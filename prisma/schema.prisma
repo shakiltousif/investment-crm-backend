@@ -1,0 +1,236 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model
+model User {
+  id                    String      @id @default(cuid())
+  email                 String      @unique
+  password              String
+  firstName             String
+  lastName              String
+  phoneNumber           String?
+  profilePicture        String?
+  dateOfBirth           DateTime?
+  address               String?
+  city                  String?
+  state                 String?
+  zipCode               String?
+  country               String?
+  
+  // KYC & Compliance
+  kycStatus             KYCStatus   @default(PENDING)
+  kycVerifiedAt         DateTime?
+  documentType          String?
+  documentNumber        String?
+  documentExpiryDate    DateTime?
+  
+  // Account Status
+  isEmailVerified       Boolean     @default(false)
+  emailVerifiedAt       DateTime?
+  isActive              Boolean     @default(true)
+  lastLoginAt           DateTime?
+  failedLoginAttempts   Int         @default(0)
+  lockedUntil           DateTime?
+  
+  // Timestamps
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  
+  // Relations
+  bankAccounts          BankAccount[]
+  investments           Investment[]
+  transactions          Transaction[]
+  portfolios            Portfolio[]
+  auditLogs             AuditLog[]
+  
+  @@index([email])
+  @@index([kycStatus])
+}
+
+// Bank Account model
+model BankAccount {
+  id                    String      @id @default(cuid())
+  userId                String
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  accountHolderName     String
+  accountNumber         String
+  bankName              String
+  bankCode              String?
+  accountType           String      // Savings, Checking, etc.
+  currency              String      @default("USD")
+  balance               Decimal     @default(0) @db.Decimal(15, 2)
+  
+  isVerified            Boolean     @default(false)
+  verifiedAt            DateTime?
+  isPrimary             Boolean     @default(false)
+  
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  
+  // Relations
+  transactions          Transaction[]
+  
+  @@unique([userId, accountNumber])
+  @@index([userId])
+}
+
+// Portfolio model
+model Portfolio {
+  id                    String      @id @default(cuid())
+  userId                String
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name                  String
+  description           String?
+  totalValue            Decimal     @default(0) @db.Decimal(15, 2)
+  totalInvested         Decimal     @default(0) @db.Decimal(15, 2)
+  totalGain             Decimal     @default(0) @db.Decimal(15, 2)
+  gainPercentage        Decimal     @default(0) @db.Decimal(5, 2)
+  
+  isActive              Boolean     @default(true)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  
+  // Relations
+  investments           Investment[]
+  
+  @@index([userId])
+}
+
+// Investment model
+model Investment {
+  id                    String      @id @default(cuid())
+  userId                String
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId           String
+  portfolio             Portfolio   @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  
+  type                  InvestmentType
+  name                  String
+  symbol                String?
+  quantity              Decimal     @db.Decimal(15, 4)
+  purchasePrice         Decimal     @db.Decimal(15, 2)
+  currentPrice          Decimal     @db.Decimal(15, 2)
+  totalValue            Decimal     @db.Decimal(15, 2)
+  totalGain             Decimal     @db.Decimal(15, 2)
+  gainPercentage        Decimal     @db.Decimal(5, 2)
+  
+  purchaseDate          DateTime
+  maturityDate          DateTime?
+  interestRate          Decimal?    @db.Decimal(5, 2)
+  
+  status                InvestmentStatus @default(ACTIVE)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  
+  // Relations
+  transactions          Transaction[]
+  
+  @@index([userId])
+  @@index([portfolioId])
+  @@index([type])
+}
+
+// Transaction model
+model Transaction {
+  id                    String      @id @default(cuid())
+  userId                String
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankAccountId         String?
+  bankAccount           BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  investmentId          String?
+  investment            Investment? @relation(fields: [investmentId], references: [id], onDelete: SetNull)
+  
+  type                  TransactionType
+  amount                Decimal     @db.Decimal(15, 2)
+  currency              String      @default("USD")
+  status                TransactionStatus @default(PENDING)
+  description           String?
+  
+  transactionDate       DateTime    @default(now())
+  completedAt           DateTime?
+  
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+  
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([transactionDate])
+}
+
+// Audit Log model
+model AuditLog {
+  id                    String      @id @default(cuid())
+  userId                String
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  action                String
+  entity                String
+  entityId              String?
+  changes               Json?
+  ipAddress             String?
+  userAgent             String?
+  
+  createdAt             DateTime    @default(now())
+  
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// Enums
+enum KYCStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+}
+
+enum InvestmentType {
+  STOCK
+  BOND
+  TERM_DEPOSIT
+  PRIVATE_EQUITY
+  MUTUAL_FUND
+  ETF
+  CRYPTOCURRENCY
+  OTHER
+}
+
+enum InvestmentStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  MATURED
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  BUY
+  SELL
+  DIVIDEND
+  INTEREST
+  TRANSFER
+  FEE
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
