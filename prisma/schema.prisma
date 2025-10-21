@@ -40,6 +40,8 @@ model User {
   lastLoginAt           DateTime?
   failedLoginAttempts   Int         @default(0)
   lockedUntil           DateTime?
+  twoFactorEnabled      Boolean     @default(false)
+  twoFactorSecret       String?
   
   // Timestamps
   createdAt             DateTime    @default(now())

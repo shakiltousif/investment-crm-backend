@@ -1,9 +1,23 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import authRoutes from '../../routes/auth.routes';
-import { prisma } from '../../lib/prisma';
 
-jest.mock('../../lib/prisma');
+// Mock Prisma
+const mockPrisma = {
+  user: {
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+  },
+  auditLog: {
+    create: vi.fn(),
+  },
+} as any;
+
+vi.mock('../../lib/prisma', () => ({
+  prisma: mockPrisma,
+}));
 
 describe('Auth Integration Tests', () => {
   let app: express.Application;
@@ -12,7 +26,7 @@ describe('Auth Integration Tests', () => {
     app = express();
     app.use(express.json());
     app.use('/api/auth', authRoutes);
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('POST /api/auth/register', () => {
@@ -24,8 +38,8 @@ describe('Auth Integration Tests', () => {
         lastName: 'Doe',
       };
 
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
-      (prisma.user.create as jest.Mock).mockResolvedValue(mockUser);
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+      mockPrisma.user.create.mockResolvedValue(mockUser);
 
       const response = await request(app).post('/api/auth/register').send({
         email: 'test@example.com',
@@ -40,7 +54,7 @@ describe('Auth Integration Tests', () => {
     });
 
     it('should return error if email already exists', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue({
+      mockPrisma.user.findUnique.mockResolvedValue({
         id: 'user-1',
         email: 'test@example.com',
       });
@@ -77,7 +91,7 @@ describe('Auth Integration Tests', () => {
         password: '$2b$10$hashedpassword',
       };
 
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
 
       const response = await request(app).post('/api/auth/login').send({
         email: 'test@example.com',
@@ -90,7 +104,7 @@ describe('Auth Integration Tests', () => {
     });
 
     it('should return error if user not found', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+      mockPrisma.user.findUnique.mockResolvedValue(null);
 
       const response = await request(app).post('/api/auth/login').send({
         email: 'test@example.com',
@@ -108,7 +122,7 @@ describe('Auth Integration Tests', () => {
         password: '$2b$10$wronghash',
       };
 
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
+      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
 
       const response = await request(app).post('/api/auth/login').send({
         email: 'test@example.com',

@@ -25,7 +25,54 @@ export class PortfolioService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return portfolios;
+    return portfolios.map(portfolio => ({
+      ...portfolio,
+      totalValue: Number(portfolio.totalValue || 0),
+      totalInvested: Number(portfolio.totalInvested || 0),
+      totalGain: Number(portfolio.totalGain || 0),
+      gainPercentage: Number(portfolio.gainPercentage || 0),
+    }));
+  }
+
+  async getPortfolioOverview(userId: string) {
+    const portfolios = await prisma.portfolio.findMany({
+      where: { userId },
+      include: {
+        investments: true,
+      },
+    });
+
+    const totalValue = portfolios.reduce((sum, portfolio) => {
+      const portfolioValue = portfolio.investments.reduce((pSum, investment) => {
+        return pSum + Number(investment.currentPrice) * investment.quantity;
+      }, 0);
+      return sum + portfolioValue;
+    }, 0);
+
+    const totalInvested = portfolios.reduce((sum, portfolio) => {
+      const portfolioInvested = portfolio.investments.reduce((pSum, investment) => {
+        return pSum + Number(investment.purchasePrice) * investment.quantity;
+      }, 0);
+      return sum + portfolioInvested;
+    }, 0);
+
+    const totalGain = totalValue - totalInvested;
+    const gainPercentage = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
+
+    return {
+      totalPortfolios: portfolios.length,
+      totalValue,
+      totalInvested,
+      totalGain,
+      gainPercentage,
+      portfolios: portfolios.map(portfolio => ({
+        id: portfolio.id,
+        name: portfolio.name,
+        value: portfolio.investments.reduce((sum, inv) => sum + Number(inv.currentPrice) * inv.quantity, 0),
+        invested: portfolio.investments.reduce((sum, inv) => sum + Number(inv.purchasePrice) * inv.quantity, 0),
+        gain: portfolio.investments.reduce((sum, inv) => sum + (Number(inv.currentPrice) - Number(inv.purchasePrice)) * inv.quantity, 0),
+      })),
+    };
   }
 
   async getPortfolioById(userId: string, portfolioId: string) {

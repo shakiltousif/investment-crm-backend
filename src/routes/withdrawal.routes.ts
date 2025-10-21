@@ -32,7 +32,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const filters = withdrawalFiltersSchema.parse(req.query);
     const result = await withdrawalService.getWithdrawals(req.userId!, filters);
-    res.status(200).json({ success: true, data: result });
+    res.status(200).json(result);
   } catch (error) {
     throw error;
   }
@@ -46,7 +46,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const data = createWithdrawalSchema.parse(req.body);
     const result = await withdrawalService.createWithdrawal(req.userId!, data);
-    res.status(201).json({ success: true, data: result });
+    res.status(201).json(result);
   } catch (error) {
     throw error;
   }
@@ -59,7 +59,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const withdrawal = await withdrawalService.getWithdrawalById(req.userId!, req.params.id);
-    res.status(200).json({ success: true, data: withdrawal });
+    res.status(200).json(withdrawal);
   } catch (error) {
     throw error;
   }
@@ -72,7 +72,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
 router.post('/:id/approve', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const withdrawal = await withdrawalService.approveWithdrawal(req.userId!, req.params.id);
-    res.status(200).json({ success: true, data: withdrawal });
+    res.status(200).json(withdrawal);
   } catch (error) {
     throw error;
   }
@@ -85,7 +85,7 @@ router.post('/:id/approve', authenticate, async (req: AuthRequest, res: Response
 router.post('/:id/complete', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const withdrawal = await withdrawalService.completeWithdrawal(req.userId!, req.params.id);
-    res.status(200).json({ success: true, data: withdrawal });
+    res.status(200).json(withdrawal);
   } catch (error) {
     throw error;
   }
@@ -99,7 +99,7 @@ router.post('/:id/reject', authenticate, async (req: AuthRequest, res: Response)
   try {
     const { reason } = req.body;
     const withdrawal = await withdrawalService.rejectWithdrawal(req.userId!, req.params.id, reason);
-    res.status(200).json({ success: true, data: withdrawal });
+    res.status(200).json(withdrawal);
   } catch (error) {
     throw error;
   }
@@ -112,7 +112,7 @@ router.post('/:id/reject', authenticate, async (req: AuthRequest, res: Response)
 router.get('/summary/all', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const summary = await withdrawalService.getWithdrawalSummary(req.userId!);
-    res.status(200).json({ success: true, data: summary });
+    res.status(200).json(summary);
   } catch (error) {
     throw error;
   }

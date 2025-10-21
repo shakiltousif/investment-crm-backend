@@ -1,186 +1,364 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { PrismaClient } from '@prisma/client';
 import { BankAccountService } from '../../services/bankAccount.service';
-import { prisma } from '../../lib/prisma';
-import { ValidationError } from '../../middleware/errorHandler';
+import { NotFoundError, ValidationError, ConflictError } from '../../middleware/errorHandler';
 
-jest.mock('../../lib/prisma');
+// Mock Prisma
+const mockPrisma = {
+  bankAccount: {
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    count: vi.fn(),
+  },
+  transaction: {
+    findMany: vi.fn(),
+  },
+  $disconnect: vi.fn(),
+} as any;
+
+vi.mock('@prisma/client', () => ({
+  PrismaClient: vi.fn(() => mockPrisma),
+}));
 
 describe('BankAccountService', () => {
-  let service: BankAccountService;
+  let bankAccountService: BankAccountService;
 
   beforeEach(() => {
-    service = new BankAccountService();
-    jest.clearAllMocks();
+    bankAccountService = new BankAccountService();
+    vi.clearAllMocks();
   });
 
-  describe('createBankAccount', () => {
-    it('should create a bank account successfully', async () => {
-      const mockAccount = {
-        id: 'account-1',
-        userId: 'user-1',
-        accountName: 'Main Account',
-        accountNumber: '12345678',
-        sortCode: '123456',
-        balance: 1000,
-        isPrimary: true,
-        isVerified: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      (prisma.bankAccount.create as jest.Mock).mockResolvedValue(mockAccount);
-
-      const result = await service.createBankAccount('user-1', {
-        accountName: 'Main Account',
-        accountNumber: '12345678',
-        sortCode: '123456',
-      });
-
-      expect(result).toEqual(mockAccount);
-      expect(prisma.bankAccount.create).toHaveBeenCalled();
-    });
-
-    it('should throw error if account already exists', async () => {
-      (prisma.bankAccount.findUnique as jest.Mock).mockResolvedValue({
-        id: 'account-1',
-      });
-
-      await expect(
-        service.createBankAccount('user-1', {
-          accountName: 'Main Account',
-          accountNumber: '12345678',
-          sortCode: '123456',
-        }),
-      ).rejects.toThrow();
-    });
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
-  describe('getBankAccounts', () => {
-    it('should get all bank accounts for a user', async () => {
-      const mockAccounts = [
+  describe('getAll', () => {
+    it('should return all bank accounts for a user', async () => {
+      const userId = 'user-1';
+      const bankAccounts = [
         {
           id: 'account-1',
-          userId: 'user-1',
-          accountName: 'Main Account',
-          balance: 1000,
-        },
-        {
-          id: 'account-2',
-          userId: 'user-1',
-          accountName: 'Savings Account',
-          balance: 5000,
+          userId,
+          accountHolderName: 'John Doe',
+          accountNumber: '1234567890',
+          bankName: 'Test Bank',
+          bankCode: 'TB001',
+          accountType: 'Savings',
+          currency: 'USD',
+          balance: 10000,
+          isVerified: true,
+          verifiedAt: new Date(),
+          isPrimary: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         },
       ];
 
-      (prisma.bankAccount.findMany as jest.Mock).mockResolvedValue(mockAccounts);
+      mockPrisma.bankAccount.findMany.mockResolvedValue(bankAccounts);
 
-      const result = await service.getBankAccounts('user-1');
+      const result = await bankAccountService.getAll(userId);
 
-      expect(result).toEqual(mockAccounts);
-      expect(prisma.bankAccount.findMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1' },
+      expect(mockPrisma.bankAccount.findMany).toHaveBeenCalledWith({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
       });
+      expect(result).toEqual(bankAccounts);
     });
 
-    it('should return empty array if user has no accounts', async () => {
-      (prisma.bankAccount.findMany as jest.Mock).mockResolvedValue([]);
+    it('should handle empty bank account list', async () => {
+      const userId = 'user-1';
 
-      const result = await service.getBankAccounts('user-1');
+      mockPrisma.bankAccount.findMany.mockResolvedValue([]);
+
+      const result = await bankAccountService.getAll(userId);
 
       expect(result).toEqual([]);
     });
   });
 
-  describe('updateBankAccount', () => {
-    it('should update a bank account successfully', async () => {
-      const mockAccount = {
-        id: 'account-1',
-        userId: 'user-1',
-        accountName: 'Updated Account',
+  describe('getById', () => {
+    it('should return a bank account by ID', async () => {
+      const userId = 'user-1';
+      const accountId = 'account-1';
+      const bankAccount = {
+        id: accountId,
+        userId,
+        accountHolderName: 'John Doe',
+        accountNumber: '1234567890',
+        bankName: 'Test Bank',
+        accountType: 'Savings',
+        currency: 'USD',
+        balance: 10000,
+        isVerified: true,
+        isPrimary: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
-      (prisma.bankAccount.findUnique as jest.Mock).mockResolvedValue(mockAccount);
-      (prisma.bankAccount.update as jest.Mock).mockResolvedValue(mockAccount);
+      mockPrisma.bankAccount.findUnique.mockResolvedValue(bankAccount);
 
-      const result = await service.updateBankAccount('user-1', 'account-1', {
-        accountName: 'Updated Account',
+      const result = await bankAccountService.getById(userId, accountId);
+
+      expect(mockPrisma.bankAccount.findUnique).toHaveBeenCalledWith({
+        where: { id: accountId, userId },
       });
-
-      expect(result).toEqual(mockAccount);
+      expect(result).toEqual(bankAccount);
     });
 
-    it('should throw error if account not found', async () => {
-      (prisma.bankAccount.findUnique as jest.Mock).mockResolvedValue(null);
+    it('should throw NotFoundError for non-existent bank account', async () => {
+      const userId = 'user-1';
+      const accountId = 'non-existent';
 
-      await expect(
-        service.updateBankAccount('user-1', 'account-1', {
-          accountName: 'Updated Account',
-        }),
-      ).rejects.toThrow(ValidationError);
-    });
+      mockPrisma.bankAccount.findUnique.mockResolvedValue(null);
 
-    it('should throw error if user does not own the account', async () => {
-      (prisma.bankAccount.findUnique as jest.Mock).mockResolvedValue({
-        id: 'account-1',
-        userId: 'other-user',
-      });
-
-      await expect(
-        service.updateBankAccount('user-1', 'account-1', {
-          accountName: 'Updated Account',
-        }),
-      ).rejects.toThrow(ValidationError);
+      await expect(bankAccountService.getById(userId, accountId)).rejects.toThrow(NotFoundError);
     });
   });
 
-  describe('deleteBankAccount', () => {
-    it('should delete a bank account successfully', async () => {
-      (prisma.bankAccount.findUnique as jest.Mock).mockResolvedValue({
-        id: 'account-1',
-        userId: 'user-1',
-      });
-      (prisma.bankAccount.delete as jest.Mock).mockResolvedValue({
-        id: 'account-1',
-      });
+  describe('create', () => {
+    it('should create a new bank account', async () => {
+      const userId = 'user-1';
+      const accountData = {
+        accountHolderName: 'John Doe',
+        accountNumber: '1234567890',
+        bankName: 'Test Bank',
+        bankCode: 'TB001',
+        accountType: 'Savings',
+        currency: 'USD',
+      };
 
-      const result = await service.deleteBankAccount('user-1', 'account-1');
+      const createdAccount = {
+        id: 'account-1',
+        userId,
+        ...accountData,
+        balance: 0,
+        isVerified: false,
+        verifiedAt: null,
+        isPrimary: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
 
-      expect(result).toEqual({ success: true });
-      expect(prisma.bankAccount.delete).toHaveBeenCalled();
+      mockPrisma.bankAccount.count.mockResolvedValue(0);
+      mockPrisma.bankAccount.create.mockResolvedValue(createdAccount);
+
+      const result = await bankAccountService.create(userId, accountData);
+
+      expect(mockPrisma.bankAccount.count).toHaveBeenCalledWith({
+        where: { userId, accountNumber: accountData.accountNumber },
+      });
+      expect(mockPrisma.bankAccount.create).toHaveBeenCalledWith({
+        data: {
+          userId,
+          ...accountData,
+          balance: 0,
+          isVerified: false,
+          isPrimary: false,
+        },
+      });
+      expect(result).toEqual(createdAccount);
     });
 
-    it('should throw error if account not found', async () => {
-      (prisma.bankAccount.findUnique as jest.Mock).mockResolvedValue(null);
+    it('should throw ConflictError for duplicate account number', async () => {
+      const userId = 'user-1';
+      const accountData = {
+        accountHolderName: 'John Doe',
+        accountNumber: '1234567890',
+        bankName: 'Test Bank',
+        accountType: 'Savings',
+        currency: 'USD',
+      };
 
-      await expect(service.deleteBankAccount('user-1', 'account-1')).rejects.toThrow(
-        ValidationError,
-      );
+      mockPrisma.bankAccount.count.mockResolvedValue(1);
+
+      await expect(bankAccountService.create(userId, accountData)).rejects.toThrow(ConflictError);
+    });
+
+    it('should validate required fields', async () => {
+      const userId = 'user-1';
+      const accountData = {
+        accountHolderName: '',
+        accountNumber: '1234567890',
+        bankName: 'Test Bank',
+        accountType: 'Savings',
+        currency: 'USD',
+      };
+
+      await expect(bankAccountService.create(userId, accountData)).rejects.toThrow(ValidationError);
     });
   });
 
-  describe('setPrimaryAccount', () => {
-    it('should set primary account successfully', async () => {
-      (prisma.bankAccount.findUnique as jest.Mock).mockResolvedValue({
-        id: 'account-1',
-        userId: 'user-1',
+  describe('update', () => {
+    it('should update an existing bank account', async () => {
+      const userId = 'user-1';
+      const accountId = 'account-1';
+      const updateData = {
+        accountHolderName: 'Jane Doe',
+        bankName: 'Updated Bank',
+      };
+
+      const updatedAccount = {
+        id: accountId,
+        userId,
+        ...updateData,
+        accountNumber: '1234567890',
+        accountType: 'Savings',
+        currency: 'USD',
+        balance: 10000,
+        isVerified: true,
+        isPrimary: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockPrisma.bankAccount.findUnique.mockResolvedValue({ id: accountId, userId });
+      mockPrisma.bankAccount.update.mockResolvedValue(updatedAccount);
+
+      const result = await bankAccountService.update(userId, accountId, updateData);
+
+      expect(mockPrisma.bankAccount.findUnique).toHaveBeenCalledWith({
+        where: { id: accountId, userId },
       });
+      expect(mockPrisma.bankAccount.update).toHaveBeenCalledWith({
+        where: { id: accountId },
+        data: updateData,
+      });
+      expect(result).toEqual(updatedAccount);
+    });
 
-      await service.setPrimaryAccount('user-1', 'account-1');
+    it('should throw NotFoundError for non-existent bank account', async () => {
+      const userId = 'user-1';
+      const accountId = 'non-existent';
+      const updateData = {
+        accountHolderName: 'Jane Doe',
+      };
 
-      expect(prisma.bankAccount.update).toHaveBeenCalled();
+      mockPrisma.bankAccount.findUnique.mockResolvedValue(null);
+
+      await expect(bankAccountService.update(userId, accountId, updateData)).rejects.toThrow(NotFoundError);
     });
   });
 
-  describe('verifyAccount', () => {
-    it('should verify account successfully', async () => {
-      (prisma.bankAccount.findUnique as jest.Mock).mockResolvedValue({
-        id: 'account-1',
-        userId: 'user-1',
+  describe('delete', () => {
+    it('should delete a bank account', async () => {
+      const userId = 'user-1';
+      const accountId = 'account-1';
+
+      mockPrisma.bankAccount.findUnique.mockResolvedValue({ id: accountId, userId });
+      mockPrisma.transaction.findMany.mockResolvedValue([]);
+      mockPrisma.bankAccount.delete.mockResolvedValue({});
+
+      await bankAccountService.delete(userId, accountId);
+
+      expect(mockPrisma.bankAccount.findUnique).toHaveBeenCalledWith({
+        where: { id: accountId, userId },
       });
+      expect(mockPrisma.bankAccount.delete).toHaveBeenCalledWith({
+        where: { id: accountId },
+      });
+    });
 
-      await service.verifyAccount('user-1', 'account-1');
+    it('should throw NotFoundError for non-existent bank account', async () => {
+      const userId = 'user-1';
+      const accountId = 'non-existent';
 
-      expect(prisma.bankAccount.update).toHaveBeenCalled();
+      mockPrisma.bankAccount.findUnique.mockResolvedValue(null);
+
+      await expect(bankAccountService.delete(userId, accountId)).rejects.toThrow(NotFoundError);
+    });
+
+    it('should throw ValidationError if account has transactions', async () => {
+      const userId = 'user-1';
+      const accountId = 'account-1';
+
+      mockPrisma.bankAccount.findUnique.mockResolvedValue({ id: accountId, userId });
+      mockPrisma.transaction.findMany.mockResolvedValue([{ id: 'transaction-1' }]);
+
+      await expect(bankAccountService.delete(userId, accountId)).rejects.toThrow(ValidationError);
+    });
+  });
+
+  describe('verify', () => {
+    it('should verify a bank account', async () => {
+      const userId = 'user-1';
+      const accountId = 'account-1';
+
+      const verifiedAccount = {
+        id: accountId,
+        userId,
+        isVerified: true,
+        verifiedAt: new Date(),
+      };
+
+      mockPrisma.bankAccount.findUnique.mockResolvedValue({ id: accountId, userId });
+      mockPrisma.bankAccount.update.mockResolvedValue(verifiedAccount);
+
+      const result = await bankAccountService.verify(userId, accountId);
+
+      expect(mockPrisma.bankAccount.findUnique).toHaveBeenCalledWith({
+        where: { id: accountId, userId },
+      });
+      expect(mockPrisma.bankAccount.update).toHaveBeenCalledWith({
+        where: { id: accountId },
+        data: {
+          isVerified: true,
+          verifiedAt: expect.any(Date),
+        },
+      });
+      expect(result).toEqual(verifiedAccount);
+    });
+
+    it('should throw NotFoundError for non-existent bank account', async () => {
+      const userId = 'user-1';
+      const accountId = 'non-existent';
+
+      mockPrisma.bankAccount.findUnique.mockResolvedValue(null);
+
+      await expect(bankAccountService.verify(userId, accountId)).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe('setPrimary', () => {
+    it('should set a bank account as primary', async () => {
+      const userId = 'user-1';
+      const accountId = 'account-1';
+
+      const primaryAccount = {
+        id: accountId,
+        userId,
+        isPrimary: true,
+      };
+
+      mockPrisma.bankAccount.findUnique.mockResolvedValue({ id: accountId, userId });
+      mockPrisma.bankAccount.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.bankAccount.update.mockResolvedValue(primaryAccount);
+
+      const result = await bankAccountService.setPrimary(userId, accountId);
+
+      expect(mockPrisma.bankAccount.findUnique).toHaveBeenCalledWith({
+        where: { id: accountId, userId },
+      });
+      expect(mockPrisma.bankAccount.updateMany).toHaveBeenCalledWith({
+        where: { userId },
+        data: { isPrimary: false },
+      });
+      expect(mockPrisma.bankAccount.update).toHaveBeenCalledWith({
+        where: { id: accountId },
+        data: { isPrimary: true },
+      });
+      expect(result).toEqual(primaryAccount);
+    });
+
+    it('should throw NotFoundError for non-existent bank account', async () => {
+      const userId = 'user-1';
+      const accountId = 'non-existent';
+
+      mockPrisma.bankAccount.findUnique.mockResolvedValue(null);
+
+      await expect(bankAccountService.setPrimary(userId, accountId)).rejects.toThrow(NotFoundError);
     });
   });
 });
-

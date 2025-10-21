@@ -33,7 +33,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const filters = depositFiltersSchema.parse(req.query);
     const result = await depositService.getDeposits(req.userId!, filters);
-    res.status(200).json({ success: true, data: result });
+    res.status(200).json(result);
   } catch (error) {
     throw error;
   }
@@ -47,7 +47,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const data = createDepositSchema.parse(req.body);
     const result = await depositService.createDeposit(req.userId!, data);
-    res.status(201).json({ success: true, data: result });
+    res.status(201).json(result);
   } catch (error) {
     throw error;
   }
@@ -60,7 +60,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const deposit = await depositService.getDepositById(req.userId!, req.params.id);
-    res.status(200).json({ success: true, data: deposit });
+    res.status(200).json(deposit);
   } catch (error) {
     throw error;
   }
@@ -73,7 +73,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
 router.post('/:id/approve', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const deposit = await depositService.approveDeposit(req.userId!, req.params.id);
-    res.status(200).json({ success: true, data: deposit });
+    res.status(200).json(deposit);
   } catch (error) {
     throw error;
   }
@@ -86,7 +86,7 @@ router.post('/:id/approve', authenticate, async (req: AuthRequest, res: Response
 router.post('/:id/complete', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const deposit = await depositService.completeDeposit(req.userId!, req.params.id);
-    res.status(200).json({ success: true, data: deposit });
+    res.status(200).json(deposit);
   } catch (error) {
     throw error;
   }
@@ -100,7 +100,7 @@ router.post('/:id/reject', authenticate, async (req: AuthRequest, res: Response)
   try {
     const { reason } = req.body;
     const deposit = await depositService.rejectDeposit(req.userId!, req.params.id, reason);
-    res.status(200).json({ success: true, data: deposit });
+    res.status(200).json(deposit);
   } catch (error) {
     throw error;
   }
@@ -113,7 +113,7 @@ router.post('/:id/reject', authenticate, async (req: AuthRequest, res: Response)
 router.get('/summary/all', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const summary = await depositService.getDepositSummary(req.userId!);
-    res.status(200).json({ success: true, data: summary });
+    res.status(200).json(summary);
   } catch (error) {
     throw error;
   }

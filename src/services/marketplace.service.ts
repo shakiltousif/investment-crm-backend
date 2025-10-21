@@ -90,15 +90,7 @@ export class MarketplaceService {
       prisma.investment.count({ where }),
     ]);
 
-    return {
-      data: investments,
-      pagination: {
-        total,
-        limit,
-        offset,
-        pages: Math.ceil(total / limit),
-      },
-    };
+    return investments;
   }
 
   /**

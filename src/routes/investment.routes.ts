@@ -14,7 +14,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
       req.userId!,
       portfolioId as string | undefined,
     );
-    res.status(200).json({ success: true, data: investments });
+    res.status(200).json(investments);
   } catch (error) {
     throw error;
   }
@@ -25,7 +25,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const data = createInvestmentSchema.parse(req.body);
     const investment = await investmentService.createInvestment(req.userId!, data);
-    res.status(201).json({ success: true, data: investment });
+    res.status(201).json(investment);
   } catch (error) {
     throw error;
   }
@@ -35,7 +35,7 @@ router.post('/', authenticate, async (req: AuthRequest, res: Response) => {
 router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const investment = await investmentService.getInvestmentById(req.userId!, req.params.id);
-    res.status(200).json({ success: true, data: investment });
+    res.status(200).json(investment);
   } catch (error) {
     throw error;
   }
@@ -46,7 +46,7 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const data = updateInvestmentSchema.parse(req.body);
     const investment = await investmentService.updateInvestment(req.userId!, req.params.id, data);
-    res.status(200).json({ success: true, data: investment });
+    res.status(200).json(investment);
   } catch (error) {
     throw error;
   }
@@ -56,7 +56,7 @@ router.put('/:id', authenticate, async (req: AuthRequest, res: Response) => {
 router.delete('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const result = await investmentService.deleteInvestment(req.userId!, req.params.id);
-    res.status(200).json({ success: true, data: result });
+    res.status(200).json(result);
   } catch (error) {
     throw error;
   }
@@ -71,7 +71,7 @@ router.patch('/:id/price', authenticate, async (req: AuthRequest, res: Response)
       req.params.id,
       new Decimal(currentPrice),
     );
-    res.status(200).json({ success: true, data: investment });
+    res.status(200).json(investment);
   } catch (error) {
     throw error;
   }

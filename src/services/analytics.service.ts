@@ -41,6 +41,112 @@ export interface PortfolioAllocation {
 
 export class AnalyticsService {
   /**
+   * Get dashboard data
+   */
+  async getDashboardData(userId: string) {
+    const portfolios = await prisma.portfolio.findMany({
+      where: { userId },
+      include: {
+        investments: true,
+      },
+    });
+
+    const transactions = await prisma.transaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+
+    const totalValue = portfolios.reduce((sum, portfolio) => {
+      const portfolioValue = portfolio.investments.reduce((pSum, investment) => {
+        return pSum + Number(investment.currentPrice) * investment.quantity;
+      }, 0);
+      return sum + portfolioValue;
+    }, 0);
+
+    const totalInvested = portfolios.reduce((sum, portfolio) => {
+      const portfolioInvested = portfolio.investments.reduce((pSum, investment) => {
+        return pSum + Number(investment.purchasePrice) * investment.quantity;
+      }, 0);
+      return sum + portfolioInvested;
+    }, 0);
+
+    const totalGain = totalValue - totalInvested;
+    const gainPercentage = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
+
+    return {
+      totalPortfolioValue: totalValue,
+      totalInvested,
+      totalGain,
+      gainPercentage,
+      monthlyReturn: 5.2, // Mock data
+      yearlyReturn: 12.8, // Mock data
+      recentTransactions: transactions,
+    };
+  }
+
+  /**
+   * Get all portfolios allocation
+   */
+  async getAllPortfoliosAllocation(userId: string) {
+    const portfolios = await prisma.portfolio.findMany({
+      where: { userId },
+      include: {
+        investments: true,
+      },
+    });
+
+    const totalValue = portfolios.reduce((sum, portfolio) => {
+      const portfolioValue = portfolio.investments.reduce((pSum, investment) => {
+        return pSum + Number(investment.currentPrice) * investment.quantity;
+      }, 0);
+      return sum + portfolioValue;
+    }, 0);
+
+    return portfolios.map(portfolio => {
+      const portfolioValue = portfolio.investments.reduce((sum, inv) => sum + Number(inv.currentPrice) * inv.quantity, 0);
+      return {
+        portfolioId: portfolio.id,
+        portfolioName: portfolio.name,
+        value: portfolioValue,
+        percentage: totalValue > 0 ? (portfolioValue / totalValue) * 100 : 0,
+        investments: portfolio.investments.map(inv => ({
+          investmentId: inv.id,
+          name: inv.name,
+          value: Number(inv.currentPrice) * inv.quantity,
+          percentage: portfolioValue > 0 ? (Number(inv.currentPrice) * inv.quantity / portfolioValue) * 100 : 0,
+        })),
+      };
+    });
+  }
+
+  /**
+   * Get all investments performance
+   */
+  async getAllInvestmentsPerformance(userId: string) {
+    const investments = await prisma.investment.findMany({
+      where: { userId },
+      include: {
+        portfolio: true,
+      },
+    });
+
+    return investments.map(investment => ({
+      investmentId: investment.id,
+      name: investment.name,
+      symbol: investment.symbol,
+      quantity: investment.quantity,
+      currentPrice: Number(investment.currentPrice),
+      totalValue: Number(investment.currentPrice) * investment.quantity,
+      costBasis: Number(investment.purchasePrice) * investment.quantity,
+      gain: (Number(investment.currentPrice) - Number(investment.purchasePrice)) * investment.quantity,
+      gainPercentage: Number(investment.purchasePrice) > 0 ? 
+        ((Number(investment.currentPrice) - Number(investment.purchasePrice)) / Number(investment.purchasePrice)) * 100 : 0,
+      portfolioName: investment.portfolio?.name || 'Unknown',
+    }));
+  }
+
+  /**
    * Get portfolio performance
    */
   async getPortfolioPerformance(userId: string, portfolioId: string) {

@@ -1,16 +1,35 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MarketplaceService } from '../../services/marketplace.service';
-import { prisma } from '../../lib/prisma';
 import { ValidationError } from '../../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
 
-jest.mock('../../lib/prisma');
+// Mock Prisma
+const mockPrisma = {
+  investment: {
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    count: vi.fn(),
+  },
+  portfolio: {
+    findUnique: vi.fn(),
+  },
+  transaction: {
+    create: vi.fn(),
+    findUnique: vi.fn(),
+  },
+  $disconnect: vi.fn(),
+} as any;
+
+vi.mock('../../lib/prisma', () => ({
+  prisma: mockPrisma,
+}));
 
 describe('MarketplaceService', () => {
   let service: MarketplaceService;
 
   beforeEach(() => {
     service = new MarketplaceService();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getAvailableInvestments', () => {
@@ -25,8 +44,8 @@ describe('MarketplaceService', () => {
         },
       ];
 
-      (prisma.investment.findMany as jest.Mock).mockResolvedValue(mockInvestments);
-      (prisma.investment.count as jest.Mock).mockResolvedValue(1);
+      mockPrisma.investment.findMany.mockResolvedValue(mockInvestments);
+      mockPrisma.investment.count.mockResolvedValue(1);
 
       const result = await service.getAvailableInvestments({
         type: 'STOCK',
@@ -39,8 +58,8 @@ describe('MarketplaceService', () => {
     });
 
     it('should filter by price range', async () => {
-      (prisma.investment.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.investment.count as jest.Mock).mockResolvedValue(0);
+      (prisma.investment.findMany as any).mockResolvedValue([]);
+      (prisma.investment.count as any).mockResolvedValue(0);
 
       await service.getAvailableInvestments({
         minPrice: 100,
@@ -60,7 +79,7 @@ describe('MarketplaceService', () => {
         currentPrice: new Decimal('100.00'),
       };
 
-      (prisma.investment.findUnique as jest.Mock).mockResolvedValue(mockInvestment);
+      (prisma.investment.findUnique as any).mockResolvedValue(mockInvestment);
 
       const result = await service.previewBuyTransaction('inv-1', 10);
 
@@ -71,7 +90,7 @@ describe('MarketplaceService', () => {
     });
 
     it('should throw error if investment not found', async () => {
-      (prisma.investment.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.investment.findUnique as any).mockResolvedValue(null);
 
       await expect(service.previewBuyTransaction('inv-1', 10)).rejects.toThrow(
         ValidationError,
@@ -91,9 +110,9 @@ describe('MarketplaceService', () => {
         userId: 'user-1',
       };
 
-      (prisma.investment.findUnique as jest.Mock).mockResolvedValue(mockInvestment);
-      (prisma.portfolio.findUnique as jest.Mock).mockResolvedValue(mockPortfolio);
-      (prisma.transaction.create as jest.Mock).mockResolvedValue({
+      (prisma.investment.findUnique as any).mockResolvedValue(mockInvestment);
+      (prisma.portfolio.findUnique as any).mockResolvedValue(mockPortfolio);
+      (prisma.transaction.create as any).mockResolvedValue({
         id: 'trans-1',
       });
 
@@ -104,7 +123,7 @@ describe('MarketplaceService', () => {
     });
 
     it('should throw error if portfolio not found', async () => {
-      (prisma.portfolio.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.portfolio.findUnique as any).mockResolvedValue(null);
 
       await expect(service.buyInvestment('user-1', 'port-1', 'inv-1', 10)).rejects.toThrow(
         ValidationError,
@@ -125,8 +144,8 @@ describe('MarketplaceService', () => {
         currentPrice: new Decimal('150.00'),
       };
 
-      (prisma.transaction.findUnique as jest.Mock).mockResolvedValue(mockTransaction);
-      (prisma.investment.findUnique as jest.Mock).mockResolvedValue(mockInvestment);
+      (prisma.transaction.findUnique as any).mockResolvedValue(mockTransaction);
+      (prisma.investment.findUnique as any).mockResolvedValue(mockInvestment);
 
       const result = await service.previewSellTransaction('trans-1', 10);
 
@@ -137,7 +156,7 @@ describe('MarketplaceService', () => {
     });
 
     it('should throw error if transaction not found', async () => {
-      (prisma.transaction.findUnique as jest.Mock).mockResolvedValue(null);
+      (prisma.transaction.findUnique as any).mockResolvedValue(null);
 
       await expect(service.previewSellTransaction('trans-1', 10)).rejects.toThrow(
         ValidationError,
@@ -153,11 +172,11 @@ describe('MarketplaceService', () => {
         totalCost: new Decimal('1000.00'),
       };
 
-      (prisma.transaction.findUnique as jest.Mock).mockResolvedValue(mockTransaction);
-      (prisma.investment.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.transaction.findUnique as any).mockResolvedValue(mockTransaction);
+      (prisma.investment.findUnique as any).mockResolvedValue({
         currentPrice: new Decimal('150.00'),
       });
-      (prisma.transaction.create as jest.Mock).mockResolvedValue({
+      (prisma.transaction.create as any).mockResolvedValue({
         id: 'trans-2',
       });
 
@@ -168,7 +187,7 @@ describe('MarketplaceService', () => {
     });
 
     it('should throw error if trying to sell more than owned', async () => {
-      (prisma.transaction.findUnique as jest.Mock).mockResolvedValue({
+      (prisma.transaction.findUnique as any).mockResolvedValue({
         quantity: 5,
       });
 

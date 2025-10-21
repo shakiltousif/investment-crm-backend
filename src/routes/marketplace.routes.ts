@@ -36,7 +36,7 @@ router.get('/', async (req, res: Response) => {
   try {
     const filters = marketplaceFiltersSchema.parse(req.query);
     const result = await marketplaceService.getAvailableInvestments(filters);
-    res.status(200).json({ success: true, data: result });
+    res.status(200).json(result);
   } catch (error) {
     throw error;
   }
@@ -56,7 +56,7 @@ router.get('/search', async (req, res: Response) => {
       q as string,
       limit ? parseInt(limit as string) : 10,
     );
-    res.status(200).json({ success: true, data: results });
+    res.status(200).json(results);
   } catch (error) {
     throw error;
   }
@@ -74,7 +74,7 @@ router.get('/compare', async (req, res: Response) => {
     }
     const investmentIds = Array.isArray(ids) ? ids : [ids];
     const results = await marketplaceService.compareInvestments(investmentIds as string[]);
-    res.status(200).json({ success: true, data: results });
+    res.status(200).json(results);
   } catch (error) {
     throw error;
   }
@@ -87,7 +87,7 @@ router.get('/compare', async (req, res: Response) => {
 router.get('/:id', async (req, res: Response) => {
   try {
     const investment = await marketplaceService.getInvestmentDetails(req.params.id);
-    res.status(200).json({ success: true, data: investment });
+    res.status(200).json(investment);
   } catch (error) {
     throw error;
   }
@@ -101,7 +101,7 @@ router.post('/buy/preview', authenticate, async (req: AuthRequest, res: Response
   try {
     const data = buyInvestmentSchema.parse(req.body);
     const preview = await marketplaceService.previewBuyTransaction(req.userId!, data);
-    res.status(200).json({ success: true, data: preview });
+    res.status(200).json(preview);
   } catch (error) {
     throw error;
   }
@@ -115,7 +115,7 @@ router.post('/buy', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const data = buyInvestmentSchema.parse(req.body);
     const result = await marketplaceService.buyInvestment(req.userId!, data);
-    res.status(201).json({ success: true, data: result });
+    res.status(201).json(result);
   } catch (error) {
     throw error;
   }
@@ -129,7 +129,7 @@ router.post('/sell/preview', authenticate, async (req: AuthRequest, res: Respons
   try {
     const data = sellInvestmentSchema.parse(req.body);
     const preview = await marketplaceService.previewSellTransaction(req.userId!, data);
-    res.status(200).json({ success: true, data: preview });
+    res.status(200).json(preview);
   } catch (error) {
     throw error;
   }
@@ -143,7 +143,7 @@ router.post('/sell', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const data = sellInvestmentSchema.parse(req.body);
     const result = await marketplaceService.sellInvestment(req.userId!, data);
-    res.status(201).json({ success: true, data: result });
+    res.status(201).json(result);
   } catch (error) {
     throw error;
   }
