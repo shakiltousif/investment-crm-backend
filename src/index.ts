@@ -31,7 +31,7 @@ const app: Express = express();
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: process.env.SOCKET_IO_CORS_ORIGIN || 'http://localhost:3002',
+    origin: process.env.SOCKET_IO_CORS_ORIGIN || 'http://localhost:3000',
     methods: ['GET', 'POST'],
   },
 });
@@ -42,7 +42,7 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3002',
+  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
