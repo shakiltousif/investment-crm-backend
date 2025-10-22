@@ -10,6 +10,11 @@ export class PortfolioService {
         userId,
         name: data.name,
         description: data.description,
+        isActive: data.isActive ?? true,
+        totalValue: data.totalValue ? new Decimal(data.totalValue) : new Decimal(0),
+        totalInvested: data.totalInvested ? new Decimal(data.totalInvested) : new Decimal(0),
+        totalGain: data.totalGain ? new Decimal(data.totalGain) : new Decimal(0),
+        gainPercentage: data.gainPercentage ? new Decimal(data.gainPercentage) : new Decimal(0),
       },
     });
 
@@ -100,9 +105,20 @@ export class PortfolioService {
   ) {
     const portfolio = await this.getPortfolioById(userId, portfolioId);
 
+    // Prepare update data with proper Decimal conversion
+    const updateData: any = {};
+    
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.description !== undefined) updateData.description = data.description;
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (data.totalValue !== undefined) updateData.totalValue = new Decimal(data.totalValue);
+    if (data.totalInvested !== undefined) updateData.totalInvested = new Decimal(data.totalInvested);
+    if (data.totalGain !== undefined) updateData.totalGain = new Decimal(data.totalGain);
+    if (data.gainPercentage !== undefined) updateData.gainPercentage = new Decimal(data.gainPercentage);
+
     const updatedPortfolio = await prisma.portfolio.update({
       where: { id: portfolioId },
-      data,
+      data: updateData,
       include: {
         investments: true,
       },

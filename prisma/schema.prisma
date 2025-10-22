@@ -236,3 +236,32 @@ enum TransactionStatus {
   CANCELLED
 }
 
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model MarketplaceItem {
+  id                String          @id @default(cuid())
+  name              String
+  type              InvestmentType
+  symbol            String?         @unique
+  description       String?
+  currentPrice      Decimal         @db.Decimal(15, 2)
+  minimumInvestment Decimal         @db.Decimal(15, 2)
+  maximumInvestment Decimal?        @db.Decimal(15, 2)
+  currency          String          @default("USD")
+  riskLevel         RiskLevel
+  expectedReturn    Decimal?        @db.Decimal(5, 2)
+  category          String?
+  issuer            String?
+  maturityDate      DateTime?
+  isAvailable       Boolean         @default(true)
+  lastPriceUpdate   DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@map("marketplace_items")
+}
+

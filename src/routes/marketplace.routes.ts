@@ -149,5 +149,109 @@ router.post('/sell', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
+/**
+ * POST /api/marketplace/items
+ * Create a new marketplace item
+ */
+router.post('/items', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { createMarketplaceItemSchema } = await import('../lib/validators');
+    const input = createMarketplaceItemSchema.parse(req.body);
+    const item = await marketplaceService.createMarketplaceItem(input);
+    res.status(201).json({
+      success: true,
+      data: item,
+    });
+  } catch (error) {
+    console.error('Create marketplace item error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create marketplace item',
+    });
+  }
+});
+
+/**
+ * PUT /api/marketplace/items/:id
+ * Update a marketplace item
+ */
+router.put('/items/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { updateMarketplaceItemSchema } = await import('../lib/validators');
+    const input = updateMarketplaceItemSchema.parse(req.body);
+    const item = await marketplaceService.updateMarketplaceItem(req.params.id, input);
+    res.status(200).json({
+      success: true,
+      data: item,
+    });
+  } catch (error) {
+    console.error('Update marketplace item error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update marketplace item',
+    });
+  }
+});
+
+/**
+ * DELETE /api/marketplace/items/:id
+ * Delete a marketplace item
+ */
+router.delete('/items/:id', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await marketplaceService.deleteMarketplaceItem(req.params.id);
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error('Delete marketplace item error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete marketplace item',
+    });
+  }
+});
+
+/**
+ * GET /api/marketplace/items/:id
+ * Get marketplace item by ID
+ */
+router.get('/items/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const item = await marketplaceService.getMarketplaceItemById(req.params.id);
+    res.status(200).json({
+      success: true,
+      data: item,
+    });
+  } catch (error) {
+    console.error('Get marketplace item error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get marketplace item',
+    });
+  }
+});
+
+/**
+ * POST /api/marketplace/update-prices
+ * Update all marketplace item prices with live quotes
+ */
+router.post('/update-prices', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await marketplaceService.updatePricesWithLiveQuotes();
+    res.status(200).json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error('Update prices error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update prices',
+    });
+  }
+});
+
 export default router;
 

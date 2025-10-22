@@ -56,9 +56,46 @@ export const updateBankAccountSchema = createBankAccountSchema.partial();
 export const createPortfolioSchema = z.object({
   name: z.string().min(1, 'Portfolio name is required'),
   description: z.string().optional(),
+  isActive: z.boolean().optional(),
+  totalValue: z.number().min(0, 'Total value must be non-negative').optional(),
+  totalInvested: z.number().min(0, 'Total invested must be non-negative').optional(),
+  totalGain: z.number().optional(),
+  gainPercentage: z.number().min(-100, 'Gain percentage cannot be less than -100%').optional(),
+}).refine((data) => {
+  // If both totalValue and totalInvested are provided, validate totalGain calculation
+  if (data.totalValue !== undefined && data.totalInvested !== undefined) {
+    const calculatedGain = data.totalValue - data.totalInvested;
+    if (data.totalGain !== undefined && Math.abs(data.totalGain - calculatedGain) > 0.01) {
+      return false;
+    }
+  }
+  return true;
+}, {
+  message: 'Total gain must match the difference between total value and total invested',
+  path: ['totalGain'],
+}).refine((data) => {
+  // If both totalInvested and gainPercentage are provided, validate calculation
+  if (data.totalInvested !== undefined && data.gainPercentage !== undefined && data.totalInvested > 0) {
+    const calculatedGainPercentage = ((data.totalValue || 0) - data.totalInvested) / data.totalInvested * 100;
+    if (Math.abs(data.gainPercentage - calculatedGainPercentage) > 0.01) {
+      return false;
+    }
+  }
+  return true;
+}, {
+  message: 'Gain percentage must match the calculated percentage based on total value and invested amount',
+  path: ['gainPercentage'],
 });
 
-export const updatePortfolioSchema = createPortfolioSchema.partial();
+export const updatePortfolioSchema = z.object({
+  name: z.string().min(1, 'Portfolio name is required').optional(),
+  description: z.string().optional(),
+  isActive: z.boolean().optional(),
+  totalValue: z.number().min(0, 'Total value must be non-negative').optional(),
+  totalInvested: z.number().min(0, 'Total invested must be non-negative').optional(),
+  totalGain: z.number().optional(),
+  gainPercentage: z.number().min(-100, 'Gain percentage cannot be less than -100%').optional(),
+});
 
 // Investment Validators
 export const createInvestmentSchema = z.object({
@@ -86,6 +123,37 @@ export const createTransactionSchema = z.object({
   investmentId: z.string().optional(),
 });
 
+// Marketplace Validators
+export const createMarketplaceItemSchema = z.object({
+  name: z.string().min(1, 'Investment name is required'),
+  type: z.enum(['STOCK', 'BOND', 'TERM_DEPOSIT', 'PRIVATE_EQUITY', 'MUTUAL_FUND', 'ETF', 'CRYPTOCURRENCY', 'OTHER']),
+  symbol: z.string().optional(),
+  description: z.string().optional(),
+  currentPrice: z.number().positive('Current price must be positive'),
+  minimumInvestment: z.number().positive('Minimum investment must be positive'),
+  maximumInvestment: z.number().positive('Maximum investment must be positive').optional(),
+  currency: z.string().default('USD'),
+  riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']),
+  expectedReturn: z.number().min(0, 'Expected return must be non-negative').optional(),
+  category: z.string().optional(),
+  issuer: z.string().optional(),
+  maturityDate: z.string().datetime().optional(),
+  isAvailable: z.boolean().default(true),
+});
+
+export const updateMarketplaceItemSchema = createMarketplaceItemSchema.partial();
+
+export const marketplaceFiltersSchema = z.object({
+  type: z.string().optional(),
+  riskLevel: z.string().optional(),
+  category: z.string().optional(),
+  search: z.string().optional(),
+  minPrice: z.number().min(0).optional(),
+  maxPrice: z.number().min(0).optional(),
+  limit: z.number().min(1).max(100).default(20),
+  offset: z.number().min(0).default(0),
+});
+
 // Type exports
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -97,4 +165,7 @@ export type UpdatePortfolioInput = z.infer<typeof updatePortfolioSchema>;
 export type CreateInvestmentInput = z.infer<typeof createInvestmentSchema>;
 export type UpdateInvestmentInput = z.infer<typeof updateInvestmentSchema>;
 export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
+export type CreateMarketplaceItemInput = z.infer<typeof createMarketplaceItemSchema>;
+export type UpdateMarketplaceItemInput = z.infer<typeof updateMarketplaceItemSchema>;
+export type MarketplaceFiltersInput = z.infer<typeof marketplaceFiltersSchema>;
 

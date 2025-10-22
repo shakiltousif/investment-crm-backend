@@ -18,6 +18,7 @@ import portfolioRoutes from './routes/portfolio.routes';
 import investmentRoutes from './routes/investment.routes';
 import transactionRoutes from './routes/transaction.routes';
 import marketplaceRoutes from './routes/marketplace.routes';
+import quotesRoutes from './routes/quotes.routes';
 import depositRoutes from './routes/deposit.routes';
 import withdrawalRoutes from './routes/withdrawal.routes';
 import analyticsRoutes from './routes/analytics.routes';
@@ -51,8 +52,8 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // Request logging
 app.use(requestLogger);
 
-// Rate limiting
-app.use(rateLimiter);
+// Rate limiting - DISABLED FOR DEVELOPMENT
+// app.use(rateLimiter);
 
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {
@@ -71,6 +72,7 @@ app.use('/api/portfolios', portfolioRoutes);
 app.use('/api/investments', investmentRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/quotes', quotesRoutes);
 app.use('/api/deposits', depositRoutes);
 app.use('/api/withdrawals', withdrawalRoutes);
 app.use('/api/analytics', analyticsRoutes);
