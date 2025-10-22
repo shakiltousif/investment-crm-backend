@@ -1,4 +1,4 @@
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
 
 export interface QuoteData {
   symbol: string;
@@ -13,6 +13,11 @@ export interface QuoteData {
 export class QuotesService {
   private cache: Map<string, { data: QuoteData; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 60000; // 1 minute cache
+  private yahooFinance: YahooFinance;
+
+  constructor() {
+    this.yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+  }
 
   /**
    * Get live quote for a single symbol
@@ -26,7 +31,7 @@ export class QuotesService {
       }
 
       console.log(`Fetching live quote for ${symbol}`);
-      const result = await yahooFinance.quote(symbol);
+      const result = await this.yahooFinance.quote(symbol);
       
       if (!result || !result.regularMarketPrice) {
         console.warn(`No price data available for ${symbol}`);
@@ -76,13 +81,14 @@ export class QuotesService {
 
     try {
       console.log(`Fetching live quotes for ${uncachedSymbols.length} symbols`);
-      const results = await yahooFinance.quote(uncachedSymbols);
       
-      if (Array.isArray(results)) {
-        for (const result of results) {
-          if (result && result.symbol && result.regularMarketPrice) {
+      // Fetch quotes for each symbol individually
+      const quotePromises = uncachedSymbols.map(async (symbol) => {
+        try {
+          const result = await this.yahooFinance.quote(symbol);
+          if (result && result.regularMarketPrice) {
             const quoteData: QuoteData = {
-              symbol: result.symbol.toUpperCase(),
+              symbol: symbol.toUpperCase(),
               price: result.regularMarketPrice,
               change: result.regularMarketChange || 0,
               changePercent: result.regularMarketChangePercent || 0,
@@ -91,25 +97,15 @@ export class QuotesService {
               lastUpdated: new Date(),
             };
             
-            quotes.set(result.symbol.toUpperCase(), quoteData);
-            this.cache.set(result.symbol.toUpperCase(), { data: quoteData, timestamp: Date.now() });
+            quotes.set(symbol.toUpperCase(), quoteData);
+            this.cache.set(symbol.toUpperCase(), { data: quoteData, timestamp: Date.now() });
           }
+        } catch (error) {
+          console.error(`Error fetching quote for ${symbol}:`, error);
         }
-      } else if (results && results.symbol && results.regularMarketPrice) {
-        // Single result
-        const quoteData: QuoteData = {
-          symbol: results.symbol.toUpperCase(),
-          price: results.regularMarketPrice,
-          change: results.regularMarketChange || 0,
-          changePercent: results.regularMarketChangePercent || 0,
-          volume: results.regularMarketVolume,
-          marketCap: results.marketCap,
-          lastUpdated: new Date(),
-        };
-        
-        quotes.set(results.symbol.toUpperCase(), quoteData);
-        this.cache.set(results.symbol.toUpperCase(), { data: quoteData, timestamp: Date.now() });
-      }
+      });
+      
+      await Promise.all(quotePromises);
     } catch (error) {
       console.error('Error fetching multiple quotes:', error);
     }
@@ -123,7 +119,7 @@ export class QuotesService {
   async searchSymbols(query: string): Promise<Array<{ symbol: string; name: string; exchange: string }>> {
     try {
       console.log(`Searching symbols for: ${query}`);
-      const results = await yahooFinance.search(query);
+      const results = await this.yahooFinance.search(query);
       
       return results.map(item => ({
         symbol: item.symbol,
