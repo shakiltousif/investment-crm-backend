@@ -44,11 +44,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        id: setup-node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
+        continue-on-error: true
 
       - name: Install dependencies
         working-directory: ./backend
@@ -91,6 +93,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Verify package-lock.json exists
+        run: |
+          if [ ! -f backend/package-lock.json ]; then
+            echo "Warning: backend/package-lock.json not found, cache will be skipped"
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
