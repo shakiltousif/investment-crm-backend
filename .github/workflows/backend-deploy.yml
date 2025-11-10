@@ -1,0 +1,403 @@
+name: Backend Deployment
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-deploy.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-deploy.yml'
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  test:
+    name: Test Backend
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: investment_crm_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: ./backend
+        run: npm run db:generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/investment_crm_test
+
+      - name: Run database migrations
+        working-directory: ./backend
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/investment_crm_test
+
+      - name: Run linter
+        working-directory: ./backend
+        run: npm run lint
+
+      - name: Type check
+        working-directory: ./backend
+        run: npm run type-check
+
+      - name: Run tests
+        working-directory: ./backend
+        run: npm test
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/investment_crm_test
+          NODE_ENV: test
+          JWT_SECRET: test-secret-key
+
+  build:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: ./backend
+        run: npm run db:generate
+
+      - name: Build application
+        working-directory: ./backend
+        run: npm run build
+
+      - name: Create deployment package
+        working-directory: ./backend
+        run: |
+          mkdir -p deploy
+          cp -r dist deploy/
+          cp -r prisma deploy/
+          cp package.json deploy/
+          cp package-lock.json deploy/
+          tar -czf ../backend-deploy.tar.gz -C deploy .
+          cd ..
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: backend-deploy.tar.gz
+          retention-days: 1
+
+  pre-deploy-check:
+    name: Pre-Deployment Validation
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Validate server prerequisites
+        run: |
+          echo "🔍 Validating server prerequisites..."
+          
+          # Test SSH connection
+          echo "📡 Testing SSH connection..."
+          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo 'SSH connection successful'" || {
+            echo "❌ SSH connection failed"
+            exit 1
+          }
+          
+          # Check Node.js version
+          echo "📦 Checking Node.js installation..."
+          NODE_VERSION=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "node --version 2>/dev/null || echo 'not_installed'")
+          if [ "$NODE_VERSION" = "not_installed" ]; then
+            echo "❌ Node.js is not installed on the server"
+            exit 1
+          fi
+          echo "✅ Node.js version: $NODE_VERSION"
+          
+          # Check npm
+          echo "📦 Checking npm installation..."
+          NPM_VERSION=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "npm --version 2>/dev/null || echo 'not_installed'")
+          if [ "$NPM_VERSION" = "not_installed" ]; then
+            echo "❌ npm is not installed on the server"
+            exit 1
+          fi
+          echo "✅ npm version: $NPM_VERSION"
+          
+          # Check deployment directory exists and is writable
+          echo "📁 Checking deployment directory..."
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            if [ ! -d '${{ secrets.BACKEND_DEPLOY_PATH }}' ]; then
+              echo 'Creating deployment directory...'
+              mkdir -p '${{ secrets.BACKEND_DEPLOY_PATH }}/releases'
+              mkdir -p '${{ secrets.BACKEND_DEPLOY_PATH }}/shared'
+            fi
+            
+            if [ ! -w '${{ secrets.BACKEND_DEPLOY_PATH }}' ]; then
+              echo '❌ Deployment directory is not writable'
+              exit 1
+            fi
+            echo '✅ Deployment directory is ready'
+          " || exit 1
+          
+          # Check if .env file exists (either from secret or shared)
+          echo "🔐 Checking environment configuration..."
+          if [ -n "${{ secrets.BACKEND_ENV_FILE }}" ]; then
+            echo "✅ BACKEND_ENV_FILE secret is set"
+          else
+            echo "⚠️  BACKEND_ENV_FILE secret not set, checking for shared .env file..."
+            ENV_EXISTS=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+              if [ -f '${{ secrets.BACKEND_DEPLOY_PATH }}/shared/.env' ]; then
+                echo 'exists'
+              else
+                echo 'missing'
+              fi
+            ")
+            if [ "$ENV_EXISTS" = "missing" ]; then
+              echo "❌ No .env file found. Please set BACKEND_ENV_FILE secret or create shared/.env file"
+              exit 1
+            fi
+            echo "✅ Shared .env file found"
+          fi
+          
+          # Check database connectivity (if DATABASE_URL can be extracted)
+          echo "🗄️  Checking database prerequisites..."
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            # Check if PostgreSQL client is available
+            if command -v psql &> /dev/null; then
+              echo '✅ PostgreSQL client is installed'
+            else
+              echo '⚠️  PostgreSQL client (psql) not found. Database migrations may require manual setup.'
+            fi
+          " || true
+          
+          # Check process manager availability
+          echo "⚙️  Checking process manager..."
+          PM_MANAGER=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            if command -v pm2 &> /dev/null; then
+              echo 'pm2'
+            elif command -v systemctl &> /dev/null; then
+              echo 'systemd'
+            else
+              echo 'none'
+            fi
+          ")
+          if [ "$PM_MANAGER" = "none" ]; then
+            echo "⚠️  No process manager found. Application will run in background mode."
+          else
+            echo "✅ Process manager found: $PM_MANAGER"
+          fi
+          
+          # Check if port is available
+          echo "🔌 Checking port availability..."
+          PORT_CHECK=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            if command -v netstat &> /dev/null; then
+              netstat -tuln | grep ':3001' || echo 'available'
+            elif command -v ss &> /dev/null; then
+              ss -tuln | grep ':3001' || echo 'available'
+            else
+              echo 'unknown'
+            fi
+          ")
+          if [ "$PORT_CHECK" != "available" ] && [ "$PORT_CHECK" != "unknown" ]; then
+            echo "⚠️  Port 3001 may be in use. Ensure the application can bind to this port."
+          else
+            echo "✅ Port 3001 appears to be available"
+          fi
+          
+          echo "✅ All prerequisites validated successfully!"
+
+  deploy:
+    name: Deploy Backend to Server
+    runs-on: ubuntu-latest
+    needs: [build, pre-deploy-check]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    environment:
+      name: production
+      url: ${{ secrets.BACKEND_URL }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
+          path: .
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Create .env file from secret
+        run: |
+          if [ -n "${{ secrets.BACKEND_ENV_FILE }}" ]; then
+            echo "${{ secrets.BACKEND_ENV_FILE }}" > backend-env.txt
+          fi
+
+      - name: Deploy to server
+        run: |
+          # Create deployment directory on server
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            mkdir -p ${{ secrets.BACKEND_DEPLOY_PATH }}/releases
+            mkdir -p ${{ secrets.BACKEND_DEPLOY_PATH }}/shared
+          "
+          
+          # Upload build artifact
+          scp backend-deploy.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.BACKEND_DEPLOY_PATH }}/releases/
+          
+          # Upload .env file if provided
+          if [ -f backend-env.txt ]; then
+            scp backend-env.txt ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.BACKEND_DEPLOY_PATH }}/releases/backend-env.txt
+          fi
+          
+          # Extract and deploy on server
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            cd ${{ secrets.BACKEND_DEPLOY_PATH }}/releases
+            TIMESTAMP=\$(date +%Y%m%d%H%M%S)
+            mkdir -p \$TIMESTAMP
+            tar -xzf backend-deploy.tar.gz -C \$TIMESTAMP
+            rm backend-deploy.tar.gz
+            
+            # Install production dependencies
+            cd \$TIMESTAMP
+            npm ci --production
+            
+            # Create .env file from secret or use shared .env
+            if [ -f ../backend-env.txt ]; then
+              cp ../backend-env.txt .env
+              rm ../backend-env.txt
+              echo '✅ Created .env file from BACKEND_ENV_FILE secret'
+            elif [ -f ${{ secrets.BACKEND_DEPLOY_PATH }}/shared/.env ]; then
+              cp ${{ secrets.BACKEND_DEPLOY_PATH }}/shared/.env .env
+              echo '✅ Using shared .env file'
+            else
+              echo '❌ Error: No .env file found. Deployment cannot continue.'
+              exit 1
+            fi
+            
+            # Validate required environment variables
+            echo '🔍 Validating environment variables...'
+            source .env
+            if [ -z "\$DATABASE_URL" ]; then
+              echo '❌ Error: DATABASE_URL is not set in .env file'
+              exit 1
+            fi
+            if [ -z "\$JWT_SECRET" ]; then
+              echo '❌ Error: JWT_SECRET is not set in .env file'
+              exit 1
+            fi
+            echo '✅ Required environment variables are set'
+            
+            # Test database connectivity before migrations
+            echo '🗄️  Testing database connectivity...'
+            if command -v psql &> /dev/null; then
+              # Extract connection details from DATABASE_URL
+              DB_CONN=$(echo \$DATABASE_URL | sed -E 's|postgresql://([^:]+):([^@]+)@([^:]+):([^/]+)/(.+)|host=\3 port=\4 user=\1 password=\2 dbname=\5|')
+              if psql "\$DB_CONN" -c 'SELECT 1' &> /dev/null; then
+                echo '✅ Database connection successful'
+              else
+                echo '⚠️  Could not verify database connection with psql, but continuing...'
+              fi
+            else
+              echo '⚠️  psql not available, skipping database connectivity test'
+            fi
+            
+            # Generate Prisma client
+            echo '📦 Generating Prisma client...'
+            npm run db:generate || {
+              echo '❌ Error: Failed to generate Prisma client'
+              exit 1
+            }
+            
+            # Run database migrations
+            echo '🔄 Running database migrations...'
+            npx prisma migrate deploy || {
+              echo '❌ Error: Database migration failed'
+              exit 1
+            }
+            echo '✅ Database migrations completed'
+            
+            # Create symlink to current release
+            cd ${{ secrets.BACKEND_DEPLOY_PATH }}
+            rm -f current
+            ln -s releases/\$TIMESTAMP current
+            
+            # Restart application (adjust based on your process manager)
+            if command -v pm2 &> /dev/null; then
+              pm2 restart investment-crm-backend || pm2 start current/dist/index.js --name investment-crm-backend
+            elif command -v systemctl &> /dev/null; then
+              sudo systemctl restart investment-crm-backend || echo 'Service not configured'
+            else
+              # Fallback: kill existing process and start new one
+              pkill -f 'node.*dist/index.js' || true
+              cd current
+              nohup npm start > /dev/null 2>&1 &
+            fi
+            
+            # Cleanup old releases (keep last 5)
+            cd releases
+            ls -t | tail -n +6 | xargs -r rm -rf
+          "
+
+      - name: Health check
+        run: |
+          sleep 10
+          curl -f ${{ secrets.BACKEND_URL }}/health || exit 1
+
