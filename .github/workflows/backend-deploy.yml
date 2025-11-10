@@ -49,50 +49,35 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
         continue-on-error: true
 
       - name: Install dependencies
-        run: |
-          cd backend
-          # Remove node_modules and package-lock.json to fix rollup optional dependencies issue
-          rm -rf node_modules package-lock.json
-          npm install
+        run: npm ci
 
       - name: Generate Prisma Client
-        run: |
-          cd backend
-          npm run db:generate
+        run: npm run db:generate
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/investment_crm_test
 
       - name: Run database migrations
-        run: |
-          cd backend
-          npx prisma migrate deploy
+        run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/investment_crm_test
 
       - name: Run linter
-        run: |
-          cd backend
-          npm run lint
+        run: npm run lint
 
       - name: Type check
-        run: |
-          cd backend
-          npm run type-check
+        run: npm run type-check
 
       - name: Run tests
-        run: |
-          cd backend
-          npm test
+        run: npm test
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/investment_crm_test
           NODE_ENV: test
           JWT_SECRET: test-secret-key
-          JWT_REFRESH_SECRET: test-refresh-secret-key
-          JWT_EXPIRY: 7d
-          JWT_REFRESH_EXPIRY: 30d
 
   build:
     name: Build Backend
@@ -110,7 +95,6 @@ jobs:
 
       - name: Verify package-lock.json exists
         run: |
-          cd backend
           if [ ! -f package-lock.json ]; then
             echo "Warning: package-lock.json not found, cache will be skipped"
           fi
@@ -119,27 +103,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: |
-          cd backend
-          # Remove node_modules and package-lock.json to fix rollup optional dependencies issue
-          rm -rf node_modules package-lock.json
-          npm install
+        run: npm ci
 
       - name: Generate Prisma Client
-        run: |
-          cd backend
-          npm run db:generate
+        run: npm run db:generate
 
       - name: Build application
-        run: |
-          cd backend
-          npm run build
+        run: npm run build
 
       - name: Create deployment package
         run: |
-          cd backend
           mkdir -p deploy
           cp -r dist deploy/
           cp -r prisma deploy/
@@ -152,7 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: backend-build
-          path: backend/backend-deploy.tar.gz
+          path: backend-deploy.tar.gz
           retention-days: 1
 
   pre-deploy-check:
@@ -329,7 +306,7 @@ jobs:
           "
           
           # Upload build artifact
-          scp backend/backend-deploy.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.BACKEND_DEPLOY_PATH }}/releases/
+          scp backend-deploy.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.BACKEND_DEPLOY_PATH }}/releases/
           
           # Upload .env file if provided
           if [ -f backend-env.txt ]; then
