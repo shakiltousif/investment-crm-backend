@@ -79,13 +79,14 @@ export class TransactionService {
     }
 
     if (filters?.startDate || filters?.endDate) {
-      where.transactionDate = {};
+      const transactionDateFilter: { gte?: Date; lte?: Date } = {};
       if (filters.startDate) {
-        where.transactionDate.gte = new Date(filters.startDate);
+        transactionDateFilter.gte = new Date(filters.startDate);
       }
       if (filters.endDate) {
-        where.transactionDate.lte = new Date(filters.endDate);
+        transactionDateFilter.lte = new Date(filters.endDate);
       }
+      where.transactionDate = transactionDateFilter;
     }
 
     const transactions = await prisma.transaction.findMany({
@@ -101,7 +102,26 @@ export class TransactionService {
     return transactions;
   }
 
-  async getTransactionById(userId: string, transactionId: string): Promise<unknown> {
+  async getTransactionById(
+    userId: string,
+    transactionId: string
+  ): Promise<{
+    id: string;
+    userId: string;
+    bankAccountId: string | null;
+    investmentId: string | null;
+    type: string;
+    amount: Decimal;
+    currency: string;
+    status: string;
+    description: string | null;
+    transactionDate: Date;
+    completedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    bankAccount?: unknown;
+    investment?: unknown;
+  }> {
     const transaction = await prisma.transaction.findFirst({
       where: {
         id: transactionId,
@@ -123,7 +143,7 @@ export class TransactionService {
   async approveTransaction(userId: string, transactionId: string): Promise<unknown> {
     const transaction = await this.getTransactionById(userId, transactionId);
 
-    if (transaction.status !== 'PENDING') {
+    if ((transaction.status as string) !== 'PENDING') {
       throw new ValidationError('Only pending transactions can be approved');
     }
 
@@ -140,7 +160,7 @@ export class TransactionService {
   async completeTransaction(userId: string, transactionId: string): Promise<unknown> {
     const transaction = await this.getTransactionById(userId, transactionId);
 
-    if (transaction.status !== 'PROCESSING') {
+    if ((transaction.status as string) !== 'PROCESSING') {
       throw new ValidationError('Only processing transactions can be completed');
     }
 
@@ -153,9 +173,9 @@ export class TransactionService {
       if (bankAccount) {
         let newBalance = bankAccount.balance;
 
-        if (transaction.type === 'DEPOSIT') {
+        if ((transaction.type as string) === 'DEPOSIT') {
           newBalance = newBalance.plus(transaction.amount);
-        } else if (transaction.type === 'WITHDRAWAL') {
+        } else if ((transaction.type as string) === 'WITHDRAWAL') {
           newBalance = newBalance.minus(transaction.amount);
         }
 
@@ -180,7 +200,7 @@ export class TransactionService {
   async rejectTransaction(userId: string, transactionId: string): Promise<unknown> {
     const transaction = await this.getTransactionById(userId, transactionId);
 
-    if (!['PENDING', 'PROCESSING'].includes(transaction.status)) {
+    if (!['PENDING', 'PROCESSING'].includes(transaction.status as string)) {
       throw new ValidationError('Cannot reject completed or failed transactions');
     }
 

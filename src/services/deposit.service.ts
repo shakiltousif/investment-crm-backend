@@ -129,24 +129,26 @@ export class DepositService {
 
     // Amount range filter
     if (filters.minAmount || filters.maxAmount) {
-      where.amount = {};
+      const amountFilter: { gte?: Decimal; lte?: Decimal } = {};
       if (filters.minAmount) {
-        where.amount.gte = new Decimal(filters.minAmount);
+        amountFilter.gte = new Decimal(filters.minAmount);
       }
       if (filters.maxAmount) {
-        where.amount.lte = new Decimal(filters.maxAmount);
+        amountFilter.lte = new Decimal(filters.maxAmount);
       }
+      where.amount = amountFilter;
     }
 
     // Date range filter
     if (filters.startDate || filters.endDate) {
-      where.transactionDate = {};
+      const transactionDateFilter: { gte?: Date; lte?: Date } = {};
       if (filters.startDate) {
-        where.transactionDate.gte = new Date(filters.startDate);
+        transactionDateFilter.gte = new Date(filters.startDate);
       }
       if (filters.endDate) {
-        where.transactionDate.lte = new Date(filters.endDate);
+        transactionDateFilter.lte = new Date(filters.endDate);
       }
+      where.transactionDate = transactionDateFilter;
     }
 
     const limit = Math.min(filters.limit ?? 20, 100);
@@ -179,7 +181,25 @@ export class DepositService {
   /**
    * Get deposit by ID
    */
-  async getDepositById(userId: string, depositId: string): Promise<unknown> {
+  async getDepositById(
+    userId: string,
+    depositId: string
+  ): Promise<{
+    id: string;
+    userId: string;
+    bankAccountId: string | null;
+    investmentId: string | null;
+    type: string;
+    amount: Decimal;
+    currency: string;
+    status: string;
+    description: string | null;
+    transactionDate: Date;
+    completedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    bankAccount?: unknown;
+  }> {
     const deposit = await prisma.transaction.findFirst({
       where: {
         id: depositId,

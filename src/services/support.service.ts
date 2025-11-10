@@ -20,7 +20,17 @@ export class SupportService {
   /**
    * Get all active support settings
    */
-  async getSupportSettings(): Promise<Array<unknown>> {
+  async getSupportSettings(): Promise<
+    Array<{
+      key: string;
+      value: string;
+      label: string | null;
+      displayOrder: number;
+      isActive: boolean;
+      createdAt: Date;
+      updatedAt: Date;
+    }>
+  > {
     const settings = await prisma.supportSettings.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: 'asc' },
@@ -138,13 +148,13 @@ export class SupportService {
     const formatted: Record<string, string> = {};
     const ordered: Array<{ label: string; value: string; key: string }> = [];
 
-    settings.forEach((setting) => {
+    settings.forEach((setting: { key: string; value: string; label: string | null }) => {
       formatted[setting.key] = setting.value;
       ordered.push({
         key: setting.key,
         label: setting.label ?? setting.key,
         value: setting.value,
-      } as { key: string; label: string; value: string });
+      });
     });
 
     return {

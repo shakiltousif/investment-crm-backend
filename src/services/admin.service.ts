@@ -624,13 +624,14 @@ export class AdminService {
     }
 
     if (filters.startDate || filters.endDate) {
-      where.transactionDate = {};
+      const transactionDateFilter: { gte?: Date; lte?: Date } = {};
       if (filters.startDate) {
-        where.transactionDate.gte = new Date(filters.startDate);
+        transactionDateFilter.gte = new Date(filters.startDate);
       }
       if (filters.endDate) {
-        where.transactionDate.lte = new Date(filters.endDate);
+        transactionDateFilter.lte = new Date(filters.endDate);
       }
+      where.transactionDate = transactionDateFilter;
     }
 
     const limit = Math.min(filters.limit ?? 100, 500);

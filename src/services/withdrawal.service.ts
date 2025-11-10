@@ -133,24 +133,26 @@ export class WithdrawalService {
 
     // Amount range filter
     if (filters.minAmount || filters.maxAmount) {
-      where.amount = {};
+      const amountFilter: { gte?: Decimal; lte?: Decimal } = {};
       if (filters.minAmount) {
-        where.amount.gte = new Decimal(filters.minAmount);
+        amountFilter.gte = new Decimal(filters.minAmount);
       }
       if (filters.maxAmount) {
-        where.amount.lte = new Decimal(filters.maxAmount);
+        amountFilter.lte = new Decimal(filters.maxAmount);
       }
+      where.amount = amountFilter;
     }
 
     // Date range filter
     if (filters.startDate || filters.endDate) {
-      where.transactionDate = {};
+      const transactionDateFilter: { gte?: Date; lte?: Date } = {};
       if (filters.startDate) {
-        where.transactionDate.gte = new Date(filters.startDate);
+        transactionDateFilter.gte = new Date(filters.startDate);
       }
       if (filters.endDate) {
-        where.transactionDate.lte = new Date(filters.endDate);
+        transactionDateFilter.lte = new Date(filters.endDate);
       }
+      where.transactionDate = transactionDateFilter;
     }
 
     const limit = Math.min(filters.limit ?? 20, 100);
@@ -183,7 +185,25 @@ export class WithdrawalService {
   /**
    * Get withdrawal by ID
    */
-  async getWithdrawalById(userId: string, withdrawalId: string): Promise<unknown> {
+  async getWithdrawalById(
+    userId: string,
+    withdrawalId: string
+  ): Promise<{
+    id: string;
+    userId: string;
+    bankAccountId: string | null;
+    investmentId: string | null;
+    type: string;
+    amount: Decimal;
+    currency: string;
+    status: string;
+    description: string | null;
+    transactionDate: Date;
+    completedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+    bankAccount?: unknown;
+  }> {
     const withdrawal = await prisma.transaction.findFirst({
       where: {
         id: withdrawalId,
@@ -208,7 +228,7 @@ export class WithdrawalService {
   async approveWithdrawal(userId: string, withdrawalId: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
-    if (withdrawal.status !== 'PENDING') {
+    if ((withdrawal.status as string) !== 'PENDING') {
       throw new ValidationError('Only pending withdrawals can be approved');
     }
 
@@ -217,7 +237,7 @@ export class WithdrawalService {
       where: { id: withdrawal.bankAccountId! },
     });
 
-    if (bankAccount?.balance.lessThan(withdrawal.amount)) {
+    if (bankAccount && bankAccount.balance.lessThan(withdrawal.amount)) {
       throw new ValidationError('Insufficient balance for withdrawal');
     }
 
@@ -238,7 +258,7 @@ export class WithdrawalService {
   async completeWithdrawal(userId: string, withdrawalId: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
-    if (withdrawal.status !== 'PROCESSING') {
+    if ((withdrawal.status as string) !== 'PROCESSING') {
       throw new ValidationError('Only processing withdrawals can be completed');
     }
 
@@ -277,7 +297,7 @@ export class WithdrawalService {
   async rejectWithdrawal(userId: string, withdrawalId: string, reason?: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
-    if (!['PENDING', 'PROCESSING'].includes(withdrawal.status)) {
+    if (!['PENDING', 'PROCESSING'].includes(withdrawal.status as string)) {
       throw new ValidationError('Only pending or processing withdrawals can be rejected');
     }
 
@@ -303,7 +323,7 @@ export class WithdrawalService {
   async cancelWithdrawal(userId: string, withdrawalId: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
-    if (!['PENDING'].includes(withdrawal.status)) {
+    if (!['PENDING'].includes(withdrawal.status as string)) {
       throw new ValidationError('Only pending withdrawals can be cancelled');
     }
 
