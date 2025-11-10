@@ -43,7 +43,25 @@ export class BankAccountService {
     return accounts;
   }
 
-  async getBankAccountById(userId: string, accountId: string): Promise<unknown> {
+  async getBankAccountById(
+    userId: string,
+    accountId: string
+  ): Promise<{
+    id: string;
+    userId: string;
+    accountHolderName: string;
+    accountNumber: string;
+    bankName: string;
+    bankCode: string | null;
+    accountType: string;
+    currency: string;
+    balance: Decimal;
+    isVerified: boolean;
+    verifiedAt: Date | null;
+    isPrimary: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }> {
     const account = await prisma.bankAccount.findFirst({
       where: {
         id: accountId,

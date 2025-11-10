@@ -64,7 +64,29 @@ export class InvestmentService {
     return investments;
   }
 
-  async getInvestmentById(userId: string, investmentId: string): Promise<unknown> {
+  async getInvestmentById(
+    userId: string,
+    investmentId: string
+  ): Promise<{
+    id: string;
+    userId: string;
+    portfolioId: string;
+    type: string;
+    name: string;
+    symbol: string | null;
+    quantity: Decimal;
+    purchasePrice: Decimal;
+    currentPrice: Decimal;
+    totalValue: Decimal;
+    totalGain: Decimal;
+    gainPercentage: Decimal;
+    purchaseDate: Date;
+    maturityDate: Date | null;
+    interestRate: Decimal | null;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }> {
     const investment = await prisma.investment.findFirst({
       where: {
         id: investmentId,

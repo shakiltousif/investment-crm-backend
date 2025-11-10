@@ -227,7 +227,10 @@ router.get('/bonds/:id/payout-schedule', authenticate, async (req: AuthRequest, 
       throw new NotFoundError('Corporate Bond not found');
     }
 
-    const schedule = investmentProductService.calculateBondPayoutSchedule(bond, investmentAmount);
+    const schedule = investmentProductService.calculateBondPayoutSchedule(
+      { ...bond, payoutFrequency: bond.payoutFrequency ?? null },
+      investmentAmount
+    );
     res.status(200).json({
       message: 'Payout schedule calculated successfully',
       data: schedule,
@@ -296,7 +299,7 @@ router.get(
       }
 
       const maturity = investmentProductService.calculateFixedDepositMaturity(
-        fixedDeposit,
+        { ...fixedDeposit, lockPeriodMonths: fixedDeposit.lockPeriodMonths ?? null },
         investmentAmount
       );
       res.status(200).json({

@@ -50,8 +50,9 @@ export class MarketplaceService {
       }
 
       if (filters.maxPrice !== undefined) {
+        const currentPriceFilter = where.currentPrice as { gte?: number } | undefined;
         where.currentPrice = {
-          ...where.currentPrice,
+          ...(currentPriceFilter || {}),
           lte: filters.maxPrice,
         };
       }
@@ -239,7 +240,25 @@ export class MarketplaceService {
   /**
    * Get investment details
    */
-  async getInvestmentDetails(investmentId: string): Promise<unknown> {
+  async getInvestmentDetails(investmentId: string): Promise<{
+    id: string;
+    name: string;
+    type: string;
+    symbol: string | null;
+    description: string | null;
+    currentPrice: number | Decimal;
+    minimumInvestment: number | Decimal;
+    maximumInvestment: number | Decimal | null;
+    currency: string;
+    riskLevel: string;
+    expectedReturn: number | Decimal | null;
+    category: string | null;
+    issuer: string | null;
+    maturityDate: Date | null;
+    isAvailable: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }> {
     try {
       const investment = await prisma.marketplaceItem.findUnique({
         where: { id: investmentId },
@@ -391,14 +410,17 @@ export class MarketplaceService {
     }
 
     // Calculate transaction details
-    const totalCost = new Decimal(input.quantity).times(investment.currentPrice);
+    const currentPrice = typeof investment.currentPrice === 'number' 
+      ? new Decimal(investment.currentPrice) 
+      : investment.currentPrice;
+    const totalCost = new Decimal(input.quantity).times(currentPrice);
     const estimatedFee = totalCost.times(new Decimal(0.01)); // 1% fee
     const totalAmount = totalCost.plus(estimatedFee);
 
     return {
       investment,
       quantity: input.quantity,
-      unitPrice: investment.currentPrice,
+      unitPrice: typeof investment.currentPrice === 'number' ? investment.currentPrice : investment.currentPrice.toNumber(),
       totalCost,
       estimatedFee,
       totalAmount,
@@ -440,27 +462,38 @@ export class MarketplaceService {
     }
 
     // Calculate transaction details
-    const totalCost = new Decimal(input.quantity).times(marketplaceInvestment.currentPrice);
+    const currentPrice = typeof marketplaceInvestment.currentPrice === 'number'
+      ? new Decimal(marketplaceInvestment.currentPrice)
+      : marketplaceInvestment.currentPrice;
+    const totalCost = new Decimal(input.quantity).times(currentPrice);
     const estimatedFee = totalCost.times(new Decimal(0.01)); // 1% fee
     const totalAmount = totalCost.plus(estimatedFee);
 
     // Create the investment record in user's portfolio
+    const purchasePrice = typeof marketplaceInvestment.currentPrice === 'number'
+      ? new Decimal(marketplaceInvestment.currentPrice)
+      : marketplaceInvestment.currentPrice;
+    const expectedReturn = marketplaceInvestment.expectedReturn
+      ? (typeof marketplaceInvestment.expectedReturn === 'number'
+          ? new Decimal(marketplaceInvestment.expectedReturn)
+          : marketplaceInvestment.expectedReturn)
+      : null;
     const userInvestment = await prisma.investment.create({
       data: {
         userId,
         portfolioId: input.portfolioId,
-        type: marketplaceInvestment.type,
+        type: marketplaceInvestment.type as 'STOCK' | 'BOND' | 'CORPORATE_BOND' | 'TERM_DEPOSIT' | 'FIXED_RATE_DEPOSIT' | 'HIGH_INTEREST_SAVINGS' | 'IPO' | 'PRIVATE_EQUITY' | 'MUTUAL_FUND' | 'ETF' | 'CRYPTOCURRENCY' | 'OTHER',
         name: marketplaceInvestment.name,
         symbol: marketplaceInvestment.symbol,
         quantity: new Decimal(input.quantity),
-        purchasePrice: marketplaceInvestment.currentPrice,
-        currentPrice: marketplaceInvestment.currentPrice,
+        purchasePrice,
+        currentPrice: purchasePrice,
         totalValue: totalCost,
         totalGain: new Decimal(0), // No gain on purchase
         gainPercentage: new Decimal(0),
         purchaseDate: new Date(),
         maturityDate: marketplaceInvestment.maturityDate,
-        interestRate: marketplaceInvestment.expectedReturn,
+        interestRate: expectedReturn,
       },
     });
 
@@ -487,7 +520,7 @@ export class MarketplaceService {
       details: {
         marketplaceInvestment,
         quantity: input.quantity,
-        unitPrice: marketplaceInvestment.currentPrice,
+        unitPrice: typeof marketplaceInvestment.currentPrice === 'number' ? marketplaceInvestment.currentPrice : marketplaceInvestment.currentPrice.toNumber(),
         totalCost,
         fee: estimatedFee,
         totalAmount,

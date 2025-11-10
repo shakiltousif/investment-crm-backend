@@ -177,6 +177,7 @@ export class TwoFactorService {
   /**
    * Hash backup code
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private hashCode(_code: string): string {
     return crypto.createHash('sha256').update(_code).digest('hex');
   }

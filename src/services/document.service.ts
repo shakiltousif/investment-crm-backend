@@ -78,7 +78,7 @@ export class DocumentService {
     const document = await prisma.document.create({
       data: {
         userId,
-        type: data.type,
+        type: data.type as 'KYC' | 'IDENTIFICATION' | 'PROOF_OF_ADDRESS' | 'BANK_STATEMENT' | 'TAX_DOCUMENT' | 'AGREEMENT' | 'OTHER',
         fileName: data.fileName,
         fileUrl: `/uploads/documents/${uniqueFileName}`,
         fileSize: data.fileSize,
@@ -155,7 +155,20 @@ export class DocumentService {
     documentId: string,
     userId?: string,
     isAdmin: boolean = false
-  ): Promise<unknown> {
+  ): Promise<{
+    id: string;
+    userId: string;
+    type: string;
+    fileName: string;
+    fileUrl: string;
+    fileSize: number;
+    mimeType: string;
+    description: string | null;
+    uploadedBy: string;
+    isImportant: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+  }> {
     // First check if document exists
     const document = await prisma.document.findUnique({
       where: { id: documentId },
@@ -301,7 +314,23 @@ export class DocumentService {
   /**
    * Get statement by ID
    */
-  async getStatementById(statementId: string, userId?: string): Promise<unknown> {
+  async getStatementById(
+    statementId: string,
+    userId?: string
+  ): Promise<{
+    id: string;
+    userId: string;
+    period: string;
+    fileName: string;
+    fileUrl: string;
+    fileSize: number;
+    mimeType: string;
+    description: string | null;
+    uploadedBy: string;
+    uploadedAt: Date;
+    createdAt: Date;
+    updatedAt: Date;
+  }> {
     const where: Record<string, unknown> = { id: statementId };
     if (userId) {
       where.userId = userId;

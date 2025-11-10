@@ -13,10 +13,10 @@ router.use(requireAdmin);
  * GET /api/admin/dashboard
  * Get admin dashboard statistics
  */
-router.get('/dashboard', async (req: AuthRequest, res: Response) => {
+router.get('/dashboard', async (_req: AuthRequest, res: Response): Promise<Response> => {
   try {
     const stats = await adminService.getDashboardStats();
-    res.status(200).json({
+    return res.status(200).json({
       message: 'Dashboard stats retrieved successfully',
       data: stats,
     });
@@ -97,7 +97,7 @@ router.post('/users', async (req: AuthRequest, res: Response) => {
  * PUT /api/admin/users/:id
  * Update user
  */
-router.put('/users/:id', async (req: AuthRequest, res: Response) => {
+router.put('/users/:id', async (req: AuthRequest, res: Response): Promise<Response> => {
   try {
     // Prevent admin from changing their own role or deactivating themselves
     if (req.userId === req.params.id) {
@@ -126,7 +126,7 @@ router.put('/users/:id', async (req: AuthRequest, res: Response) => {
     const validatedData = schema.parse(req.body);
     const user = await adminService.updateUser(req.params.id, validatedData);
 
-    res.status(200).json({
+    return res.status(200).json({
       message: 'User updated successfully',
       data: user,
     });
@@ -151,7 +151,7 @@ router.delete('/users/:id', async (req: AuthRequest, res: Response) => {
 
     const result = await adminService.deleteUser(req.params.id);
 
-    res.status(200).json({
+    return res.status(200).json({
       message: 'User deleted successfully',
       data: result,
     });

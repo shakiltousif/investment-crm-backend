@@ -122,7 +122,7 @@ export const generateToken = (userId: string, email: string): string => {
     throw new Error('JWT_SECRET is not defined');
   }
 
-  return jwt.sign({ userId, email }, secret, { expiresIn });
+  return jwt.sign({ userId, email }, secret, { expiresIn: expiresIn as string | number });
 };
 
 export const generateRefreshToken = (userId: string): string => {
@@ -133,7 +133,7 @@ export const generateRefreshToken = (userId: string): string => {
     throw new Error('JWT_REFRESH_SECRET is not defined');
   }
 
-  return jwt.sign({ userId }, secret, { expiresIn });
+  return jwt.sign({ userId }, secret, { expiresIn: expiresIn as string | number });
 };
 
 export const verifyRefreshToken = (token: string): { userId: string } => {

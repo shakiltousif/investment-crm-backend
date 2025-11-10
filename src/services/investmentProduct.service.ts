@@ -283,7 +283,7 @@ export class InvestmentProductService {
       type: string;
       couponRate?: unknown;
       maturityDate?: Date | null;
-      payoutFrequency?: string;
+      payoutFrequency?: string | null;
       nextPayoutDate?: Date | null;
     },
     investmentAmount: number
@@ -387,7 +387,7 @@ export class InvestmentProductService {
     fixedDeposit: {
       type: string;
       interestRate?: unknown;
-      lockPeriodMonths?: number;
+      lockPeriodMonths?: number | null;
       earlyWithdrawalPenalty?: unknown;
     },
     investmentAmount: number

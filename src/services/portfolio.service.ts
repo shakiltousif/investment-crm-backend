@@ -120,7 +120,23 @@ export class PortfolioService {
     }
   }
 
-  async getPortfolioById(userId: string, portfolioId: string): Promise<unknown> {
+  async getPortfolioById(
+    userId: string,
+    portfolioId: string
+  ): Promise<{
+    id: string;
+    userId: string;
+    name: string;
+    description: string | null;
+    totalValue: Decimal;
+    totalInvested: Decimal;
+    totalGain: Decimal;
+    gainPercentage: Decimal;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    investments: Array<unknown>;
+  }> {
     const portfolio = await prisma.portfolio.findFirst({
       where: {
         id: portfolioId,

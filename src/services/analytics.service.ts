@@ -67,14 +67,14 @@ export class AnalyticsService {
 
     const totalValue = portfolios.reduce((sum, portfolio) => {
       const portfolioValue = portfolio.investments.reduce((pSum, investment) => {
-        return pSum + Number(investment.currentPrice) * investment.quantity;
+        return pSum + Number(investment.currentPrice) * Number(investment.quantity);
       }, 0);
       return sum + portfolioValue;
     }, 0);
 
     const totalInvested = portfolios.reduce((sum, portfolio) => {
       const portfolioInvested = portfolio.investments.reduce((pSum, investment) => {
-        return pSum + Number(investment.purchasePrice) * investment.quantity;
+        return pSum + Number(investment.purchasePrice) * Number(investment.quantity);
       }, 0);
       return sum + portfolioInvested;
     }, 0);
@@ -119,14 +119,14 @@ export class AnalyticsService {
 
     const totalValue = portfolios.reduce((sum, portfolio) => {
       const portfolioValue = portfolio.investments.reduce((pSum, investment) => {
-        return pSum + Number(investment.currentPrice) * investment.quantity;
+        return pSum + Number(investment.currentPrice) * Number(investment.quantity);
       }, 0);
       return sum + portfolioValue;
     }, 0);
 
     return portfolios.map((portfolio) => {
       const portfolioValue = portfolio.investments.reduce(
-        (sum, inv) => sum + Number(inv.currentPrice) * inv.quantity,
+        (sum, inv) => sum + Number(inv.currentPrice) * Number(inv.quantity),
         0
       );
       return {
@@ -137,10 +137,10 @@ export class AnalyticsService {
         investments: portfolio.investments.map((inv) => ({
           investmentId: inv.id,
           name: inv.name,
-          value: Number(inv.currentPrice) * inv.quantity,
+          value: Number(inv.currentPrice) * Number(inv.quantity),
           percentage:
             portfolioValue > 0
-              ? ((Number(inv.currentPrice) * inv.quantity) / portfolioValue) * 100
+              ? ((Number(inv.currentPrice) * Number(inv.quantity)) / portfolioValue) * 100
               : 0,
         })),
       };
@@ -175,12 +175,12 @@ export class AnalyticsService {
       investmentId: investment.id,
       name: investment.name,
       symbol: investment.symbol,
-      quantity: investment.quantity,
+      quantity: Number(investment.quantity),
       currentPrice: Number(investment.currentPrice),
-      totalValue: Number(investment.currentPrice) * investment.quantity,
-      costBasis: Number(investment.purchasePrice) * investment.quantity,
+      totalValue: Number(investment.currentPrice) * Number(investment.quantity),
+      costBasis: Number(investment.purchasePrice) * Number(investment.quantity),
       gain:
-        (Number(investment.currentPrice) - Number(investment.purchasePrice)) * investment.quantity,
+        (Number(investment.currentPrice) - Number(investment.purchasePrice)) * Number(investment.quantity),
       gainPercentage:
         Number(investment.purchasePrice) > 0
           ? ((Number(investment.currentPrice) - Number(investment.purchasePrice)) /
@@ -217,9 +217,13 @@ export class AnalyticsService {
     let totalInvested = new Decimal(0);
 
     for (const investment of portfolio.investments) {
-      const value = investment.quantity * investment.currentPrice;
+      const quantity = new Decimal(investment.quantity);
+      const currentPrice = new Decimal(investment.currentPrice);
+      const value = quantity.times(currentPrice);
       totalValue = totalValue.plus(value);
-      totalInvested = totalInvested.plus(investment.costBasis);
+      const purchasePrice = new Decimal(investment.purchasePrice);
+      const costBasis = quantity.times(purchasePrice);
+      totalInvested = totalInvested.plus(costBasis);
     }
 
     const totalGain = totalValue.minus(totalInvested);
@@ -273,9 +277,13 @@ export class AnalyticsService {
       let totalInvested = new Decimal(0);
 
       for (const investment of portfolio.investments) {
-        const value = investment.quantity * investment.currentPrice;
+        const quantity = new Decimal(investment.quantity);
+        const currentPrice = new Decimal(investment.currentPrice);
+        const value = quantity.times(currentPrice);
         totalValue = totalValue.plus(value);
-        totalInvested = totalInvested.plus(investment.costBasis);
+        const purchasePrice = new Decimal(investment.purchasePrice);
+        const costBasis = quantity.times(purchasePrice);
+        totalInvested = totalInvested.plus(costBasis);
       }
 
       const totalGain = totalValue.minus(totalInvested);
@@ -325,13 +333,17 @@ export class AnalyticsService {
     // Calculate total value
     let totalValue = new Decimal(0);
     for (const investment of portfolio.investments) {
-      const value = investment.quantity * investment.currentPrice;
+      const quantity = new Decimal(investment.quantity);
+      const currentPrice = new Decimal(investment.currentPrice);
+      const value = quantity.times(currentPrice);
       totalValue = totalValue.plus(value);
     }
 
     // Calculate allocation percentages
     const allocation: PortfolioAllocation[] = portfolio.investments.map((investment) => {
-      const value = investment.quantity * investment.currentPrice;
+      const quantity = new Decimal(investment.quantity);
+      const currentPrice = new Decimal(investment.currentPrice);
+      const value = quantity.times(currentPrice);
       const percentage = totalValue.greaterThan(0)
         ? value.dividedBy(totalValue).times(100)
         : new Decimal(0);
@@ -339,7 +351,7 @@ export class AnalyticsService {
       return {
         investmentId: investment.id,
         name: investment.name,
-        symbol: investment.symbol,
+        symbol: investment.symbol ?? '',
         type: investment.type,
         value,
         percentage,
@@ -372,10 +384,14 @@ export class AnalyticsService {
       throw new NotFoundError('Investment not found');
     }
 
-    const totalValue = investment.quantity * investment.currentPrice;
-    const gain = totalValue.minus(investment.costBasis);
-    const gainPercentage = investment.costBasis.greaterThan(0)
-      ? gain.dividedBy(investment.costBasis).times(100)
+    const quantity = new Decimal(investment.quantity);
+    const currentPrice = new Decimal(investment.currentPrice);
+    const purchasePrice = new Decimal(investment.purchasePrice);
+    const totalValue = quantity.times(currentPrice);
+    const costBasis = quantity.times(purchasePrice);
+    const gain = totalValue.minus(costBasis);
+    const gainPercentage = costBasis.greaterThan(0)
+      ? gain.dividedBy(costBasis).times(100)
       : new Decimal(0);
 
     // For now, calculate based on current data
@@ -385,11 +401,11 @@ export class AnalyticsService {
     return {
       investmentId,
       name: investment.name,
-      symbol: investment.symbol,
-      quantity: investment.quantity,
-      currentPrice: investment.currentPrice,
+      symbol: investment.symbol ?? '',
+      quantity: Number(quantity),
+      currentPrice,
       totalValue,
-      costBasis: investment.costBasis,
+      costBasis,
       gain,
       gainPercentage,
       dayChange,
@@ -426,10 +442,14 @@ export class AnalyticsService {
 
     for (const portfolio of portfolios) {
       for (const investment of portfolio.investments) {
-        const value = investment.quantity * investment.currentPrice;
+        const quantity = new Decimal(investment.quantity);
+        const currentPrice = new Decimal(investment.currentPrice);
+        const purchasePrice = new Decimal(investment.purchasePrice);
+        const value = quantity.times(currentPrice);
+        const costBasis = quantity.times(purchasePrice);
         totalPortfolioValue = totalPortfolioValue.plus(value);
-        totalInvested = totalInvested.plus(investment.costBasis);
-        totalGain = totalGain.plus(value.minus(investment.costBasis));
+        totalInvested = totalInvested.plus(costBasis);
+        totalGain = totalGain.plus(value.minus(costBasis));
       }
     }
 
