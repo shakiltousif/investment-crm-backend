@@ -114,4 +114,3 @@ router.post('/regenerate-backup-codes', authenticate, async (req: AuthRequest, r
 });
 
 export default router;
-

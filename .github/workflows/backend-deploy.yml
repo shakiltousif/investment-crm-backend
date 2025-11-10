@@ -7,29 +7,15 @@ on:
       - master
     paths:
       - 'backend/**'
-      - '.github/workflows/backend-deploy.yml'
+      - 'backend/.github/workflows/backend-deploy.yml'
   pull_request:
     branches:
       - main
       - master
     paths:
       - 'backend/**'
-      - '.github/workflows/backend-deploy.yml'
+      - 'backend/.github/workflows/backend-deploy.yml'
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to deploy from'
-        required: false
-        default: 'main'
-        type: choice
-        options:
-          - main
-          - master
-      skip_tests:
-        description: 'Skip tests (not recommended)'
-        required: false
-        default: false
-        type: boolean
 
 env:
   NODE_VERSION: '20'
@@ -38,7 +24,6 @@ jobs:
   test:
     name: Test Backend
     runs-on: ubuntu-latest
-    if: github.event.inputs.skip_tests != 'true'
     
     services:
       postgres:
@@ -58,8 +43,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.ref }}
 
       - name: Setup Node.js
         id: setup-node
@@ -104,13 +87,11 @@ jobs:
       always() &&
       (needs.test.result == 'success' || needs.test.result == 'skipped') &&
       ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
-       (github.event_name == 'workflow_dispatch' && (github.event.inputs.branch == 'main' || github.event.inputs.branch == 'master' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')))
+       (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')))
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.ref }}
 
       - name: Verify package-lock.json exists
         run: |
@@ -157,7 +138,7 @@ jobs:
     needs: build
     if: |
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.branch == 'main' || github.event.inputs.branch == 'master' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+      (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     
     steps:
       - name: Setup SSH
@@ -287,15 +268,13 @@ jobs:
     needs: [build, pre-deploy-check]
     if: |
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.branch == 'main' || github.event.inputs.branch == 'master' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
+      (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     environment:
       name: production
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.ref }}
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4

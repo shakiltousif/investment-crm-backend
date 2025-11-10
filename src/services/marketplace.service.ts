@@ -46,9 +46,9 @@ export class MarketplaceService {
       }
 
       if (filters.maxPrice !== undefined) {
-        where.currentPrice = { 
+        where.currentPrice = {
           ...where.currentPrice,
-          lte: filters.maxPrice 
+          lte: filters.maxPrice,
         };
       }
 
@@ -93,7 +93,7 @@ export class MarketplaceService {
       };
     } catch (error) {
       console.error('Error fetching marketplace investments:', error);
-      
+
       // Return mock data when database is not available
       const mockInvestments = [
         {
@@ -102,7 +102,7 @@ export class MarketplaceService {
           type: 'STOCK',
           symbol: 'AAPL',
           description: 'Technology company focused on consumer electronics and software',
-          currentPrice: 175.50,
+          currentPrice: 175.5,
           minimumInvestment: 100,
           maximumInvestment: 100000,
           currency: 'GBP',
@@ -138,7 +138,7 @@ export class MarketplaceService {
           type: 'STOCK',
           symbol: 'TSLA',
           description: 'Electric vehicle and clean energy company',
-          currentPrice: 245.30,
+          currentPrice: 245.3,
           minimumInvestment: 100,
           maximumInvestment: 100000,
           currency: 'GBP',
@@ -155,7 +155,7 @@ export class MarketplaceService {
           name: 'Bitcoin (BTC)',
           type: 'CRYPTOCURRENCY',
           symbol: 'BTC-USD',
-          description: 'The world\'s first and largest cryptocurrency by market capitalization',
+          description: "The world's first and largest cryptocurrency by market capitalization",
           currentPrice: 65000,
           minimumInvestment: 100,
           maximumInvestment: 1000000,
@@ -192,7 +192,7 @@ export class MarketplaceService {
           type: 'BOND',
           symbol: 'US10Y',
           description: '10-year US Treasury bond with fixed interest rate',
-          currentPrice: 98.50,
+          currentPrice: 98.5,
           minimumInvestment: 1000,
           maximumInvestment: 1000000,
           currency: 'GBP',
@@ -209,17 +209,18 @@ export class MarketplaceService {
 
       // Apply filters to mock data
       let filteredData = mockInvestments;
-      
+
       if (filters.type) {
-        filteredData = filteredData.filter(item => item.type === filters.type);
+        filteredData = filteredData.filter((item) => item.type === filters.type);
       }
-      
+
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
-        filteredData = filteredData.filter(item => 
-          item.name.toLowerCase().includes(searchLower) ||
-          item.symbol?.toLowerCase().includes(searchLower) ||
-          item.description.toLowerCase().includes(searchLower)
+        filteredData = filteredData.filter(
+          (item) =>
+            item.name.toLowerCase().includes(searchLower) ||
+            item.symbol?.toLowerCase().includes(searchLower) ||
+            item.description.toLowerCase().includes(searchLower)
         );
       }
 
@@ -249,7 +250,7 @@ export class MarketplaceService {
             type: 'STOCK',
             symbol: 'AAPL',
             description: 'Technology company focused on consumer electronics and software',
-            currentPrice: 175.50,
+            currentPrice: 175.5,
             minimumInvestment: 100,
             maximumInvestment: 100000,
             currency: 'GBP',
@@ -285,7 +286,7 @@ export class MarketplaceService {
             type: 'STOCK',
             symbol: 'TSLA',
             description: 'Electric vehicle and clean energy company',
-            currentPrice: 245.30,
+            currentPrice: 245.3,
             minimumInvestment: 100,
             maximumInvestment: 100000,
             currency: 'GBP',
@@ -299,11 +300,11 @@ export class MarketplaceService {
           },
         ];
 
-        const mockInvestment = mockInvestments.find(inv => inv.id === investmentId);
+        const mockInvestment = mockInvestments.find((inv) => inv.id === investmentId);
         if (mockInvestment) {
           return mockInvestment;
         }
-        
+
         throw new NotFoundError('Investment not found');
       }
 
@@ -474,9 +475,14 @@ export class MarketplaceService {
     });
 
     const totalValue = investments.reduce((sum, inv) => sum.plus(inv.totalValue), new Decimal(0));
-    const totalInvested = investments.reduce((sum, inv) => sum.plus(inv.quantity.times(inv.purchasePrice)), new Decimal(0));
+    const totalInvested = investments.reduce(
+      (sum, inv) => sum.plus(inv.quantity.times(inv.purchasePrice)),
+      new Decimal(0)
+    );
     const totalGain = totalValue.minus(totalInvested);
-    const gainPercentage = totalInvested.isZero() ? new Decimal(0) : totalGain.dividedBy(totalInvested).times(100);
+    const gainPercentage = totalInvested.isZero()
+      ? new Decimal(0)
+      : totalGain.dividedBy(totalInvested).times(100);
 
     await prisma.portfolio.update({
       where: { id: portfolioId },
@@ -636,20 +642,50 @@ export class MarketplaceService {
     }
 
     const updateData: any = {};
-    if (input.name !== undefined) updateData.name = input.name;
-    if (input.type !== undefined) updateData.type = input.type;
-    if (input.symbol !== undefined) updateData.symbol = input.symbol;
-    if (input.description !== undefined) updateData.description = input.description;
-    if (input.currentPrice !== undefined) updateData.currentPrice = new Decimal(input.currentPrice);
-    if (input.minimumInvestment !== undefined) updateData.minimumInvestment = new Decimal(input.minimumInvestment);
-    if (input.maximumInvestment !== undefined) updateData.maximumInvestment = input.maximumInvestment ? new Decimal(input.maximumInvestment) : null;
-    if (input.currency !== undefined) updateData.currency = input.currency;
-    if (input.riskLevel !== undefined) updateData.riskLevel = input.riskLevel;
-    if (input.expectedReturn !== undefined) updateData.expectedReturn = input.expectedReturn ? new Decimal(input.expectedReturn) : null;
-    if (input.category !== undefined) updateData.category = input.category;
-    if (input.issuer !== undefined) updateData.issuer = input.issuer;
-    if (input.maturityDate !== undefined) updateData.maturityDate = input.maturityDate ? new Date(input.maturityDate) : null;
-    if (input.isAvailable !== undefined) updateData.isAvailable = input.isAvailable;
+    if (input.name !== undefined) {
+      updateData.name = input.name;
+    }
+    if (input.type !== undefined) {
+      updateData.type = input.type;
+    }
+    if (input.symbol !== undefined) {
+      updateData.symbol = input.symbol;
+    }
+    if (input.description !== undefined) {
+      updateData.description = input.description;
+    }
+    if (input.currentPrice !== undefined) {
+      updateData.currentPrice = new Decimal(input.currentPrice);
+    }
+    if (input.minimumInvestment !== undefined) {
+      updateData.minimumInvestment = new Decimal(input.minimumInvestment);
+    }
+    if (input.maximumInvestment !== undefined) {
+      updateData.maximumInvestment = input.maximumInvestment
+        ? new Decimal(input.maximumInvestment)
+        : null;
+    }
+    if (input.currency !== undefined) {
+      updateData.currency = input.currency;
+    }
+    if (input.riskLevel !== undefined) {
+      updateData.riskLevel = input.riskLevel;
+    }
+    if (input.expectedReturn !== undefined) {
+      updateData.expectedReturn = input.expectedReturn ? new Decimal(input.expectedReturn) : null;
+    }
+    if (input.category !== undefined) {
+      updateData.category = input.category;
+    }
+    if (input.issuer !== undefined) {
+      updateData.issuer = input.issuer;
+    }
+    if (input.maturityDate !== undefined) {
+      updateData.maturityDate = input.maturityDate ? new Date(input.maturityDate) : null;
+    }
+    if (input.isAvailable !== undefined) {
+      updateData.isAvailable = input.isAvailable;
+    }
 
     const updatedItem = await prisma.marketplaceItem.update({
       where: { id },
@@ -710,9 +746,9 @@ export class MarketplaceService {
         return { updated: 0, errors: [] };
       }
 
-      const symbols = items.map(item => item.symbol!).filter(Boolean);
+      const symbols = items.map((item) => item.symbol!).filter(Boolean);
       const quotes = await quotesService.getQuotes(symbols);
-      
+
       let updated = 0;
       const errors: string[] = [];
 
@@ -743,4 +779,3 @@ export class MarketplaceService {
 }
 
 export const marketplaceService = new MarketplaceService();
-

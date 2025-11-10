@@ -55,7 +55,10 @@ router.get('/portfolio/csv', authenticate, async (req: AuthRequest, res: Respons
     const csv = reportService.generateCSVReport(reportData);
 
     res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="portfolio-report-${Date.now()}.csv"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="portfolio-report-${Date.now()}.csv"`
+    );
     res.status(200).send(csv);
   } catch (error) {
     throw error;
@@ -63,4 +66,3 @@ router.get('/portfolio/csv', authenticate, async (req: AuthRequest, res: Respons
 });
 
 export default router;
-

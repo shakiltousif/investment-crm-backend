@@ -86,4 +86,3 @@ router.get('/summary/all', authenticate, async (req: AuthRequest, res: Response)
 });
 
 export default router;
-

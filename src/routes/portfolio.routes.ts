@@ -91,7 +91,11 @@ router.get('/:id/performance', authenticate, async (req: AuthRequest, res: Respo
 router.post('/:id/rebalance', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { targetAllocation } = req.body;
-    const plan = await portfolioService.rebalancePortfolio(req.userId!, req.params.id, targetAllocation);
+    const plan = await portfolioService.rebalancePortfolio(
+      req.userId!,
+      req.params.id,
+      targetAllocation
+    );
     res.status(200).json(plan);
   } catch (error) {
     throw error;
@@ -99,4 +103,3 @@ router.post('/:id/rebalance', authenticate, async (req: AuthRequest, res: Respon
 });
 
 export default router;
-

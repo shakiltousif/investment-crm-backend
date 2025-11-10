@@ -18,7 +18,7 @@ export class TwoFactorService {
 
     // Generate backup codes
     const backupCodes = Array.from({ length: 10 }, () =>
-      crypto.randomBytes(4).toString('hex').toUpperCase(),
+      crypto.randomBytes(4).toString('hex').toUpperCase()
     );
 
     // In production, you would generate a QR code using a library like 'qrcode'
@@ -83,7 +83,7 @@ export class TwoFactorService {
       where: { id: userId },
     });
 
-    if (!user || !user.twoFactorSecret) {
+    if (!user?.twoFactorSecret) {
       throw new ValidationError('2FA not enabled for this user');
     }
 
@@ -106,7 +106,7 @@ export class TwoFactorService {
       where: { id: userId },
     });
 
-    if (!user || !user.twoFactorBackupCodes || user.twoFactorBackupCodes.length === 0) {
+    if (!user?.twoFactorBackupCodes || user.twoFactorBackupCodes.length === 0) {
       throw new ValidationError('No backup codes available');
     }
 
@@ -153,7 +153,7 @@ export class TwoFactorService {
    */
   async regenerateBackupCodes(userId: string) {
     const backupCodes = Array.from({ length: 10 }, () =>
-      crypto.randomBytes(4).toString('hex').toUpperCase(),
+      crypto.randomBytes(4).toString('hex').toUpperCase()
     );
 
     const hashedBackupCodes = backupCodes.map((code) => this.hashCode(code));
@@ -199,4 +199,3 @@ export class TwoFactorService {
 }
 
 export const twoFactorService = new TwoFactorService();
-

@@ -88,10 +88,7 @@ router.get('/dashboard', authenticate, async (req: AuthRequest, res: Response) =
  */
 router.get('/portfolio/:id/performance', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const performance = await analyticsService.getPortfolioPerformance(
-      req.userId!,
-      req.params.id,
-    );
+    const performance = await analyticsService.getPortfolioPerformance(req.userId!, req.params.id);
     res.status(200).json({ success: true, data: performance });
   } catch (error) {
     throw error;
@@ -128,21 +125,14 @@ router.get('/portfolio/:id/allocation', authenticate, async (req: AuthRequest, r
  * GET /api/analytics/investment/:id/performance
  * Get investment performance
  */
-router.get(
-  '/investment/:id/performance',
-  authenticate,
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const performance = await analyticsService.getInvestmentPerformance(
-        req.userId!,
-        req.params.id,
-      );
-      res.status(200).json({ success: true, data: performance });
-    } catch (error) {
-      throw error;
-    }
-  },
-);
+router.get('/investment/:id/performance', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const performance = await analyticsService.getInvestmentPerformance(req.userId!, req.params.id);
+    res.status(200).json({ success: true, data: performance });
+  } catch (error) {
+    throw error;
+  }
+});
 
 /**
  * GET /api/analytics/summary
@@ -161,18 +151,13 @@ router.get('/summary', authenticate, async (req: AuthRequest, res: Response) => 
  * GET /api/analytics/transactions/statistics
  * Get transaction statistics
  */
-router.get(
-  '/transactions/statistics',
-  authenticate,
-  async (req: AuthRequest, res: Response) => {
-    try {
-      const stats = await analyticsService.getTransactionStatistics(req.userId!);
-      res.status(200).json({ success: true, data: stats });
-    } catch (error) {
-      throw error;
-    }
-  },
-);
+router.get('/transactions/statistics', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const stats = await analyticsService.getTransactionStatistics(req.userId!);
+    res.status(200).json({ success: true, data: stats });
+  } catch (error) {
+    throw error;
+  }
+});
 
 export default router;
-

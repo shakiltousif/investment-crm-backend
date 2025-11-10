@@ -36,7 +36,7 @@ export class QuotesService {
       }
 
       console.log(`Fetching live quote for ${symbol}`);
-      
+
       // Try Alpha Vantage first if configured
       if (this.useAlphaVantage) {
         try {
@@ -52,8 +52,8 @@ export class QuotesService {
 
       // Fallback to Yahoo Finance
       const result = await this.yahooFinance.quote(symbol);
-      
-      if (!result || !result.regularMarketPrice) {
+
+      if (!result?.regularMarketPrice) {
         console.warn(`No price data available for ${symbol}`);
         return null;
       }
@@ -70,7 +70,7 @@ export class QuotesService {
 
       // Cache the result
       this.cache.set(symbol, { data: quoteData, timestamp: Date.now() });
-      
+
       return quoteData;
     } catch (error) {
       console.error(`Error fetching quote for ${symbol}:`, error);
@@ -94,15 +94,18 @@ export class QuotesService {
       });
 
       const data = response.data;
-      
+
       // Check for API errors
       if (data['Error Message'] || data['Note']) {
-        console.warn(`Alpha Vantage API error for ${symbol}:`, data['Error Message'] || data['Note']);
+        console.warn(
+          `Alpha Vantage API error for ${symbol}:`,
+          data['Error Message'] || data['Note']
+        );
         return null;
       }
 
       const quote = data['Global Quote'];
-      if (!quote || !quote['05. price']) {
+      if (!quote?.['05. price']) {
         return null;
       }
 
@@ -131,7 +134,7 @@ export class QuotesService {
    */
   async getQuotes(symbols: string[]): Promise<Map<string, QuoteData>> {
     const quotes = new Map<string, QuoteData>();
-    
+
     // Check cache for all symbols first
     const uncachedSymbols: string[] = [];
     for (const symbol of symbols) {
@@ -149,7 +152,7 @@ export class QuotesService {
 
     try {
       console.log(`Fetching live quotes for ${uncachedSymbols.length} symbols`);
-      
+
       // Fetch quotes for each symbol individually
       const quotePromises = uncachedSymbols.map(async (symbol) => {
         try {
@@ -165,7 +168,7 @@ export class QuotesService {
 
           // Fallback to Yahoo Finance
           const result = await this.yahooFinance.quote(symbol);
-          if (result && result.regularMarketPrice) {
+          if (result?.regularMarketPrice) {
             const quoteData: QuoteData = {
               symbol: symbol.toUpperCase(),
               price: result.regularMarketPrice,
@@ -175,7 +178,7 @@ export class QuotesService {
               marketCap: result.marketCap,
               lastUpdated: new Date(),
             };
-            
+
             quotes.set(symbol.toUpperCase(), quoteData);
             this.cache.set(symbol.toUpperCase(), { data: quoteData, timestamp: Date.now() });
           }
@@ -183,7 +186,7 @@ export class QuotesService {
           console.error(`Error fetching quote for ${symbol}:`, error);
         }
       });
-      
+
       await Promise.all(quotePromises);
     } catch (error) {
       console.error('Error fetching multiple quotes:', error);
@@ -195,12 +198,14 @@ export class QuotesService {
   /**
    * Search for symbols by name
    */
-  async searchSymbols(query: string): Promise<Array<{ symbol: string; name: string; exchange: string }>> {
+  async searchSymbols(
+    query: string
+  ): Promise<Array<{ symbol: string; name: string; exchange: string }>> {
     try {
       console.log(`Searching symbols for: ${query}`);
       const results = await this.yahooFinance.search(query);
-      
-      return results.map(item => ({
+
+      return results.map((item) => ({
         symbol: item.symbol,
         name: item.shortName || item.longName || item.symbol,
         exchange: item.exchange || 'Unknown',

@@ -130,7 +130,7 @@ export class SupportService {
    */
   async getFormattedSupportInfo() {
     const settings = await this.getSupportSettings();
-    
+
     // Format as key-value pairs for easy display
     const formatted: Record<string, string> = {};
     const ordered: Array<{ label: string; value: string; key: string }> = [];
@@ -152,4 +152,3 @@ export class SupportService {
 }
 
 export const supportService = new SupportService();
-

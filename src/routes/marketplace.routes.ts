@@ -54,7 +54,7 @@ router.get('/search', async (req, res: Response) => {
     }
     const results = await marketplaceService.searchInvestments(
       q as string,
-      limit ? parseInt(limit as string) : 10,
+      limit ? parseInt(limit as string) : 10
     );
     res.status(200).json(results);
   } catch (error) {
@@ -254,4 +254,3 @@ router.post('/update-prices', authenticate, async (req: AuthRequest, res: Respon
 });
 
 export default router;
-

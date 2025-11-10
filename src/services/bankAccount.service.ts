@@ -58,11 +58,7 @@ export class BankAccountService {
     return account;
   }
 
-  async updateBankAccount(
-    userId: string,
-    accountId: string,
-    data: UpdateBankAccountInput,
-  ) {
+  async updateBankAccount(userId: string, accountId: string, data: UpdateBankAccountInput) {
     const account = await this.getBankAccountById(userId, accountId);
 
     // Check if trying to change account number to one that already exists
@@ -205,4 +201,3 @@ export class BankAccountService {
 }
 
 export const bankAccountService = new BankAccountService();
-

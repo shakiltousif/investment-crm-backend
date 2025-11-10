@@ -10,7 +10,7 @@ export const logger = winston.createLogger({
     winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
     winston.format.errors({ stack: true }),
     winston.format.splat(),
-    winston.format.json(),
+    winston.format.json()
   ),
   defaultMeta: { service: 'investment-crm-api' },
   transports: [
@@ -21,7 +21,7 @@ export const logger = winston.createLogger({
         winston.format.printf(({ level, message, timestamp, ...meta }) => {
           const metaStr = Object.keys(meta).length ? JSON.stringify(meta, null, 2) : '';
           return `${timestamp} [${level}]: ${message} ${metaStr}`;
-        }),
+        })
       ),
     }),
     // File transport for errors
@@ -45,4 +45,3 @@ import fs from 'fs';
 if (!fs.existsSync(logDir)) {
   fs.mkdirSync(logDir);
 }
-

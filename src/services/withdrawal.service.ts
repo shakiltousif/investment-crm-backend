@@ -73,15 +73,17 @@ export class WithdrawalService {
 
     // Send email notification (non-blocking)
     if (user?.email) {
-      emailService.sendWithdrawalNotification(
-        user.email,
-        Number(withdrawal.amount),
-        withdrawal.currency,
-        'PENDING'
-      ).catch((error) => {
-        console.error('Failed to send withdrawal notification email:', error);
-        // Don't throw - email failure shouldn't break the withdrawal creation
-      });
+      emailService
+        .sendWithdrawalNotification(
+          user.email,
+          Number(withdrawal.amount),
+          withdrawal.currency,
+          'PENDING'
+        )
+        .catch((error) => {
+          console.error('Failed to send withdrawal notification email:', error);
+          // Don't throw - email failure shouldn't break the withdrawal creation
+        });
     }
 
     return {
@@ -306,14 +308,16 @@ export class WithdrawalService {
     });
 
     if (user?.email) {
-      emailService.sendWithdrawalNotification(
-        user.email,
-        Number(withdrawal.amount),
-        withdrawal.currency,
-        'CANCELLED'
-      ).catch((error) => {
-        console.error('Failed to send cancellation email:', error);
-      });
+      emailService
+        .sendWithdrawalNotification(
+          user.email,
+          Number(withdrawal.amount),
+          withdrawal.currency,
+          'CANCELLED'
+        )
+        .catch((error) => {
+          console.error('Failed to send cancellation email:', error);
+        });
     }
 
     return updated;
@@ -351,7 +355,7 @@ export class WithdrawalService {
         summary.byCurrency[withdrawal.currency] = new Decimal(0);
       }
       summary.byCurrency[withdrawal.currency] = summary.byCurrency[withdrawal.currency].plus(
-        withdrawal.amount,
+        withdrawal.amount
       );
     }
 
@@ -360,4 +364,3 @@ export class WithdrawalService {
 }
 
 export const withdrawalService = new WithdrawalService();
-

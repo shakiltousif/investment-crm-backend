@@ -26,7 +26,7 @@ router.get('/:symbol', async (req: AuthRequest, res: Response) => {
   try {
     const { symbol } = getQuoteSchema.parse({ symbol: req.params.symbol });
     const quote = await quotesService.getQuote(symbol);
-    
+
     if (!quote) {
       return res.status(404).json({
         success: false,
@@ -55,7 +55,7 @@ router.post('/batch', async (req: AuthRequest, res: Response) => {
   try {
     const { symbols } = getQuotesSchema.parse(req.body);
     const quotes = await quotesService.getQuotes(symbols);
-    
+
     res.status(200).json({
       success: true,
       data: Object.fromEntries(quotes),
@@ -77,7 +77,7 @@ router.get('/search/:query', async (req: AuthRequest, res: Response) => {
   try {
     const { query } = searchSymbolsSchema.parse({ query: req.params.query });
     const results = await quotesService.searchSymbols(query);
-    
+
     res.status(200).json({
       success: true,
       data: results,
@@ -98,7 +98,7 @@ router.get('/search/:query', async (req: AuthRequest, res: Response) => {
 router.get('/cache/stats', async (req: AuthRequest, res: Response) => {
   try {
     const stats = quotesService.getCacheStats();
-    
+
     res.status(200).json({
       success: true,
       data: stats,
@@ -119,7 +119,7 @@ router.get('/cache/stats', async (req: AuthRequest, res: Response) => {
 router.delete('/cache', async (req: AuthRequest, res: Response) => {
   try {
     quotesService.clearCache();
-    
+
     res.status(200).json({
       success: true,
       message: 'Cache cleared successfully',

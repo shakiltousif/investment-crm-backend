@@ -211,7 +211,7 @@ router.post('/transactions/:id/approve', async (req: AuthRequest, res: Response)
     const transaction = await adminService.updateTransactionStatus(
       req.params.id,
       'COMPLETED',
-      req.body.notes,
+      req.body.notes
     );
 
     res.status(200).json({
@@ -232,7 +232,7 @@ router.post('/transactions/:id/reject', async (req: AuthRequest, res: Response) 
     const transaction = await adminService.updateTransactionStatus(
       req.params.id,
       'REJECTED',
-      req.body.notes,
+      req.body.notes
     );
 
     res.status(200).json({
@@ -287,7 +287,7 @@ router.post('/users/:userId/balance/adjust', async (req: AuthRequest, res: Respo
       req.params.userId,
       validatedData.bankAccountId,
       validatedData.amount,
-      validatedData.description,
+      validatedData.description
     );
 
     res.status(200).json({
@@ -300,4 +300,3 @@ router.post('/users/:userId/balance/adjust', async (req: AuthRequest, res: Respo
 });
 
 export default router;
-

@@ -103,18 +103,24 @@ export class AnalyticsService {
       return sum + portfolioValue;
     }, 0);
 
-    return portfolios.map(portfolio => {
-      const portfolioValue = portfolio.investments.reduce((sum, inv) => sum + Number(inv.currentPrice) * inv.quantity, 0);
+    return portfolios.map((portfolio) => {
+      const portfolioValue = portfolio.investments.reduce(
+        (sum, inv) => sum + Number(inv.currentPrice) * inv.quantity,
+        0
+      );
       return {
         portfolioId: portfolio.id,
         portfolioName: portfolio.name,
         value: portfolioValue,
         percentage: totalValue > 0 ? (portfolioValue / totalValue) * 100 : 0,
-        investments: portfolio.investments.map(inv => ({
+        investments: portfolio.investments.map((inv) => ({
           investmentId: inv.id,
           name: inv.name,
           value: Number(inv.currentPrice) * inv.quantity,
-          percentage: portfolioValue > 0 ? (Number(inv.currentPrice) * inv.quantity / portfolioValue) * 100 : 0,
+          percentage:
+            portfolioValue > 0
+              ? ((Number(inv.currentPrice) * inv.quantity) / portfolioValue) * 100
+              : 0,
         })),
       };
     });
@@ -131,7 +137,7 @@ export class AnalyticsService {
       },
     });
 
-    return investments.map(investment => ({
+    return investments.map((investment) => ({
       investmentId: investment.id,
       name: investment.name,
       symbol: investment.symbol,
@@ -139,9 +145,14 @@ export class AnalyticsService {
       currentPrice: Number(investment.currentPrice),
       totalValue: Number(investment.currentPrice) * investment.quantity,
       costBasis: Number(investment.purchasePrice) * investment.quantity,
-      gain: (Number(investment.currentPrice) - Number(investment.purchasePrice)) * investment.quantity,
-      gainPercentage: Number(investment.purchasePrice) > 0 ? 
-        ((Number(investment.currentPrice) - Number(investment.purchasePrice)) / Number(investment.purchasePrice)) * 100 : 0,
+      gain:
+        (Number(investment.currentPrice) - Number(investment.purchasePrice)) * investment.quantity,
+      gainPercentage:
+        Number(investment.purchasePrice) > 0
+          ? ((Number(investment.currentPrice) - Number(investment.purchasePrice)) /
+              Number(investment.purchasePrice)) *
+            100
+          : 0,
       portfolioName: investment.portfolio?.name || 'Unknown',
     }));
   }
@@ -175,8 +186,9 @@ export class AnalyticsService {
     }
 
     const totalGain = totalValue.minus(totalInvested);
-    const gainPercentage =
-      totalInvested.greaterThan(0) ? totalGain.dividedBy(totalInvested).times(100) : new Decimal(0);
+    const gainPercentage = totalInvested.greaterThan(0)
+      ? totalGain.dividedBy(totalInvested).times(100)
+      : new Decimal(0);
 
     // Get historical data for day/week/month/year changes
     const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -231,10 +243,9 @@ export class AnalyticsService {
       }
 
       const totalGain = totalValue.minus(totalInvested);
-      const gainPercentage =
-        totalInvested.greaterThan(0)
-          ? totalGain.dividedBy(totalInvested).times(100)
-          : new Decimal(0);
+      const gainPercentage = totalInvested.greaterThan(0)
+        ? totalGain.dividedBy(totalInvested).times(100)
+        : new Decimal(0);
 
       performances.push({
         portfolioId: portfolio.id,
@@ -282,8 +293,9 @@ export class AnalyticsService {
     // Calculate allocation percentages
     const allocation: PortfolioAllocation[] = portfolio.investments.map((investment) => {
       const value = investment.quantity * investment.currentPrice;
-      const percentage =
-        totalValue.greaterThan(0) ? value.dividedBy(totalValue).times(100) : new Decimal(0);
+      const percentage = totalValue.greaterThan(0)
+        ? value.dividedBy(totalValue).times(100)
+        : new Decimal(0);
 
       return {
         investmentId: investment.id,
@@ -320,10 +332,9 @@ export class AnalyticsService {
 
     const totalValue = investment.quantity * investment.currentPrice;
     const gain = totalValue.minus(investment.costBasis);
-    const gainPercentage =
-      investment.costBasis.greaterThan(0)
-        ? gain.dividedBy(investment.costBasis).times(100)
-        : new Decimal(0);
+    const gainPercentage = investment.costBasis.greaterThan(0)
+      ? gain.dividedBy(investment.costBasis).times(100)
+      : new Decimal(0);
 
     // For now, calculate based on current data
     const dayChange = new Decimal(0);
@@ -368,10 +379,9 @@ export class AnalyticsService {
       }
     }
 
-    const gainPercentage =
-      totalInvested.greaterThan(0)
-        ? totalGain.dividedBy(totalInvested).times(100)
-        : new Decimal(0);
+    const gainPercentage = totalInvested.greaterThan(0)
+      ? totalGain.dividedBy(totalInvested).times(100)
+      : new Decimal(0);
 
     return {
       totalPortfolios: portfolios.length,
@@ -430,4 +440,3 @@ export class AnalyticsService {
 }
 
 export const analyticsService = new AnalyticsService();
-

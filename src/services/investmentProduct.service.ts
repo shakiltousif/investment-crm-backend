@@ -157,7 +157,9 @@ export class InvestmentProductService {
         expectedReturn: new Decimal(data.interestRate),
         interestRate: new Decimal(data.interestRate),
         lockPeriodMonths: data.lockPeriodMonths,
-        earlyWithdrawalPenalty: data.earlyWithdrawalPenalty ? new Decimal(data.earlyWithdrawalPenalty) : null,
+        earlyWithdrawalPenalty: data.earlyWithdrawalPenalty
+          ? new Decimal(data.earlyWithdrawalPenalty)
+          : null,
         issuer: data.issuer,
         maturityDate: new Date(Date.now() + data.lockPeriodMonths * 30 * 24 * 60 * 60 * 1000), // Approximate maturity
       },
@@ -278,24 +280,27 @@ export class InvestmentProductService {
     const couponRate = Number(bond.couponRate) / 100;
     const annualPayout = investmentAmount * couponRate;
     const frequency = bond.payoutFrequency || 'ANNUAL';
-    
+
     let payoutsPerYear = 1;
-    if (frequency === 'MONTHLY') payoutsPerYear = 12;
-    else if (frequency === 'QUARTERLY') payoutsPerYear = 4;
+    if (frequency === 'MONTHLY') {
+      payoutsPerYear = 12;
+    } else if (frequency === 'QUARTERLY') {
+      payoutsPerYear = 4;
+    }
 
     const payoutAmount = annualPayout / payoutsPerYear;
     const maturityDate = new Date(bond.maturityDate);
     const now = new Date();
-    
+
     const schedule = [];
     let nextDate = bond.nextPayoutDate ? new Date(bond.nextPayoutDate) : new Date(now);
-    
+
     while (nextDate < maturityDate) {
       schedule.push({
         date: nextDate.toISOString(),
         amount: payoutAmount,
       });
-      
+
       // Calculate next payout date
       if (frequency === 'MONTHLY') {
         nextDate = new Date(nextDate.setMonth(nextDate.getMonth() + 1));
@@ -343,17 +348,21 @@ export class InvestmentProductService {
    * Calculate fixed deposit maturity
    */
   calculateFixedDepositMaturity(fixedDeposit: any, investmentAmount: number) {
-    if (fixedDeposit.type !== 'FIXED_RATE_DEPOSIT' || !fixedDeposit.interestRate || !fixedDeposit.lockPeriodMonths) {
+    if (
+      fixedDeposit.type !== 'FIXED_RATE_DEPOSIT' ||
+      !fixedDeposit.interestRate ||
+      !fixedDeposit.lockPeriodMonths
+    ) {
       return null;
     }
 
     const interestRate = Number(fixedDeposit.interestRate) / 100;
     const lockPeriodMonths = fixedDeposit.lockPeriodMonths;
     const lockPeriodYears = lockPeriodMonths / 12;
-    
+
     const totalInterest = investmentAmount * interestRate * lockPeriodYears;
     const maturityAmount = investmentAmount + totalInterest;
-    
+
     const startDate = new Date();
     const maturityDate = new Date(startDate.setMonth(startDate.getMonth() + lockPeriodMonths));
 
@@ -365,11 +374,11 @@ export class InvestmentProductService {
       maturityAmount,
       startDate: new Date().toISOString(),
       maturityDate: maturityDate.toISOString(),
-      earlyWithdrawalPenalty: fixedDeposit.earlyWithdrawalPenalty ? Number(fixedDeposit.earlyWithdrawalPenalty) : null,
+      earlyWithdrawalPenalty: fixedDeposit.earlyWithdrawalPenalty
+        ? Number(fixedDeposit.earlyWithdrawalPenalty)
+        : null,
     };
   }
 }
 
 export const investmentProductService = new InvestmentProductService();
-
-

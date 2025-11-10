@@ -48,10 +48,12 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Middleware
 app.use(helmet());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -137,4 +139,3 @@ process.on('SIGINT', () => {
 });
 
 export { app, io };
-

@@ -12,7 +12,7 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     const { portfolioId } = req.query;
     const investments = await investmentService.getInvestments(
       req.userId!,
-      portfolioId as string | undefined,
+      portfolioId as string | undefined
     );
     res.status(200).json(investments);
   } catch (error) {
@@ -69,7 +69,7 @@ router.patch('/:id/price', authenticate, async (req: AuthRequest, res: Response)
     const investment = await investmentService.updateInvestmentPrice(
       req.userId!,
       req.params.id,
-      new Decimal(currentPrice),
+      new Decimal(currentPrice)
     );
     res.status(200).json(investment);
   } catch (error) {
@@ -88,4 +88,3 @@ router.get('/:id/performance', authenticate, async (req: AuthRequest, res: Respo
 });
 
 export default router;
-

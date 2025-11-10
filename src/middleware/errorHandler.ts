@@ -6,12 +6,7 @@ export interface ApiError extends Error {
   details?: unknown;
 }
 
-export const errorHandler = (
-  err: ApiError,
-  _req: Request,
-  res: Response,
-  _next: NextFunction,
-) => {
+export const errorHandler = (err: ApiError, _req: Request, res: Response, _next: NextFunction) => {
   const statusCode = err.statusCode || 500;
   const message = err.message || 'Internal Server Error';
 
@@ -34,7 +29,10 @@ export const errorHandler = (
 export class ValidationError extends Error implements ApiError {
   statusCode = 400;
 
-  constructor(message: string, public details?: unknown) {
+  constructor(
+    message: string,
+    public details?: unknown
+  ) {
     super(message);
     this.name = 'ValidationError';
   }
@@ -75,4 +73,3 @@ export class ConflictError extends Error implements ApiError {
     this.name = 'ConflictError';
   }
 }
-

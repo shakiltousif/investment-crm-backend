@@ -133,18 +133,23 @@ router.post('/ipo', authenticate, requireAdmin, async (req: AuthRequest, res: Re
  * POST /api/investment-products/fixed-deposits
  * Create Fixed Rate Deposit product (admin only)
  */
-router.post('/fixed-deposits', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
-  try {
-    const data = createFixedDepositSchema.parse(req.body);
-    const fixedDeposit = await investmentProductService.createFixedDepositProduct(data);
-    res.status(201).json({
-      message: 'Fixed Rate Deposit product created successfully',
-      data: fixedDeposit,
-    });
-  } catch (error) {
-    throw error;
+router.post(
+  '/fixed-deposits',
+  authenticate,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const data = createFixedDepositSchema.parse(req.body);
+      const fixedDeposit = await investmentProductService.createFixedDepositProduct(data);
+      res.status(201).json({
+        message: 'Fixed Rate Deposit product created successfully',
+        data: fixedDeposit,
+      });
+    } catch (error) {
+      throw error;
+    }
   }
-});
+);
 
 /**
  * POST /api/investment-products/applications
@@ -208,15 +213,17 @@ router.get('/applications/:id', authenticate, async (req: AuthRequest, res: Resp
  */
 router.get('/bonds/:id/payout-schedule', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { investmentAmount } = z.object({
-      investmentAmount: z.number().positive(),
-    }).parse(req.query);
+    const { investmentAmount } = z
+      .object({
+        investmentAmount: z.number().positive(),
+      })
+      .parse(req.query);
 
     const bond = await prisma.marketplaceItem.findUnique({
       where: { id: req.params.id },
     });
 
-    if (!bond || bond.type !== 'CORPORATE_BOND') {
+    if (bond?.type !== 'CORPORATE_BOND') {
       throw new NotFoundError('Corporate Bond not found');
     }
 
@@ -236,20 +243,26 @@ router.get('/bonds/:id/payout-schedule', authenticate, async (req: AuthRequest, 
  */
 router.get('/savings/:id/interest', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { balance, days } = z.object({
-      balance: z.number().positive(),
-      days: z.number().int().positive().optional(),
-    }).parse(req.query);
+    const { balance, days } = z
+      .object({
+        balance: z.number().positive(),
+        days: z.number().int().positive().optional(),
+      })
+      .parse(req.query);
 
     const savings = await prisma.marketplaceItem.findUnique({
       where: { id: req.params.id },
     });
 
-    if (!savings || savings.type !== 'HIGH_INTEREST_SAVINGS') {
+    if (savings?.type !== 'HIGH_INTEREST_SAVINGS') {
       throw new NotFoundError('Savings Account product not found');
     }
 
-    const interest = investmentProductService.calculateSavingsInterest(savings, balance, days || 30);
+    const interest = investmentProductService.calculateSavingsInterest(
+      savings,
+      balance,
+      days || 30
+    );
     res.status(200).json({
       message: 'Interest calculated successfully',
       data: interest,
@@ -263,29 +276,37 @@ router.get('/savings/:id/interest', authenticate, async (req: AuthRequest, res: 
  * GET /api/investment-products/fixed-deposits/:id/maturity
  * Calculate fixed deposit maturity
  */
-router.get('/fixed-deposits/:id/maturity', authenticate, async (req: AuthRequest, res: Response) => {
-  try {
-    const { investmentAmount } = z.object({
-      investmentAmount: z.number().positive(),
-    }).parse(req.query);
+router.get(
+  '/fixed-deposits/:id/maturity',
+  authenticate,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { investmentAmount } = z
+        .object({
+          investmentAmount: z.number().positive(),
+        })
+        .parse(req.query);
 
-    const fixedDeposit = await prisma.marketplaceItem.findUnique({
-      where: { id: req.params.id },
-    });
+      const fixedDeposit = await prisma.marketplaceItem.findUnique({
+        where: { id: req.params.id },
+      });
 
-    if (!fixedDeposit || fixedDeposit.type !== 'FIXED_RATE_DEPOSIT') {
-      throw new NotFoundError('Fixed Rate Deposit product not found');
+      if (fixedDeposit?.type !== 'FIXED_RATE_DEPOSIT') {
+        throw new NotFoundError('Fixed Rate Deposit product not found');
+      }
+
+      const maturity = investmentProductService.calculateFixedDepositMaturity(
+        fixedDeposit,
+        investmentAmount
+      );
+      res.status(200).json({
+        message: 'Maturity calculated successfully',
+        data: maturity,
+      });
+    } catch (error) {
+      throw error;
     }
-
-    const maturity = investmentProductService.calculateFixedDepositMaturity(fixedDeposit, investmentAmount);
-    res.status(200).json({
-      message: 'Maturity calculated successfully',
-      data: maturity,
-    });
-  } catch (error) {
-    throw error;
   }
-});
+);
 
 export default router;
-

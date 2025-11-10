@@ -30,7 +30,7 @@ export class PortfolioService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return portfolios.map(portfolio => ({
+    return portfolios.map((portfolio) => ({
       ...portfolio,
       totalValue: Number(portfolio.totalValue || 0),
       totalInvested: Number(portfolio.totalInvested || 0),
@@ -75,7 +75,7 @@ export class PortfolioService {
         totalInvested,
         totalGain,
         gainPercentage,
-        portfolios: portfolios.map(portfolio => ({
+        portfolios: portfolios.map((portfolio) => ({
           id: portfolio.id,
           name: portfolio.name,
           value: portfolio.investments.reduce((sum, inv) => {
@@ -98,8 +98,10 @@ export class PortfolioService {
       };
     } catch (error: any) {
       // Check if it's a database connection error
-      if (error.message && error.message.includes("Can't reach database server")) {
-        throw new Error('Database connection failed. Please ensure PostgreSQL is running on localhost:5432');
+      if (error.message?.includes("Can't reach database server")) {
+        throw new Error(
+          'Database connection failed. Please ensure PostgreSQL is running on localhost:5432'
+        );
       }
       throw error;
     }
@@ -123,23 +125,33 @@ export class PortfolioService {
     return portfolio;
   }
 
-  async updatePortfolio(
-    userId: string,
-    portfolioId: string,
-    data: UpdatePortfolioInput,
-  ) {
+  async updatePortfolio(userId: string, portfolioId: string, data: UpdatePortfolioInput) {
     const portfolio = await this.getPortfolioById(userId, portfolioId);
 
     // Prepare update data with proper Decimal conversion
     const updateData: any = {};
-    
-    if (data.name !== undefined) updateData.name = data.name;
-    if (data.description !== undefined) updateData.description = data.description;
-    if (data.isActive !== undefined) updateData.isActive = data.isActive;
-    if (data.totalValue !== undefined) updateData.totalValue = new Decimal(data.totalValue);
-    if (data.totalInvested !== undefined) updateData.totalInvested = new Decimal(data.totalInvested);
-    if (data.totalGain !== undefined) updateData.totalGain = new Decimal(data.totalGain);
-    if (data.gainPercentage !== undefined) updateData.gainPercentage = new Decimal(data.gainPercentage);
+
+    if (data.name !== undefined) {
+      updateData.name = data.name;
+    }
+    if (data.description !== undefined) {
+      updateData.description = data.description;
+    }
+    if (data.isActive !== undefined) {
+      updateData.isActive = data.isActive;
+    }
+    if (data.totalValue !== undefined) {
+      updateData.totalValue = new Decimal(data.totalValue);
+    }
+    if (data.totalInvested !== undefined) {
+      updateData.totalInvested = new Decimal(data.totalInvested);
+    }
+    if (data.totalGain !== undefined) {
+      updateData.totalGain = new Decimal(data.totalGain);
+    }
+    if (data.gainPercentage !== undefined) {
+      updateData.gainPercentage = new Decimal(data.gainPercentage);
+    }
 
     const updatedPortfolio = await prisma.portfolio.update({
       where: { id: portfolioId },
@@ -238,7 +250,7 @@ export class PortfolioService {
   async rebalancePortfolio(
     userId: string,
     portfolioId: string,
-    targetAllocation: Record<string, number>,
+    targetAllocation: Record<string, number>
   ) {
     const portfolio = await this.getPortfolioById(userId, portfolioId);
 
@@ -252,12 +264,10 @@ export class PortfolioService {
       const currentInvestments = investments.filter((inv) => inv.type === type);
       const currentValue = currentInvestments.reduce(
         (sum, inv) => sum.plus(inv.totalValue),
-        new Decimal(0),
+        new Decimal(0)
       );
 
-      const targetValue = portfolio.totalValue
-        .times(targetPercentage)
-        .dividedBy(100);
+      const targetValue = portfolio.totalValue.times(targetPercentage).dividedBy(100);
       const difference = targetValue.minus(currentValue);
 
       rebalancingPlan.push({
@@ -274,4 +284,3 @@ export class PortfolioService {
 }
 
 export const portfolioService = new PortfolioService();
-

@@ -110,11 +110,9 @@ export class DocumentService {
 
     // Construct full URLs for each document
     const apiBaseUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 4000}`;
-    return documents.map(doc => ({
+    return documents.map((doc) => ({
       ...doc,
-      fileUrl: doc.fileUrl.startsWith('http') 
-        ? doc.fileUrl 
-        : `${apiBaseUrl}${doc.fileUrl}`,
+      fileUrl: doc.fileUrl.startsWith('http') ? doc.fileUrl : `${apiBaseUrl}${doc.fileUrl}`,
       downloadUrl: `${apiBaseUrl}/api/documents/${doc.id}/download`,
     }));
   }
@@ -133,14 +131,14 @@ export class DocumentService {
 
     // Construct full file path - fileUrl is already /uploads/documents/...
     const filePath = path.join(process.cwd(), document.fileUrl);
-    
+
     // Verify file exists
     try {
       await fs.access(filePath);
     } catch {
       throw new NotFoundError('Document file not found on server');
     }
-    
+
     return filePath;
   }
 
@@ -254,11 +252,9 @@ export class DocumentService {
 
     // Construct full URLs for each statement
     const apiBaseUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 4000}`;
-    return statements.map(stmt => ({
+    return statements.map((stmt) => ({
       ...stmt,
-      fileUrl: stmt.fileUrl.startsWith('http') 
-        ? stmt.fileUrl 
-        : `${apiBaseUrl}${stmt.fileUrl}`,
+      fileUrl: stmt.fileUrl.startsWith('http') ? stmt.fileUrl : `${apiBaseUrl}${stmt.fileUrl}`,
       downloadUrl: `${apiBaseUrl}/api/documents/statements/${stmt.id}/download`,
     }));
   }
@@ -277,14 +273,14 @@ export class DocumentService {
 
     // Construct full file path - fileUrl is already /uploads/statements/...
     const filePath = path.join(process.cwd(), statement.fileUrl);
-    
+
     // Verify file exists
     try {
       await fs.access(filePath);
     } catch {
       throw new NotFoundError('Statement file not found on server');
     }
-    
+
     return filePath;
   }
 
@@ -338,4 +334,3 @@ export class DocumentService {
 }
 
 export const documentService = new DocumentService();
-

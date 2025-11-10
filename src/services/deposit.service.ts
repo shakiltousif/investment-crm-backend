@@ -69,15 +69,12 @@ export class DepositService {
 
     // Send email notification (non-blocking)
     if (user?.email) {
-      emailService.sendDepositNotification(
-        user.email,
-        Number(deposit.amount),
-        deposit.currency,
-        'PENDING'
-      ).catch((error) => {
-        console.error('Failed to send deposit notification email:', error);
-        // Don't throw - email failure shouldn't break the deposit creation
-      });
+      emailService
+        .sendDepositNotification(user.email, Number(deposit.amount), deposit.currency, 'PENDING')
+        .catch((error) => {
+          console.error('Failed to send deposit notification email:', error);
+          // Don't throw - email failure shouldn't break the deposit creation
+        });
     }
 
     return {
@@ -291,14 +288,11 @@ export class DepositService {
     });
 
     if (user?.email) {
-      emailService.sendDepositNotification(
-        user.email,
-        Number(deposit.amount),
-        deposit.currency,
-        'CANCELLED'
-      ).catch((error) => {
-        console.error('Failed to send cancellation email:', error);
-      });
+      emailService
+        .sendDepositNotification(user.email, Number(deposit.amount), deposit.currency, 'CANCELLED')
+        .catch((error) => {
+          console.error('Failed to send cancellation email:', error);
+        });
     }
 
     return updated;
@@ -336,7 +330,7 @@ export class DepositService {
         summary.byCurrency[deposit.currency] = new Decimal(0);
       }
       summary.byCurrency[deposit.currency] = summary.byCurrency[deposit.currency].plus(
-        deposit.amount,
+        deposit.amount
       );
     }
 
@@ -361,4 +355,3 @@ export class DepositService {
 }
 
 export const depositService = new DepositService();
-

@@ -93,7 +93,10 @@ router.get('/:id/balance', authenticate, async (req: AuthRequest, res: Response)
 // Get account transactions
 router.get('/:id/transactions', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const transactions = await bankAccountService.getAccountTransactions(req.userId!, req.params.id);
+    const transactions = await bankAccountService.getAccountTransactions(
+      req.userId!,
+      req.params.id
+    );
     res.status(200).json({
       success: true,
       data: transactions,
@@ -104,4 +107,3 @@ router.get('/:id/transactions', authenticate, async (req: AuthRequest, res: Resp
 });
 
 export default router;
-

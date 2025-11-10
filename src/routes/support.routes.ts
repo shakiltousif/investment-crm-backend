@@ -57,17 +57,22 @@ router.get('/settings', authenticate, requireAdmin, async (_req: AuthRequest, re
  * GET /api/support/settings/:key
  * Get a specific support setting (admin only)
  */
-router.get('/settings/:key', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
-  try {
-    const setting = await supportService.getSupportSettingByKey(req.params.key);
-    res.status(200).json({
-      message: 'Support setting retrieved successfully',
-      data: setting,
-    });
-  } catch (error) {
-    throw error;
+router.get(
+  '/settings/:key',
+  authenticate,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const setting = await supportService.getSupportSettingByKey(req.params.key);
+      res.status(200).json({
+        message: 'Support setting retrieved successfully',
+        data: setting,
+      });
+    } catch (error) {
+      throw error;
+    }
   }
-});
+);
 
 /**
  * POST /api/support/settings
@@ -90,33 +95,42 @@ router.post('/settings', authenticate, requireAdmin, async (req: AuthRequest, re
  * PUT /api/support/settings/:key
  * Update a support setting (admin only)
  */
-router.put('/settings/:key', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
-  try {
-    const data = updateSupportSettingSchema.parse(req.body);
-    const setting = await supportService.updateSupportSetting(req.params.key, data);
-    res.status(200).json({
-      message: 'Support setting updated successfully',
-      data: setting,
-    });
-  } catch (error) {
-    throw error;
+router.put(
+  '/settings/:key',
+  authenticate,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const data = updateSupportSettingSchema.parse(req.body);
+      const setting = await supportService.updateSupportSetting(req.params.key, data);
+      res.status(200).json({
+        message: 'Support setting updated successfully',
+        data: setting,
+      });
+    } catch (error) {
+      throw error;
+    }
   }
-});
+);
 
 /**
  * DELETE /api/support/settings/:key
  * Delete a support setting (admin only)
  */
-router.delete('/settings/:key', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
-  try {
-    await supportService.deleteSupportSetting(req.params.key);
-    res.status(200).json({
-      message: 'Support setting deleted successfully',
-    });
-  } catch (error) {
-    throw error;
+router.delete(
+  '/settings/:key',
+  authenticate,
+  requireAdmin,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      await supportService.deleteSupportSetting(req.params.key);
+      res.status(200).json({
+        message: 'Support setting deleted successfully',
+      });
+    } catch (error) {
+      throw error;
+    }
   }
-});
+);
 
 export default router;
-

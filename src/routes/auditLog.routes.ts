@@ -62,13 +62,13 @@ router.get(
     try {
       const logs = await auditLogService.getResourceAuditLogs(
         req.params.resource,
-        req.params.resourceId,
+        req.params.resourceId
       );
       res.status(200).json({ success: true, data: logs });
     } catch (error) {
       throw error;
     }
-  },
+  }
 );
 
 /**
@@ -133,7 +133,7 @@ router.get('/export', authenticate, async (req: AuthRequest, res: Response) => {
           log.details || '',
         ]
           .map((field) => `"${field}"`)
-          .join(','),
+          .join(',')
       ),
     ].join('\n');
 
@@ -144,4 +144,3 @@ router.get('/export', authenticate, async (req: AuthRequest, res: Response) => {
 });
 
 export default router;
-

@@ -59,10 +59,7 @@ export class AdminService {
       }),
     ]);
 
-    const totalPortfolioValue = portfolios.reduce(
-      (sum, p) => sum + Number(p.totalValue),
-      0,
-    );
+    const totalPortfolioValue = portfolios.reduce((sum, p) => sum + Number(p.totalValue), 0);
 
     return {
       totalUsers,
@@ -172,20 +169,23 @@ export class AdminService {
     const length = 12;
     const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
     let password = '';
-    
+
     // Ensure at least one of each required character type
     password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]; // uppercase
     password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]; // lowercase
     password += '0123456789'[Math.floor(Math.random() * 10)]; // number
     password += '!@#$%^&*'[Math.floor(Math.random() * 8)]; // special
-    
+
     // Fill the rest randomly
     for (let i = password.length; i < length; i++) {
       password += charset[Math.floor(Math.random() * charset.length)];
     }
-    
+
     // Shuffle the password
-    return password.split('').sort(() => Math.random() - 0.5).join('');
+    return password
+      .split('')
+      .sort(() => Math.random() - 0.5)
+      .join('');
   }
 
   /**
@@ -239,7 +239,7 @@ export class AdminService {
     // Send welcome email with credentials if requested
     if (data.sendCredentialsEmail !== false) {
       const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
-      
+
       const html = `
         <!DOCTYPE html>
         <html>
@@ -279,14 +279,16 @@ export class AdminService {
         </html>
       `;
 
-      emailService.sendEmail({
-        to: data.email,
-        subject: 'Welcome to FIL LIMITED - Your Account Credentials',
-        html,
-      }).catch((error) => {
-        console.error('Failed to send welcome email:', error);
-        // Don't throw - email failure shouldn't break user creation
-      });
+      emailService
+        .sendEmail({
+          to: data.email,
+          subject: 'Welcome to FIL LIMITED - Your Account Credentials',
+          html,
+        })
+        .catch((error) => {
+          console.error('Failed to send welcome email:', error);
+          // Don't throw - email failure shouldn't break user creation
+        });
     }
 
     return {
@@ -299,13 +301,16 @@ export class AdminService {
   /**
    * Update user
    */
-  async updateUser(userId: string, data: {
-    firstName?: string;
-    lastName?: string;
-    phoneNumber?: string;
-    role?: string;
-    isActive?: boolean;
-  }) {
+  async updateUser(
+    userId: string,
+    data: {
+      firstName?: string;
+      lastName?: string;
+      phoneNumber?: string;
+      role?: string;
+      isActive?: boolean;
+    }
+  ) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -315,11 +320,21 @@ export class AdminService {
     }
 
     const updateData: any = {};
-    if (data.firstName !== undefined) updateData.firstName = data.firstName;
-    if (data.lastName !== undefined) updateData.lastName = data.lastName;
-    if (data.phoneNumber !== undefined) updateData.phoneNumber = data.phoneNumber;
-    if (data.role !== undefined) updateData.role = data.role;
-    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (data.firstName !== undefined) {
+      updateData.firstName = data.firstName;
+    }
+    if (data.lastName !== undefined) {
+      updateData.lastName = data.lastName;
+    }
+    if (data.phoneNumber !== undefined) {
+      updateData.phoneNumber = data.phoneNumber;
+    }
+    if (data.role !== undefined) {
+      updateData.role = data.role;
+    }
+    if (data.isActive !== undefined) {
+      updateData.isActive = data.isActive;
+    }
 
     const updated = await prisma.user.update({
       where: { id: userId },
@@ -362,10 +377,7 @@ export class AdminService {
   /**
    * Get pending deposits
    */
-  async getPendingDeposits(filters: {
-    limit?: number;
-    offset?: number;
-  }) {
+  async getPendingDeposits(filters: { limit?: number; offset?: number }) {
     const [deposits, total] = await Promise.all([
       prisma.transaction.findMany({
         where: {
@@ -406,10 +418,7 @@ export class AdminService {
   /**
    * Get pending withdrawals
    */
-  async getPendingWithdrawals(filters: {
-    limit?: number;
-    offset?: number;
-  }) {
+  async getPendingWithdrawals(filters: { limit?: number; offset?: number }) {
     const [withdrawals, total] = await Promise.all([
       prisma.transaction.findMany({
         where: {
@@ -453,7 +462,7 @@ export class AdminService {
   async updateTransactionStatus(
     transactionId: string,
     status: 'COMPLETED' | 'CANCELLED' | 'FAILED' | 'REJECTED',
-    notes?: string,
+    notes?: string
   ) {
     const transaction = await prisma.transaction.findUnique({
       where: { id: transactionId },
@@ -479,7 +488,9 @@ export class AdminService {
       data: {
         status: dbStatus,
         completedAt: status === 'COMPLETED' ? new Date() : null,
-        description: notes ? `${transaction.description || ''} - ${notes}`.trim() : transaction.description,
+        description: notes
+          ? `${transaction.description || ''} - ${notes}`.trim()
+          : transaction.description,
       },
     });
 
@@ -594,7 +605,7 @@ export class AdminService {
     userId: string,
     bankAccountId: string,
     amount: number,
-    description: string,
+    description: string
   ) {
     const bankAccount = await prisma.bankAccount.findFirst({
       where: {
@@ -642,4 +653,3 @@ export class AdminService {
 }
 
 export const adminService = new AdminService();
-

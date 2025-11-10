@@ -16,7 +16,7 @@ export const authenticate = async (req: AuthRequest, _res: Response, next: NextF
   try {
     const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       throw new AuthenticationError('Missing or invalid authorization header');
     }
 
@@ -31,7 +31,7 @@ export const authenticate = async (req: AuthRequest, _res: Response, next: NextF
 
     // Fetch user from database to get role
     let user: { id: string; email: string; role?: string; isActive: boolean } | null;
-    
+
     try {
       user = await prisma.user.findUnique({
         where: { id: decoded.userId },
@@ -44,7 +44,7 @@ export const authenticate = async (req: AuthRequest, _res: Response, next: NextF
       });
     } catch (error: any) {
       // Fallback if role column doesn't exist yet (database not migrated)
-      if (error.message && error.message.includes('does not exist')) {
+      if (error.message?.includes('does not exist')) {
         user = await prisma.user.findUnique({
           where: { id: decoded.userId },
           select: {
@@ -92,7 +92,7 @@ export const authenticate = async (req: AuthRequest, _res: Response, next: NextF
  * Middleware to require admin role
  */
 export const requireAdmin = (req: AuthRequest, _res: Response, next: NextFunction) => {
-  if (!req.user || req.user.role !== 'ADMIN') {
+  if (req.user?.role !== 'ADMIN') {
     throw new AuthorizationError('Admin access required');
   }
   next();
@@ -103,7 +103,7 @@ export const requireAdmin = (req: AuthRequest, _res: Response, next: NextFunctio
  */
 export const requireRole = (role: string) => {
   return (req: AuthRequest, _res: Response, next: NextFunction) => {
-    if (!req.user || req.user.role !== role) {
+    if (req.user?.role !== role) {
       throw new AuthorizationError(`Access denied. Required role: ${role}`);
     }
     next();
@@ -141,4 +141,3 @@ export const verifyRefreshToken = (token: string): { userId: string } => {
 
   return jwt.verify(token, secret) as { userId: string };
 };
-

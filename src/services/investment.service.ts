@@ -79,11 +79,7 @@ export class InvestmentService {
     return investment;
   }
 
-  async updateInvestment(
-    userId: string,
-    investmentId: string,
-    data: UpdateInvestmentInput,
-  ) {
+  async updateInvestment(userId: string, investmentId: string, data: UpdateInvestmentInput) {
     const investment = await this.getInvestmentById(userId, investmentId);
 
     // Recalculate totals if price or quantity changed
@@ -131,11 +127,7 @@ export class InvestmentService {
     return { message: 'Investment deleted successfully' };
   }
 
-  async updateInvestmentPrice(
-    userId: string,
-    investmentId: string,
-    currentPrice: Decimal,
-  ) {
+  async updateInvestmentPrice(userId: string, investmentId: string, currentPrice: Decimal) {
     const investment = await this.getInvestmentById(userId, investmentId);
 
     const totalValue = investment.quantity.times(currentPrice);
@@ -203,9 +195,7 @@ export class InvestmentService {
 
     for (const investment of investments) {
       totalValue = totalValue.plus(investment.totalValue);
-      totalInvested = totalInvested.plus(
-        investment.quantity.times(investment.purchasePrice),
-      );
+      totalInvested = totalInvested.plus(investment.quantity.times(investment.purchasePrice));
     }
 
     const totalGain = totalValue.minus(totalInvested);
@@ -226,4 +216,3 @@ export class InvestmentService {
 }
 
 export const investmentService = new InvestmentService();
-

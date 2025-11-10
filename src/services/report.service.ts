@@ -88,8 +88,12 @@ export class ReportService {
     const transactionWhere: any = { userId };
     if (startDate || endDate) {
       transactionWhere.createdAt = {};
-      if (startDate) transactionWhere.createdAt.gte = startDate;
-      if (endDate) transactionWhere.createdAt.lte = endDate;
+      if (startDate) {
+        transactionWhere.createdAt.gte = startDate;
+      }
+      if (endDate) {
+        transactionWhere.createdAt.lte = endDate;
+      }
     }
 
     const transactions = await prisma.transaction.findMany({
@@ -112,14 +116,18 @@ export class ReportService {
         totalGain: (Number(inv.currentPrice) - Number(inv.purchasePrice)) * inv.quantity,
         gainPercentage:
           Number(inv.purchasePrice) > 0
-            ? ((Number(inv.currentPrice) - Number(inv.purchasePrice)) / Number(inv.purchasePrice)) * 100
+            ? ((Number(inv.currentPrice) - Number(inv.purchasePrice)) / Number(inv.purchasePrice)) *
+              100
             : 0,
         purchaseDate: inv.purchaseDate,
         maturityDate: inv.maturityDate || undefined,
       }));
 
       const totalValue = investments.reduce((sum, inv) => sum + inv.totalValue, 0);
-      const totalInvested = investments.reduce((sum, inv) => sum + inv.purchasePrice * inv.quantity, 0);
+      const totalInvested = investments.reduce(
+        (sum, inv) => sum + inv.purchasePrice * inv.quantity,
+        0
+      );
       const totalGain = totalValue - totalInvested;
       const gainPercentage = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
 
@@ -141,7 +149,9 @@ export class ReportService {
     const gainPercentage = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
 
     const deposits = transactions.filter((t) => t.type === 'DEPOSIT' && t.status === 'COMPLETED');
-    const withdrawals = transactions.filter((t) => t.type === 'WITHDRAWAL' && t.status === 'COMPLETED');
+    const withdrawals = transactions.filter(
+      (t) => t.type === 'WITHDRAWAL' && t.status === 'COMPLETED'
+    );
     const totalDeposits = deposits.reduce((sum, t) => sum + Number(t.amount), 0);
     const totalWithdrawals = withdrawals.reduce((sum, t) => sum + Number(t.amount), 0);
 
@@ -184,7 +194,9 @@ export class ReportService {
     lines.push(`Generated: ${data.reportDate.toLocaleDateString()}`);
     lines.push(`Client: ${data.userName} (${data.userEmail})`);
     if (data.startDate && data.endDate) {
-      lines.push(`Period: ${data.startDate.toLocaleDateString()} to ${data.endDate.toLocaleDateString()}`);
+      lines.push(
+        `Period: ${data.startDate.toLocaleDateString()} to ${data.endDate.toLocaleDateString()}`
+      );
     }
     lines.push('');
 
@@ -202,13 +214,17 @@ export class ReportService {
     // Portfolios
     data.portfolios.forEach((portfolio) => {
       lines.push(`PORTFOLIO: ${portfolio.name}`);
-      lines.push('Investment Name,Symbol,Type,Quantity,Purchase Price,Current Price,Total Value,Total Gain,Gain %');
+      lines.push(
+        'Investment Name,Symbol,Type,Quantity,Purchase Price,Current Price,Total Value,Total Gain,Gain %'
+      );
       portfolio.investments.forEach((inv) => {
         lines.push(
           `${inv.name},${inv.symbol || ''},${inv.type},${inv.quantity},${inv.purchasePrice.toFixed(2)},${inv.currentPrice.toFixed(2)},${inv.totalValue.toFixed(2)},${inv.totalGain.toFixed(2)},${inv.gainPercentage.toFixed(2)}%`
         );
       });
-      lines.push(`Portfolio Total,,,${portfolio.totalInvested.toFixed(2)},,${portfolio.totalValue.toFixed(2)},${portfolio.totalGain.toFixed(2)},${portfolio.gainPercentage.toFixed(2)}%`);
+      lines.push(
+        `Portfolio Total,,,${portfolio.totalInvested.toFixed(2)},,${portfolio.totalValue.toFixed(2)},${portfolio.totalGain.toFixed(2)},${portfolio.gainPercentage.toFixed(2)}%`
+      );
       lines.push('');
     });
 
@@ -228,4 +244,3 @@ export class ReportService {
 }
 
 export const reportService = new ReportService();
-
