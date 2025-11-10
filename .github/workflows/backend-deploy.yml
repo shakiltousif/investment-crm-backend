@@ -264,7 +264,6 @@ jobs:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     environment:
       name: production
-      url: ${{ secrets.BACKEND_URL }}
 
     steps:
       - name: Checkout code
