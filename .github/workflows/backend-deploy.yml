@@ -49,35 +49,29 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: package-lock.json
         continue-on-error: true
 
       - name: Install dependencies
-        working-directory: ./backend
         run: npm ci
 
       - name: Generate Prisma Client
-        working-directory: ./backend
         run: npm run db:generate
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/investment_crm_test
 
       - name: Run database migrations
-        working-directory: ./backend
         run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/investment_crm_test
 
       - name: Run linter
-        working-directory: ./backend
         run: npm run lint
 
       - name: Type check
-        working-directory: ./backend
         run: npm run type-check
 
       - name: Run tests
-        working-directory: ./backend
         run: npm test
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/investment_crm_test
@@ -96,8 +90,8 @@ jobs:
 
       - name: Verify package-lock.json exists
         run: |
-          if [ ! -f backend/package-lock.json ]; then
-            echo "Warning: backend/package-lock.json not found, cache will be skipped"
+          if [ ! -f package-lock.json ]; then
+            echo "Warning: package-lock.json not found, cache will be skipped"
           fi
 
       - name: Setup Node.js
@@ -105,30 +99,26 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: ./backend
         run: npm ci
 
       - name: Generate Prisma Client
-        working-directory: ./backend
         run: npm run db:generate
 
       - name: Build application
-        working-directory: ./backend
         run: npm run build
 
       - name: Create deployment package
-        working-directory: ./backend
         run: |
           mkdir -p deploy
           cp -r dist deploy/
           cp -r prisma deploy/
           cp package.json deploy/
           cp package-lock.json deploy/
-          tar -czf ../backend-deploy.tar.gz -C deploy .
-          cd ..
+          tar -czf backend-deploy.tar.gz -C deploy .
+          rm -rf deploy
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
