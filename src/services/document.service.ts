@@ -7,7 +7,7 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './uploads';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 // Ensure upload directory exists
-async function ensureUploadDir() {
+async function ensureUploadDir(): Promise<void> {
   try {
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
     await fs.mkdir(path.join(UPLOAD_DIR, 'documents'), { recursive: true });
@@ -42,7 +42,11 @@ export class DocumentService {
   /**
    * Upload document (client or admin)
    */
-  async uploadDocument(userId: string, uploadedBy: string, data: UploadDocumentInput) {
+  async uploadDocument(
+    userId: string,
+    uploadedBy: string,
+    data: UploadDocumentInput
+  ): Promise<unknown> {
     // Validate file size
     if (data.fileSize > MAX_FILE_SIZE) {
       throw new ValidationError(`File size exceeds maximum of ${MAX_FILE_SIZE / 1024 / 1024}MB`);
@@ -91,7 +95,10 @@ export class DocumentService {
   /**
    * Get user documents
    */
-  async getUserDocuments(userId: string, filters?: { type?: string; isImportant?: boolean }) {
+  async getUserDocuments(
+    userId: string,
+    filters?: { type?: string; isImportant?: boolean }
+  ): Promise<Array<unknown>> {
     const where: Record<string, unknown> = { userId };
 
     if (filters?.type) {
@@ -144,7 +151,11 @@ export class DocumentService {
   /**
    * Get document by ID
    */
-  async getDocumentById(documentId: string, userId?: string, isAdmin: boolean = false) {
+  async getDocumentById(
+    documentId: string,
+    userId?: string,
+    isAdmin: boolean = false
+  ): Promise<unknown> {
     // First check if document exists
     const document = await prisma.document.findUnique({
       where: { id: documentId },
@@ -165,7 +176,11 @@ export class DocumentService {
   /**
    * Delete document
    */
-  async deleteDocument(documentId: string, userId: string, isAdmin: boolean = false) {
+  async deleteDocument(
+    documentId: string,
+    userId: string,
+    isAdmin: boolean = false
+  ): Promise<{ message: string }> {
     const document = await prisma.document.findFirst({
       where: { id: documentId },
     });
@@ -198,7 +213,7 @@ export class DocumentService {
   /**
    * Upload statement (admin only)
    */
-  async uploadStatement(adminId: string, data: UploadStatementInput) {
+  async uploadStatement(adminId: string, data: UploadStatementInput): Promise<unknown> {
     // Validate file size
     if (data.fileSize > MAX_FILE_SIZE) {
       throw new ValidationError(`File size exceeds maximum of ${MAX_FILE_SIZE / 1024 / 1024}MB`);
@@ -237,7 +252,7 @@ export class DocumentService {
   /**
    * Get user statements
    */
-  async getUserStatements(userId: string, filters?: { period?: string }) {
+  async getUserStatements(userId: string, filters?: { period?: string }): Promise<Array<unknown>> {
     const where: Record<string, unknown> = { userId };
 
     if (filters?.period) {
@@ -286,7 +301,7 @@ export class DocumentService {
   /**
    * Get statement by ID
    */
-  async getStatementById(statementId: string, userId?: string) {
+  async getStatementById(statementId: string, userId?: string): Promise<unknown> {
     const where: Record<string, unknown> = { id: statementId };
     if (userId) {
       where.userId = userId;
@@ -306,7 +321,7 @@ export class DocumentService {
   /**
    * Delete statement (admin only)
    */
-  async deleteStatement(statementId: string) {
+  async deleteStatement(statementId: string): Promise<{ message: string }> {
     const statement = await prisma.statement.findFirst({
       where: { id: statementId },
     });

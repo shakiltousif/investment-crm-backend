@@ -15,8 +15,8 @@ export class EmailService {
     // For production, use SMTP settings from environment variables
     // For development, you can use Ethereal Email or a service like SendGrid
     this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.SMTP_PORT || '587'),
+      host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
+      port: parseInt(process.env.SMTP_PORT ?? '587'),
       secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
       auth: {
         user: process.env.SMTP_USER,
@@ -31,11 +31,11 @@ export class EmailService {
   async sendEmail(options: EmailOptions): Promise<void> {
     try {
       const mailOptions = {
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
         to: options.to,
         subject: options.subject,
         html: options.html,
-        text: options.text || options.html.replace(/<[^>]*>/g, ''),
+        text: options.text ?? options.html.replace(/<[^>]*>/g, ''),
       };
 
       await this.transporter.sendMail(mailOptions);
@@ -52,7 +52,7 @@ export class EmailService {
    * Send password reset email
    */
   async sendPasswordResetEmail(email: string, resetToken: string): Promise<void> {
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
+    const resetUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/reset-password?token=${resetToken}`;
 
     const html = `
       <!DOCTYPE html>

@@ -119,7 +119,7 @@ export class ReportService {
               100
             : 0,
         purchaseDate: inv.purchaseDate,
-        maturityDate: inv.maturityDate || undefined,
+        maturityDate: inv.maturityDate ?? undefined,
       }));
 
       const totalValue = investments.reduce((sum, inv) => sum + inv.totalValue, 0);
@@ -218,7 +218,7 @@ export class ReportService {
       );
       portfolio.investments.forEach((inv) => {
         lines.push(
-          `${inv.name},${inv.symbol || ''},${inv.type},${inv.quantity},${inv.purchasePrice.toFixed(2)},${inv.currentPrice.toFixed(2)},${inv.totalValue.toFixed(2)},${inv.totalGain.toFixed(2)},${inv.gainPercentage.toFixed(2)}%`
+          `${inv.name},${inv.symbol ?? ''},${inv.type},${inv.quantity},${inv.purchasePrice.toFixed(2)},${inv.currentPrice.toFixed(2)},${inv.totalValue.toFixed(2)},${inv.totalGain.toFixed(2)},${inv.gainPercentage.toFixed(2)}%`
         );
       });
       lines.push(

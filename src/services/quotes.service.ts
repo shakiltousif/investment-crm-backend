@@ -20,7 +20,7 @@ export class QuotesService {
 
   constructor() {
     this.yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
-    this.alphaVantageApiKey = process.env.ALPHA_VANTAGE_API_KEY || '9AVY0Z60WGSX4C1W';
+    this.alphaVantageApiKey = process.env.ALPHA_VANTAGE_API_KEY ?? '9AVY0Z60WGSX4C1W';
     this.useAlphaVantage = !!this.alphaVantageApiKey;
   }
 
@@ -62,8 +62,8 @@ export class QuotesService {
       const quoteData: QuoteData = {
         symbol: symbol.toUpperCase(),
         price: result.regularMarketPrice,
-        change: result.regularMarketChange || 0,
-        changePercent: result.regularMarketChangePercent || 0,
+        change: result.regularMarketChange ?? 0,
+        changePercent: result.regularMarketChangePercent ?? 0,
         volume: result.regularMarketVolume,
         marketCap: result.marketCap,
         lastUpdated: new Date(),
@@ -100,7 +100,7 @@ export class QuotesService {
       if (data['Error Message'] || data['Note']) {
         console.warn(
           `Alpha Vantage API error for ${symbol}:`,
-          data['Error Message'] || data['Note']
+          data['Error Message'] ?? data['Note']
         );
         return null;
       }
@@ -111,7 +111,7 @@ export class QuotesService {
       }
 
       const price = parseFloat(quote['05. price']);
-      const previousClose = parseFloat(quote['08. previous close']) || price;
+      const previousClose = parseFloat(quote['08. previous close']) ?? price;
       const change = price - previousClose;
       const changePercent = previousClose !== 0 ? (change / previousClose) * 100 : 0;
       const volume = quote['06. volume'] ? parseInt(quote['06. volume']) : undefined;
@@ -174,8 +174,8 @@ export class QuotesService {
             const quoteData: QuoteData = {
               symbol: symbol.toUpperCase(),
               price: result.regularMarketPrice,
-              change: result.regularMarketChange || 0,
-              changePercent: result.regularMarketChangePercent || 0,
+              change: result.regularMarketChange ?? 0,
+              changePercent: result.regularMarketChangePercent ?? 0,
               volume: result.regularMarketVolume,
               marketCap: result.marketCap,
               lastUpdated: new Date(),
@@ -210,8 +210,8 @@ export class QuotesService {
 
       return results.map((item) => ({
         symbol: item.symbol,
-        name: item.shortName || item.longName || item.symbol,
-        exchange: item.exchange || 'Unknown',
+        name: item.shortName ?? item.longName ?? item.symbol,
+        exchange: item.exchange ?? 'Unknown',
       }));
     } catch (error) {
       console.error(`Error searching symbols for ${query}:`, error);

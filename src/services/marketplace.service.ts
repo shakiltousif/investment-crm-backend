@@ -30,7 +30,11 @@ export class MarketplaceService {
   /**
    * Get available investments for marketplace
    */
-  async getAvailableInvestments(filters: MarketplaceFilters) {
+  async getAvailableInvestments(filters: MarketplaceFilters): Promise<{
+    success: boolean;
+    data: Array<unknown>;
+    total: number;
+  }> {
     try {
       // Build where clause based on filters
       const where: Record<string, unknown> = {
@@ -65,13 +69,13 @@ export class MarketplaceService {
       if (filters.sortBy) {
         switch (filters.sortBy) {
           case 'name':
-            orderBy = { name: filters.sortOrder || 'asc' };
+            orderBy = { name: filters.sortOrder ?? 'asc' };
             break;
           case 'price':
-            orderBy = { currentPrice: filters.sortOrder || 'asc' };
+            orderBy = { currentPrice: filters.sortOrder ?? 'asc' };
             break;
           case 'return':
-            orderBy = { expectedReturn: filters.sortOrder || 'desc' };
+            orderBy = { expectedReturn: filters.sortOrder ?? 'desc' };
             break;
           case 'popularity':
             orderBy = { createdAt: 'desc' };
@@ -82,8 +86,8 @@ export class MarketplaceService {
       const items = await prisma.marketplaceItem.findMany({
         where,
         orderBy,
-        take: filters.limit || 20,
-        skip: filters.offset || 0,
+        take: filters.limit ?? 20,
+        skip: filters.offset ?? 0,
       });
 
       return {
@@ -235,7 +239,7 @@ export class MarketplaceService {
   /**
    * Get investment details
    */
-  async getInvestmentDetails(investmentId: string) {
+  async getInvestmentDetails(investmentId: string): Promise<unknown> {
     try {
       const investment = await prisma.marketplaceItem.findUnique({
         where: { id: investmentId },
@@ -324,7 +328,7 @@ export class MarketplaceService {
   /**
    * Search investments
    */
-  async searchInvestments(query: string, limit: number = 10) {
+  async searchInvestments(query: string, limit: number = 10): Promise<Array<unknown>> {
     const investments = await prisma.investment.findMany({
       where: {
         status: 'ACTIVE',
@@ -342,7 +346,7 @@ export class MarketplaceService {
   /**
    * Get investment comparison
    */
-  async compareInvestments(investmentIds: string[]) {
+  async compareInvestments(investmentIds: string[]): Promise<Array<unknown>> {
     const investments = await prisma.investment.findMany({
       where: {
         id: { in: investmentIds },
@@ -359,7 +363,18 @@ export class MarketplaceService {
   /**
    * Preview buy transaction
    */
-  async previewBuyTransaction(userId: string, input: BuyInvestmentInput) {
+  async previewBuyTransaction(
+    userId: string,
+    input: BuyInvestmentInput
+  ): Promise<{
+    investment: unknown;
+    quantity: number;
+    unitPrice: number | Decimal;
+    totalCost: Decimal;
+    estimatedFee: Decimal;
+    totalAmount: Decimal;
+    portfolio: unknown;
+  }> {
     // Verify investment exists
     const investment = await this.getInvestmentDetails(input.investmentId);
 
@@ -394,7 +409,21 @@ export class MarketplaceService {
   /**
    * Execute buy transaction
    */
-  async buyInvestment(userId: string, input: BuyInvestmentInput) {
+  async buyInvestment(
+    userId: string,
+    input: BuyInvestmentInput
+  ): Promise<{
+    transaction: unknown;
+    investment: unknown;
+    details: {
+      marketplaceInvestment: unknown;
+      quantity: number;
+      unitPrice: number | Decimal;
+      totalCost: Decimal;
+      fee: Decimal;
+      totalAmount: Decimal;
+    };
+  }> {
     // Verify investment exists
     const marketplaceInvestment = await this.getInvestmentDetails(input.investmentId);
 
@@ -469,7 +498,7 @@ export class MarketplaceService {
   /**
    * Update portfolio totals
    */
-  private async updatePortfolioTotals(portfolioId: string) {
+  private async updatePortfolioTotals(portfolioId: string): Promise<void> {
     const investments = await prisma.investment.findMany({
       where: { portfolioId },
     });
@@ -498,7 +527,20 @@ export class MarketplaceService {
   /**
    * Preview sell transaction
    */
-  async previewSellTransaction(userId: string, input: SellInvestmentInput) {
+  async previewSellTransaction(
+    userId: string,
+    input: SellInvestmentInput
+  ): Promise<{
+    investment: unknown;
+    quantity: number;
+    unitPrice: Decimal;
+    totalProceeds: Decimal;
+    estimatedFee: Decimal;
+    netProceeds: Decimal;
+    costBasis: Decimal;
+    gainLoss: Decimal;
+    gainLossPercentage: Decimal;
+  }> {
     // Verify investment exists and belongs to user
     const investment = await prisma.investment.findFirst({
       where: {
@@ -544,7 +586,20 @@ export class MarketplaceService {
   /**
    * Execute sell transaction
    */
-  async sellInvestment(userId: string, input: SellInvestmentInput) {
+  async sellInvestment(
+    userId: string,
+    input: SellInvestmentInput
+  ): Promise<{
+    transaction: unknown;
+    details: {
+      investment: unknown;
+      quantity: number;
+      unitPrice: Decimal;
+      totalProceeds: Decimal;
+      fee: Decimal;
+      netProceeds: Decimal;
+    };
+  }> {
     // Verify investment exists and belongs to user
     const investment = await prisma.investment.findFirst({
       where: {
@@ -606,7 +661,7 @@ export class MarketplaceService {
   /**
    * Create a new marketplace item
    */
-  async createMarketplaceItem(input: CreateMarketplaceItemInput) {
+  async createMarketplaceItem(input: CreateMarketplaceItemInput): Promise<unknown> {
     const marketplaceItem = await prisma.marketplaceItem.create({
       data: {
         name: input.name,
@@ -616,7 +671,7 @@ export class MarketplaceService {
         currentPrice: new Decimal(input.currentPrice),
         minimumInvestment: new Decimal(input.minimumInvestment),
         maximumInvestment: input.maximumInvestment ? new Decimal(input.maximumInvestment) : null,
-        currency: input.currency || 'GBP',
+        currency: input.currency ?? 'GBP',
         riskLevel: input.riskLevel,
         expectedReturn: input.expectedReturn ? new Decimal(input.expectedReturn) : null,
         category: input.category,
@@ -632,7 +687,7 @@ export class MarketplaceService {
   /**
    * Update a marketplace item
    */
-  async updateMarketplaceItem(id: string, input: UpdateMarketplaceItemInput) {
+  async updateMarketplaceItem(id: string, input: UpdateMarketplaceItemInput): Promise<unknown> {
     const existingItem = await prisma.marketplaceItem.findUnique({
       where: { id },
     });
@@ -698,7 +753,7 @@ export class MarketplaceService {
   /**
    * Delete a marketplace item
    */
-  async deleteMarketplaceItem(id: string) {
+  async deleteMarketplaceItem(id: string): Promise<{ success: boolean }> {
     const existingItem = await prisma.marketplaceItem.findUnique({
       where: { id },
     });
@@ -717,7 +772,7 @@ export class MarketplaceService {
   /**
    * Get marketplace item by ID
    */
-  async getMarketplaceItemById(id: string) {
+  async getMarketplaceItemById(id: string): Promise<unknown> {
     const item = await prisma.marketplaceItem.findUnique({
       where: { id },
     });
@@ -732,7 +787,10 @@ export class MarketplaceService {
   /**
    * Update prices with live quotes
    */
-  async updatePricesWithLiveQuotes() {
+  async updatePricesWithLiveQuotes(): Promise<{
+    updated: number;
+    errors: string[];
+  }> {
     try {
       // Get all marketplace items with symbols
       const items = await prisma.marketplaceItem.findMany({

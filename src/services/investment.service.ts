@@ -4,7 +4,7 @@ import { NotFoundError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export class InvestmentService {
-  async createInvestment(userId: string, data: CreateInvestmentInput) {
+  async createInvestment(userId: string, data: CreateInvestmentInput): Promise<unknown> {
     // Verify portfolio exists and belongs to user
     const portfolio = await prisma.portfolio.findFirst({
       where: {
@@ -50,7 +50,7 @@ export class InvestmentService {
     return investment;
   }
 
-  async getInvestments(userId: string, portfolioId?: string) {
+  async getInvestments(userId: string, portfolioId?: string): Promise<Array<unknown>> {
     const where: Record<string, unknown> = { userId };
     if (portfolioId) {
       where.portfolioId = portfolioId;
@@ -64,7 +64,7 @@ export class InvestmentService {
     return investments;
   }
 
-  async getInvestmentById(userId: string, investmentId: string) {
+  async getInvestmentById(userId: string, investmentId: string): Promise<unknown> {
     const investment = await prisma.investment.findFirst({
       where: {
         id: investmentId,
@@ -79,14 +79,18 @@ export class InvestmentService {
     return investment;
   }
 
-  async updateInvestment(userId: string, investmentId: string, data: UpdateInvestmentInput) {
+  async updateInvestment(
+    userId: string,
+    investmentId: string,
+    data: UpdateInvestmentInput
+  ): Promise<unknown> {
     const investment = await this.getInvestmentById(userId, investmentId);
 
     // Recalculate totals if price or quantity changed
     let updateData: Record<string, unknown> = data;
     if (data.currentPrice || data.quantity) {
-      const quantity = data.quantity || investment.quantity;
-      const currentPrice = data.currentPrice || investment.currentPrice;
+      const quantity = data.quantity ?? investment.quantity;
+      const currentPrice = data.currentPrice ?? investment.currentPrice;
 
       const totalValue = quantity.times(currentPrice);
       const totalInvested = quantity.times(investment.purchasePrice);
@@ -114,7 +118,7 @@ export class InvestmentService {
     return updatedInvestment;
   }
 
-  async deleteInvestment(userId: string, investmentId: string) {
+  async deleteInvestment(userId: string, investmentId: string): Promise<{ message: string }> {
     const investment = await this.getInvestmentById(userId, investmentId);
 
     await prisma.investment.delete({
@@ -127,7 +131,11 @@ export class InvestmentService {
     return { message: 'Investment deleted successfully' };
   }
 
-  async updateInvestmentPrice(userId: string, investmentId: string, currentPrice: Decimal) {
+  async updateInvestmentPrice(
+    userId: string,
+    investmentId: string,
+    currentPrice: Decimal
+  ): Promise<unknown> {
     const investment = await this.getInvestmentById(userId, investmentId);
 
     const totalValue = investment.quantity.times(currentPrice);
@@ -153,7 +161,20 @@ export class InvestmentService {
     return updatedInvestment;
   }
 
-  async getPortfolioPerformance(userId: string, portfolioId: string) {
+  async getPortfolioPerformance(
+    userId: string,
+    portfolioId: string
+  ): Promise<{
+    portfolio: unknown;
+    investments: Array<unknown>;
+    summary: {
+      totalValue: Decimal;
+      totalInvested: Decimal;
+      totalGain: Decimal;
+      gainPercentage: Decimal;
+      investmentCount: number;
+    };
+  }> {
     const portfolio = await prisma.portfolio.findFirst({
       where: {
         id: portfolioId,
@@ -185,7 +206,7 @@ export class InvestmentService {
     };
   }
 
-  private async updatePortfolioTotals(portfolioId: string) {
+  private async updatePortfolioTotals(portfolioId: string): Promise<void> {
     const investments = await prisma.investment.findMany({
       where: { portfolioId },
     });

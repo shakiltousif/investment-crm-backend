@@ -18,7 +18,21 @@ const mockPrisma = {
     findUnique: vi.fn(),
   },
   $disconnect: vi.fn(),
-} as any;
+} as unknown as {
+  investment: {
+    findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
+  };
+  portfolio: {
+    findUnique: ReturnType<typeof vi.fn>;
+  };
+  transaction: {
+    create: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+  };
+  $disconnect: ReturnType<typeof vi.fn>;
+};
 
 vi.mock('../../lib/prisma', () => ({
   prisma: mockPrisma,
@@ -58,8 +72,8 @@ describe('MarketplaceService', () => {
     });
 
     it('should filter by price range', async () => {
-      (prisma.investment.findMany as any).mockResolvedValue([]);
-      (prisma.investment.count as any).mockResolvedValue(0);
+      mockPrisma.investment.findMany.mockResolvedValue([]);
+      mockPrisma.investment.count.mockResolvedValue(0);
 
       await service.getAvailableInvestments({
         minPrice: 100,
@@ -68,7 +82,7 @@ describe('MarketplaceService', () => {
         offset: 0,
       });
 
-      expect(prisma.investment.findMany).toHaveBeenCalled();
+      expect(mockPrisma.investment.findMany).toHaveBeenCalled();
     });
   });
 
@@ -79,7 +93,7 @@ describe('MarketplaceService', () => {
         currentPrice: new Decimal('100.00'),
       };
 
-      (prisma.investment.findUnique as any).mockResolvedValue(mockInvestment);
+      mockPrisma.investment.findUnique.mockResolvedValue(mockInvestment);
 
       const result = await service.previewBuyTransaction('inv-1', 10);
 
@@ -90,7 +104,7 @@ describe('MarketplaceService', () => {
     });
 
     it('should throw error if investment not found', async () => {
-      (prisma.investment.findUnique as any).mockResolvedValue(null);
+      mockPrisma.investment.findUnique.mockResolvedValue(null);
 
       await expect(service.previewBuyTransaction('inv-1', 10)).rejects.toThrow(ValidationError);
     });
@@ -108,20 +122,20 @@ describe('MarketplaceService', () => {
         userId: 'user-1',
       };
 
-      (prisma.investment.findUnique as any).mockResolvedValue(mockInvestment);
-      (prisma.portfolio.findUnique as any).mockResolvedValue(mockPortfolio);
-      (prisma.transaction.create as any).mockResolvedValue({
+      mockPrisma.investment.findUnique.mockResolvedValue(mockInvestment);
+      mockPrisma.portfolio.findUnique.mockResolvedValue(mockPortfolio);
+      mockPrisma.transaction.create.mockResolvedValue({
         id: 'trans-1',
       });
 
       const result = await service.buyInvestment('user-1', 'port-1', 'inv-1', 10);
 
       expect(result).toHaveProperty('id');
-      expect(prisma.transaction.create).toHaveBeenCalled();
+      expect(mockPrisma.transaction.create).toHaveBeenCalled();
     });
 
     it('should throw error if portfolio not found', async () => {
-      (prisma.portfolio.findUnique as any).mockResolvedValue(null);
+      mockPrisma.portfolio.findUnique.mockResolvedValue(null);
 
       await expect(service.buyInvestment('user-1', 'port-1', 'inv-1', 10)).rejects.toThrow(
         ValidationError
@@ -142,8 +156,8 @@ describe('MarketplaceService', () => {
         currentPrice: new Decimal('150.00'),
       };
 
-      (prisma.transaction.findUnique as any).mockResolvedValue(mockTransaction);
-      (prisma.investment.findUnique as any).mockResolvedValue(mockInvestment);
+      mockPrisma.transaction.findUnique.mockResolvedValue(mockTransaction);
+      mockPrisma.investment.findUnique.mockResolvedValue(mockInvestment);
 
       const result = await service.previewSellTransaction('trans-1', 10);
 
@@ -154,7 +168,7 @@ describe('MarketplaceService', () => {
     });
 
     it('should throw error if transaction not found', async () => {
-      (prisma.transaction.findUnique as any).mockResolvedValue(null);
+      mockPrisma.transaction.findUnique.mockResolvedValue(null);
 
       await expect(service.previewSellTransaction('trans-1', 10)).rejects.toThrow(ValidationError);
     });
@@ -168,22 +182,22 @@ describe('MarketplaceService', () => {
         totalCost: new Decimal('1000.00'),
       };
 
-      (prisma.transaction.findUnique as any).mockResolvedValue(mockTransaction);
-      (prisma.investment.findUnique as any).mockResolvedValue({
+      mockPrisma.transaction.findUnique.mockResolvedValue(mockTransaction);
+      mockPrisma.investment.findUnique.mockResolvedValue({
         currentPrice: new Decimal('150.00'),
       });
-      (prisma.transaction.create as any).mockResolvedValue({
+      mockPrisma.transaction.create.mockResolvedValue({
         id: 'trans-2',
       });
 
       const result = await service.sellInvestment('user-1', 'trans-1', 10);
 
       expect(result).toHaveProperty('id');
-      expect(prisma.transaction.create).toHaveBeenCalled();
+      expect(mockPrisma.transaction.create).toHaveBeenCalled();
     });
 
     it('should throw error if trying to sell more than owned', async () => {
-      (prisma.transaction.findUnique as any).mockResolvedValue({
+      mockPrisma.transaction.findUnique.mockResolvedValue({
         quantity: 5,
       });
 

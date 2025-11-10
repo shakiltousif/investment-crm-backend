@@ -20,7 +20,7 @@ export class SupportService {
   /**
    * Get all active support settings
    */
-  async getSupportSettings() {
+  async getSupportSettings(): Promise<Array<unknown>> {
     const settings = await prisma.supportSettings.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: 'asc' },
@@ -32,7 +32,7 @@ export class SupportService {
   /**
    * Get all support settings (including inactive) - Admin only
    */
-  async getAllSupportSettings() {
+  async getAllSupportSettings(): Promise<Array<unknown>> {
     const settings = await prisma.supportSettings.findMany({
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
@@ -43,7 +43,7 @@ export class SupportService {
   /**
    * Get a specific support setting by key
    */
-  async getSupportSettingByKey(key: string) {
+  async getSupportSettingByKey(key: string): Promise<unknown> {
     const setting = await prisma.supportSettings.findUnique({
       where: { key },
     });
@@ -58,7 +58,7 @@ export class SupportService {
   /**
    * Create a new support setting - Admin only
    */
-  async createSupportSetting(data: SupportSettingsInput) {
+  async createSupportSetting(data: SupportSettingsInput): Promise<unknown> {
     // Check if key already exists
     const existing = await prisma.supportSettings.findUnique({
       where: { key: data.key },
@@ -72,9 +72,9 @@ export class SupportService {
       data: {
         key: data.key,
         value: data.value,
-        label: data.label || data.key,
-        displayOrder: data.displayOrder || 0,
-        isActive: data.isActive !== undefined ? data.isActive : true,
+        label: data.label ?? data.key,
+        displayOrder: data.displayOrder ?? 0,
+        isActive: data.isActive ?? true,
       },
     });
 
@@ -84,7 +84,7 @@ export class SupportService {
   /**
    * Update a support setting - Admin only
    */
-  async updateSupportSetting(key: string, data: UpdateSupportSettingsInput) {
+  async updateSupportSetting(key: string, data: UpdateSupportSettingsInput): Promise<unknown> {
     const setting = await prisma.supportSettings.findUnique({
       where: { key },
     });
@@ -109,7 +109,7 @@ export class SupportService {
   /**
    * Delete a support setting - Admin only
    */
-  async deleteSupportSetting(key: string) {
+  async deleteSupportSetting(key: string): Promise<{ message: string }> {
     const setting = await prisma.supportSettings.findUnique({
       where: { key },
     });
@@ -128,7 +128,10 @@ export class SupportService {
   /**
    * Get formatted support information for client display
    */
-  async getFormattedSupportInfo() {
+  async getFormattedSupportInfo(): Promise<{
+    formatted: Record<string, string>;
+    ordered: Array<{ key: string; label: string; value: string }>;
+  }> {
     const settings = await this.getSupportSettings();
 
     // Format as key-value pairs for easy display
@@ -139,7 +142,7 @@ export class SupportService {
       formatted[setting.key] = setting.value;
       ordered.push({
         key: setting.key,
-        label: setting.label || setting.key,
+        label: setting.label ?? setting.key,
         value: setting.value,
       } as { key: string; label: string; value: string });
     });

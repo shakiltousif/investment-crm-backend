@@ -43,7 +43,15 @@ export class AnalyticsService {
   /**
    * Get dashboard data
    */
-  async getDashboardData(userId: string) {
+  async getDashboardData(userId: string): Promise<{
+    totalPortfolioValue: number;
+    totalInvested: number;
+    totalGain: number;
+    gainPercentage: number;
+    monthlyReturn: number;
+    yearlyReturn: number;
+    recentTransactions: unknown[];
+  }> {
     const portfolios = await prisma.portfolio.findMany({
       where: { userId },
       include: {
@@ -88,7 +96,20 @@ export class AnalyticsService {
   /**
    * Get all portfolios allocation
    */
-  async getAllPortfoliosAllocation(userId: string) {
+  async getAllPortfoliosAllocation(userId: string): Promise<
+    Array<{
+      portfolioId: string;
+      portfolioName: string;
+      value: number;
+      percentage: number;
+      investments: Array<{
+        investmentId: string;
+        name: string;
+        value: number;
+        percentage: number;
+      }>;
+    }>
+  > {
     const portfolios = await prisma.portfolio.findMany({
       where: { userId },
       include: {
@@ -129,7 +150,20 @@ export class AnalyticsService {
   /**
    * Get all investments performance
    */
-  async getAllInvestmentsPerformance(userId: string) {
+  async getAllInvestmentsPerformance(userId: string): Promise<
+    Array<{
+      investmentId: string;
+      name: string;
+      symbol: string | null;
+      quantity: number;
+      currentPrice: number;
+      totalValue: number;
+      costBasis: number;
+      gain: number;
+      gainPercentage: number;
+      portfolioName: string;
+    }>
+  > {
     const investments = await prisma.investment.findMany({
       where: { userId },
       include: {
@@ -153,14 +187,17 @@ export class AnalyticsService {
               Number(investment.purchasePrice)) *
             100
           : 0,
-      portfolioName: investment.portfolio?.name || 'Unknown',
+      portfolioName: investment.portfolio?.name ?? 'Unknown',
     }));
   }
 
   /**
    * Get portfolio performance
    */
-  async getPortfolioPerformance(userId: string, portfolioId: string) {
+  async getPortfolioPerformance(
+    userId: string,
+    portfolioId: string
+  ): Promise<PortfolioPerformance> {
     const portfolio = await prisma.portfolio.findFirst({
       where: {
         id: portfolioId,
@@ -221,7 +258,7 @@ export class AnalyticsService {
   /**
    * Get all portfolios performance
    */
-  async getAllPortfoliosPerformance(userId: string) {
+  async getAllPortfoliosPerformance(userId: string): Promise<PortfolioPerformance[]> {
     const portfolios = await prisma.portfolio.findMany({
       where: { userId },
       include: {
@@ -267,7 +304,10 @@ export class AnalyticsService {
   /**
    * Get portfolio allocation
    */
-  async getPortfolioAllocation(userId: string, portfolioId: string) {
+  async getPortfolioAllocation(
+    userId: string,
+    portfolioId: string
+  ): Promise<PortfolioAllocation[]> {
     const portfolio = await prisma.portfolio.findFirst({
       where: {
         id: portfolioId,
@@ -312,7 +352,10 @@ export class AnalyticsService {
   /**
    * Get investment performance
    */
-  async getInvestmentPerformance(userId: string, investmentId: string) {
+  async getInvestmentPerformance(
+    userId: string,
+    investmentId: string
+  ): Promise<InvestmentPerformance> {
     const investment = await prisma.investment.findFirst({
       where: {
         id: investmentId,
@@ -357,7 +400,19 @@ export class AnalyticsService {
   /**
    * Get portfolio summary
    */
-  async getPortfolioSummary(userId: string) {
+  async getPortfolioSummary(userId: string): Promise<{
+    totalPortfolios: number;
+    totalPortfolioValue: Decimal;
+    totalInvested: Decimal;
+    totalGain: Decimal;
+    gainPercentage: Decimal;
+    portfolios: Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      investmentCount: number;
+    }>;
+  }> {
     const portfolios = await prisma.portfolio.findMany({
       where: { userId },
       include: {
@@ -400,7 +455,15 @@ export class AnalyticsService {
   /**
    * Get transaction statistics
    */
-  async getTransactionStatistics(userId: string) {
+  async getTransactionStatistics(userId: string): Promise<{
+    totalTransactions: number;
+    byType: Record<string, number>;
+    byStatus: Record<string, number>;
+    totalBuys: Decimal;
+    totalSells: Decimal;
+    totalDeposits: Decimal;
+    totalWithdrawals: Decimal;
+  }> {
     const transactions = await prisma.transaction.findMany({
       where: { userId },
     });
@@ -417,10 +480,10 @@ export class AnalyticsService {
 
     for (const transaction of transactions) {
       // Count by type
-      stats.byType[transaction.type] = (stats.byType[transaction.type] || 0) + 1;
+      stats.byType[transaction.type] = (stats.byType[transaction.type] ?? 0) + 1;
 
       // Count by status
-      stats.byStatus[transaction.status] = (stats.byStatus[transaction.status] || 0) + 1;
+      stats.byStatus[transaction.status] = (stats.byStatus[transaction.status] ?? 0) + 1;
 
       // Sum by type
       if (transaction.type === 'BUY') {

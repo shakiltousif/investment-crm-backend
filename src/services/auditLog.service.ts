@@ -27,7 +27,7 @@ export class AuditLogService {
   /**
    * Log an action
    */
-  async logAction(entry: AuditLogEntry) {
+  async logAction(entry: AuditLogEntry): Promise<unknown> {
     const auditLog = await prisma.auditLog.create({
       data: {
         userId: entry.userId,
@@ -49,7 +49,15 @@ export class AuditLogService {
   /**
    * Get audit logs
    */
-  async getAuditLogs(filters: AuditLogFilters) {
+  async getAuditLogs(filters: AuditLogFilters): Promise<{
+    data: Array<unknown>;
+    pagination: {
+      total: number;
+      limit: number;
+      offset: number;
+      pages: number;
+    };
+  }> {
     const where: Record<string, unknown> = {};
 
     if (filters.userId) {
@@ -78,8 +86,8 @@ export class AuditLogService {
       }
     }
 
-    const limit = Math.min(filters.limit || 50, 500);
-    const offset = filters.offset || 0;
+    const limit = Math.min(filters.limit ?? 50, 500);
+    const offset = filters.offset ?? 0;
 
     const [logs, total] = await Promise.all([
       prisma.auditLog.findMany({
@@ -108,7 +116,18 @@ export class AuditLogService {
   /**
    * Get user audit logs
    */
-  async getUserAuditLogs(userId: string, filters: Omit<AuditLogFilters, 'userId'>) {
+  async getUserAuditLogs(
+    userId: string,
+    filters: Omit<AuditLogFilters, 'userId'>
+  ): Promise<{
+    data: Array<unknown>;
+    pagination: {
+      total: number;
+      limit: number;
+      offset: number;
+      pages: number;
+    };
+  }> {
     return this.getAuditLogs({
       ...filters,
       userId,
@@ -118,7 +137,7 @@ export class AuditLogService {
   /**
    * Get audit logs by resource
    */
-  async getResourceAuditLogs(resource: string, resourceId: string) {
+  async getResourceAuditLogs(resource: string, resourceId: string): Promise<Array<unknown>> {
     const logs = await prisma.auditLog.findMany({
       where: {
         resource,
@@ -136,7 +155,13 @@ export class AuditLogService {
   /**
    * Get audit summary
    */
-  async getAuditSummary(userId?: string) {
+  async getAuditSummary(userId?: string): Promise<{
+    totalLogs: number;
+    successCount: number;
+    failureCount: number;
+    successRate: string;
+    actionSummary: Record<string, number>;
+  }> {
     const where = userId ? { userId } : {};
 
     const [totalLogs, successCount, failureCount, actionCounts] = await Promise.all([
@@ -167,7 +192,20 @@ export class AuditLogService {
   /**
    * Export audit logs
    */
-  async exportAuditLogs(filters: AuditLogFilters) {
+  async exportAuditLogs(filters: AuditLogFilters): Promise<
+    Array<{
+      timestamp: string;
+      userId: string;
+      action: string;
+      resource: string;
+      resourceId: string | null;
+      status: string;
+      ipAddress: string | null;
+      userAgent: string | null;
+      details: string | null;
+      changes: unknown;
+    }>
+  > {
     const logs = await this.getAuditLogs({
       ...filters,
       limit: 10000, // Max export limit
@@ -190,7 +228,7 @@ export class AuditLogService {
   /**
    * Delete old audit logs (retention policy)
    */
-  async deleteOldAuditLogs(daysToKeep: number = 90) {
+  async deleteOldAuditLogs(daysToKeep: number = 90): Promise<{ count: number }> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
 

@@ -9,7 +9,16 @@ import { emailService } from './email.service';
 const prisma = new PrismaClient();
 
 export class AuthService {
-  async register(data: RegisterInput) {
+  async register(data: RegisterInput): Promise<{
+    user: {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+    };
+    accessToken: string;
+    refreshToken: string;
+  }> {
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: { email: data.email },
@@ -50,7 +59,17 @@ export class AuthService {
     };
   }
 
-  async login(data: LoginInput) {
+  async login(data: LoginInput): Promise<{
+    user: {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      role: string;
+    };
+    accessToken: string;
+    refreshToken: string;
+  }> {
     // Find user
     const user = await prisma.user.findUnique({
       where: { email: data.email },
@@ -123,7 +142,11 @@ export class AuthService {
     };
   }
 
-  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ message: string }> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -151,7 +174,7 @@ export class AuthService {
     return { message: 'Password changed successfully' };
   }
 
-  async requestPasswordReset(email: string) {
+  async requestPasswordReset(email: string): Promise<{ message: string }> {
     const user = await prisma.user.findUnique({
       where: { email },
     });
@@ -185,7 +208,7 @@ export class AuthService {
     return { message: 'If email exists, password reset link will be sent' };
   }
 
-  async resetPassword(token: string, newPassword: string) {
+  async resetPassword(token: string, newPassword: string): Promise<{ message: string }> {
     const user = await prisma.user.findFirst({
       where: {
         passwordResetToken: token,

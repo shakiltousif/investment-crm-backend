@@ -3,7 +3,7 @@ import { CreateBankAccountInput, UpdateBankAccountInput } from '../lib/validator
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 
 export class BankAccountService {
-  async createBankAccount(userId: string, data: CreateBankAccountInput) {
+  async createBankAccount(userId: string, data: CreateBankAccountInput): Promise<unknown> {
     // Check if account with same number already exists for this user
     const existingAccount = await prisma.bankAccount.findUnique({
       where: {
@@ -34,7 +34,7 @@ export class BankAccountService {
     return bankAccount;
   }
 
-  async getBankAccounts(userId: string) {
+  async getBankAccounts(userId: string): Promise<Array<unknown>> {
     const accounts = await prisma.bankAccount.findMany({
       where: { userId },
       orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
@@ -43,7 +43,7 @@ export class BankAccountService {
     return accounts;
   }
 
-  async getBankAccountById(userId: string, accountId: string) {
+  async getBankAccountById(userId: string, accountId: string): Promise<unknown> {
     const account = await prisma.bankAccount.findFirst({
       where: {
         id: accountId,
@@ -58,7 +58,11 @@ export class BankAccountService {
     return account;
   }
 
-  async updateBankAccount(userId: string, accountId: string, data: UpdateBankAccountInput) {
+  async updateBankAccount(
+    userId: string,
+    accountId: string,
+    data: UpdateBankAccountInput
+  ): Promise<unknown> {
     const account = await this.getBankAccountById(userId, accountId);
 
     // Check if trying to change account number to one that already exists
@@ -85,7 +89,7 @@ export class BankAccountService {
     return updatedAccount;
   }
 
-  async deleteBankAccount(userId: string, accountId: string) {
+  async deleteBankAccount(userId: string, accountId: string): Promise<{ message: string }> {
     const account = await this.getBankAccountById(userId, accountId);
 
     // Check if this is the only account
@@ -122,7 +126,7 @@ export class BankAccountService {
     return { message: 'Bank account deleted successfully' };
   }
 
-  async setPrimaryAccount(userId: string, accountId: string) {
+  async setPrimaryAccount(userId: string, accountId: string): Promise<unknown> {
     await this.getBankAccountById(userId, accountId);
 
     // Remove primary from all other accounts
@@ -143,7 +147,7 @@ export class BankAccountService {
     return updatedAccount;
   }
 
-  async verifyBankAccount(userId: string, accountId: string) {
+  async verifyBankAccount(userId: string, accountId: string): Promise<unknown> {
     await this.getBankAccountById(userId, accountId);
 
     const verifiedAccount = await prisma.bankAccount.update({
@@ -157,7 +161,14 @@ export class BankAccountService {
     return verifiedAccount;
   }
 
-  async getAccountBalance(userId: string, accountId: string) {
+  async getAccountBalance(
+    userId: string,
+    accountId: string
+  ): Promise<{
+    accountId: string;
+    balance: unknown;
+    lastUpdated: Date;
+  }> {
     const account = await this.getBankAccountById(userId, accountId);
 
     // Calculate balance from transactions
@@ -184,7 +195,7 @@ export class BankAccountService {
     };
   }
 
-  async getAccountTransactions(userId: string, accountId: string) {
+  async getAccountTransactions(userId: string, accountId: string): Promise<Array<unknown>> {
     await this.getBankAccountById(userId, accountId);
 
     const transactions = await prisma.transaction.findMany({

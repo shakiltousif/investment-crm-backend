@@ -68,7 +68,7 @@ export class InvestmentProductService {
   /**
    * Create Corporate Bond product
    */
-  async createBondProduct(data: CreateBondProductInput) {
+  async createBondProduct(data: CreateBondProductInput): Promise<unknown> {
     const bond = await prisma.marketplaceItem.create({
       data: {
         name: data.name,
@@ -78,14 +78,14 @@ export class InvestmentProductService {
         currentPrice: new Decimal(data.currentPrice),
         minimumInvestment: new Decimal(data.minimumInvestment),
         maximumInvestment: data.maximumInvestment ? new Decimal(data.maximumInvestment) : null,
-        currency: data.currency || 'GBP',
+        currency: data.currency ?? 'GBP',
         riskLevel: data.riskLevel,
         expectedReturn: data.expectedReturn ? new Decimal(data.expectedReturn) : null,
         issuer: data.issuer,
         maturityDate: data.maturityDate,
         couponRate: new Decimal(data.couponRate),
         payoutFrequency: data.payoutFrequency,
-        nextPayoutDate: data.nextPayoutDate || null,
+        nextPayoutDate: data.nextPayoutDate ?? null,
       },
     });
 
@@ -95,7 +95,7 @@ export class InvestmentProductService {
   /**
    * Create High Interest Savings Account product
    */
-  async createSavingsProduct(data: CreateSavingsProductInput) {
+  async createSavingsProduct(data: CreateSavingsProductInput): Promise<unknown> {
     const savings = await prisma.marketplaceItem.create({
       data: {
         name: data.name,
@@ -104,7 +104,7 @@ export class InvestmentProductService {
         currentPrice: new Decimal(data.minimumInvestment), // Use minimum as base price
         minimumInvestment: new Decimal(data.minimumInvestment),
         maximumInvestment: data.maximumInvestment ? new Decimal(data.maximumInvestment) : null,
-        currency: data.currency || 'GBP',
+        currency: data.currency ?? 'GBP',
         riskLevel: data.riskLevel,
         expectedReturn: new Decimal(data.interestRate),
         interestRate: new Decimal(data.interestRate),
@@ -118,7 +118,7 @@ export class InvestmentProductService {
   /**
    * Create IPO product
    */
-  async createIPOProduct(data: CreateIPOProductInput) {
+  async createIPOProduct(data: CreateIPOProductInput): Promise<unknown> {
     const ipo = await prisma.marketplaceItem.create({
       data: {
         name: data.name,
@@ -128,11 +128,11 @@ export class InvestmentProductService {
         currentPrice: new Decimal(data.currentPrice),
         minimumInvestment: new Decimal(data.minimumInvestment),
         maximumInvestment: data.maximumInvestment ? new Decimal(data.maximumInvestment) : null,
-        currency: data.currency || 'GBP',
+        currency: data.currency ?? 'GBP',
         riskLevel: data.riskLevel,
         issuer: data.issuer,
         applicationDeadline: data.applicationDeadline,
-        allocationDate: data.allocationDate || null,
+        allocationDate: data.allocationDate ?? null,
         ipoStatus: 'OPEN',
       },
     });
@@ -143,7 +143,7 @@ export class InvestmentProductService {
   /**
    * Create Fixed Rate Deposit product
    */
-  async createFixedDepositProduct(data: CreateFixedDepositProductInput) {
+  async createFixedDepositProduct(data: CreateFixedDepositProductInput): Promise<unknown> {
     const fixedDeposit = await prisma.marketplaceItem.create({
       data: {
         name: data.name,
@@ -152,7 +152,7 @@ export class InvestmentProductService {
         currentPrice: new Decimal(data.minimumInvestment),
         minimumInvestment: new Decimal(data.minimumInvestment),
         maximumInvestment: data.maximumInvestment ? new Decimal(data.maximumInvestment) : null,
-        currency: data.currency || 'GBP',
+        currency: data.currency ?? 'GBP',
         riskLevel: data.riskLevel,
         expectedReturn: new Decimal(data.interestRate),
         interestRate: new Decimal(data.interestRate),
@@ -171,7 +171,10 @@ export class InvestmentProductService {
   /**
    * Create investment application (for IPO, etc.)
    */
-  async createApplication(userId: string, data: CreateInvestmentApplicationInput) {
+  async createApplication(
+    userId: string,
+    data: CreateInvestmentApplicationInput
+  ): Promise<unknown> {
     // Verify marketplace item exists and is available
     const item = await prisma.marketplaceItem.findUnique({
       where: { id: data.marketplaceItemId },
@@ -214,7 +217,10 @@ export class InvestmentProductService {
   /**
    * Get user's investment applications
    */
-  async getUserApplications(userId: string, filters?: { status?: string; type?: string }) {
+  async getUserApplications(
+    userId: string,
+    filters?: { status?: string; type?: string }
+  ): Promise<Array<unknown>> {
     const where: Record<string, unknown> = { userId };
 
     if (filters?.status) {
@@ -241,7 +247,7 @@ export class InvestmentProductService {
   /**
    * Get application by ID
    */
-  async getApplicationById(applicationId: string, userId?: string) {
+  async getApplicationById(applicationId: string, userId?: string): Promise<unknown> {
     const where: Record<string, unknown> = { id: applicationId };
     if (userId) {
       where.userId = userId;
@@ -281,14 +287,22 @@ export class InvestmentProductService {
       nextPayoutDate?: Date | null;
     },
     investmentAmount: number
-  ) {
+  ): {
+    frequency: string;
+    payoutAmount: number;
+    totalPayouts: number;
+    totalAmount: number;
+    schedule: Array<{ date: string; amount: number }>;
+    maturityDate: string;
+    principalReturn: number;
+  } | null {
     if (bond.type !== 'CORPORATE_BOND' || !bond.couponRate || !bond.maturityDate) {
       return null;
     }
 
     const couponRate = Number(bond.couponRate) / 100;
     const annualPayout = investmentAmount * couponRate;
-    const frequency = bond.payoutFrequency || 'ANNUAL';
+    const frequency = bond.payoutFrequency ?? 'ANNUAL';
 
     let payoutsPerYear = 1;
     if (frequency === 'MONTHLY') {
@@ -341,7 +355,13 @@ export class InvestmentProductService {
     },
     balance: number,
     days: number = 30
-  ) {
+  ): {
+    balance: number;
+    interestRate: number;
+    days: number;
+    interest: number;
+    newBalance: number;
+  } | null {
     if (savings.type !== 'HIGH_INTEREST_SAVINGS' || !savings.interestRate) {
       return null;
     }
@@ -371,7 +391,15 @@ export class InvestmentProductService {
       earlyWithdrawalPenalty?: unknown;
     },
     investmentAmount: number
-  ) {
+  ): {
+    investmentAmount: number;
+    interestRate: number;
+    lockPeriodMonths: number;
+    maturityDate: string;
+    totalReturn: number;
+    totalInterest: number;
+    earlyWithdrawalPenalty: number | null;
+  } | null {
     if (
       fixedDeposit.type !== 'FIXED_RATE_DEPOSIT' ||
       !fixedDeposit.interestRate ||

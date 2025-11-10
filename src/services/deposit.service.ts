@@ -26,7 +26,17 @@ export class DepositService {
   /**
    * Create deposit request
    */
-  async createDeposit(userId: string, data: CreateDepositInput) {
+  async createDeposit(
+    userId: string,
+    data: CreateDepositInput
+  ): Promise<{
+    deposit: unknown;
+    details: {
+      bankAccount: unknown;
+      transferMethod: string;
+      estimatedTime: string;
+    };
+  }> {
     // Verify bank account exists and belongs to user
     const bankAccount = await prisma.bankAccount.findFirst({
       where: {
@@ -90,7 +100,18 @@ export class DepositService {
   /**
    * Get deposits
    */
-  async getDeposits(userId: string, filters: DepositFilters) {
+  async getDeposits(
+    userId: string,
+    filters: DepositFilters
+  ): Promise<{
+    data: Array<unknown>;
+    pagination: {
+      total: number;
+      limit: number;
+      offset: number;
+      pages: number;
+    };
+  }> {
     const where: Record<string, unknown> = {
       userId,
       type: 'DEPOSIT',
@@ -158,7 +179,7 @@ export class DepositService {
   /**
    * Get deposit by ID
    */
-  async getDepositById(userId: string, depositId: string) {
+  async getDepositById(userId: string, depositId: string): Promise<unknown> {
     const deposit = await prisma.transaction.findFirst({
       where: {
         id: depositId,
@@ -180,7 +201,7 @@ export class DepositService {
   /**
    * Approve deposit
    */
-  async approveDeposit(userId: string, depositId: string) {
+  async approveDeposit(userId: string, depositId: string): Promise<unknown> {
     const deposit = await this.getDepositById(userId, depositId);
 
     if (deposit.status !== 'PENDING') {
@@ -201,7 +222,7 @@ export class DepositService {
   /**
    * Complete deposit
    */
-  async completeDeposit(userId: string, depositId: string) {
+  async completeDeposit(userId: string, depositId: string): Promise<unknown> {
     const deposit = await this.getDepositById(userId, depositId);
 
     if (deposit.status !== 'PROCESSING') {
@@ -240,7 +261,7 @@ export class DepositService {
   /**
    * Reject deposit
    */
-  async rejectDeposit(userId: string, depositId: string, reason?: string) {
+  async rejectDeposit(userId: string, depositId: string, reason?: string): Promise<unknown> {
     const deposit = await this.getDepositById(userId, depositId);
 
     if (!['PENDING', 'PROCESSING'].includes(deposit.status)) {
@@ -264,7 +285,7 @@ export class DepositService {
   /**
    * Cancel deposit (user-initiated)
    */
-  async cancelDeposit(userId: string, depositId: string) {
+  async cancelDeposit(userId: string, depositId: string): Promise<unknown> {
     const deposit = await this.getDepositById(userId, depositId);
 
     if (!['PENDING'].includes(deposit.status)) {
@@ -301,7 +322,18 @@ export class DepositService {
   /**
    * Get deposit summary
    */
-  async getDepositSummary(userId: string) {
+  async getDepositSummary(userId: string): Promise<{
+    totalDeposits: number;
+    totalAmount: Decimal;
+    byStatus: {
+      PENDING: number;
+      PROCESSING: number;
+      COMPLETED: number;
+      FAILED: number;
+      CANCELLED: number;
+    };
+    byCurrency: Record<string, Decimal>;
+  }> {
     const deposits = await prisma.transaction.findMany({
       where: {
         userId,

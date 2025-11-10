@@ -88,7 +88,23 @@ export class AdminService {
     isActive?: boolean;
     limit?: number;
     offset?: number;
-  }) {
+  }): Promise<{
+    users: Array<{
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      phoneNumber: string | null;
+      role: string;
+      isActive: boolean;
+      kycStatus: string;
+      createdAt: Date;
+      lastLoginAt: Date | null;
+    }>;
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
     const where: Record<string, unknown> = {};
 
     if (filters.search) {
@@ -140,7 +156,19 @@ export class AdminService {
   /**
    * Get user by ID
    */
-  async getUserById(userId: string) {
+  async getUserById(userId: string): Promise<{
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phoneNumber: string | null;
+    portfolios: Array<unknown>;
+    bankAccounts: Array<unknown>;
+    _count: {
+      investments: number;
+      transactions: number;
+    };
+  }> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -199,7 +227,18 @@ export class AdminService {
     phoneNumber?: string;
     role?: string;
     sendCredentialsEmail?: boolean; // Whether to send email with credentials
-  }) {
+  }): Promise<{
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phoneNumber: string | null;
+    role: string;
+    isActive: boolean;
+    createdAt: Date;
+    temporaryPassword?: string;
+    credentialsSent: boolean;
+  }> {
     const existingUser = await prisma.user.findUnique({
       where: { email: data.email },
     });
@@ -310,7 +349,16 @@ export class AdminService {
       role?: string;
       isActive?: boolean;
     }
-  ) {
+  ): Promise<{
+    id: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phoneNumber: string | null;
+    role: string;
+    isActive: boolean;
+    updatedAt: Date;
+  }> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -357,7 +405,7 @@ export class AdminService {
   /**
    * Delete user
    */
-  async deleteUser(userId: string) {
+  async deleteUser(userId: string): Promise<{ message: string }> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -377,7 +425,12 @@ export class AdminService {
   /**
    * Get pending deposits
    */
-  async getPendingDeposits(filters: { limit?: number; offset?: number }) {
+  async getPendingDeposits(filters: { limit?: number; offset?: number }): Promise<{
+    deposits: Array<unknown>;
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
     const [deposits, total] = await Promise.all([
       prisma.transaction.findMany({
         where: {
@@ -418,7 +471,12 @@ export class AdminService {
   /**
    * Get pending withdrawals
    */
-  async getPendingWithdrawals(filters: { limit?: number; offset?: number }) {
+  async getPendingWithdrawals(filters: { limit?: number; offset?: number }): Promise<{
+    withdrawals: Array<unknown>;
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
     const [withdrawals, total] = await Promise.all([
       prisma.transaction.findMany({
         where: {
@@ -463,7 +521,12 @@ export class AdminService {
     transactionId: string,
     status: 'COMPLETED' | 'CANCELLED' | 'FAILED' | 'REJECTED',
     notes?: string
-  ) {
+  ): Promise<{
+    id: string;
+    status: string;
+    completedAt: Date | null;
+    description: string | null;
+  }> {
     const transaction = await prisma.transaction.findUnique({
       where: { id: transactionId },
       include: {
@@ -540,7 +603,12 @@ export class AdminService {
     endDate?: string;
     limit?: number;
     offset?: number;
-  }) {
+  }): Promise<{
+    transactions: Array<unknown>;
+    total: number;
+    limit: number;
+    offset: number;
+  }> {
     const where: Record<string, unknown> = {};
 
     if (filters.type) {
@@ -606,7 +674,20 @@ export class AdminService {
     bankAccountId: string,
     amount: number,
     description: string
-  ) {
+  ): Promise<{
+    id: string;
+    userId: string;
+    bankAccountId: string | null;
+    type: string;
+    amount: Decimal;
+    currency: string;
+    status: string;
+    description: string | null;
+    transactionDate: Date;
+    completedAt: Date | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }> {
     const bankAccount = await prisma.bankAccount.findFirst({
       where: {
         id: bankAccountId,

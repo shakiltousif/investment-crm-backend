@@ -4,7 +4,7 @@ import { NotFoundError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export class PortfolioService {
-  async createPortfolio(userId: string, data: CreatePortfolioInput) {
+  async createPortfolio(userId: string, data: CreatePortfolioInput): Promise<unknown> {
     const portfolio = await prisma.portfolio.create({
       data: {
         userId,
@@ -21,7 +21,7 @@ export class PortfolioService {
     return portfolio;
   }
 
-  async getPortfolios(userId: string) {
+  async getPortfolios(userId: string): Promise<Array<unknown>> {
     const portfolios = await prisma.portfolio.findMany({
       where: { userId },
       include: {
@@ -39,7 +39,20 @@ export class PortfolioService {
     }));
   }
 
-  async getPortfolioOverview(userId: string) {
+  async getPortfolioOverview(userId: string): Promise<{
+    totalPortfolios: number;
+    totalValue: number;
+    totalInvested: number;
+    totalGain: number;
+    gainPercentage: number;
+    portfolios: Array<{
+      id: string;
+      name: string;
+      value: number;
+      invested: number;
+      gain: number;
+    }>;
+  }> {
     try {
       const portfolios = await prisma.portfolio.findMany({
         where: { userId },
@@ -107,7 +120,7 @@ export class PortfolioService {
     }
   }
 
-  async getPortfolioById(userId: string, portfolioId: string) {
+  async getPortfolioById(userId: string, portfolioId: string): Promise<unknown> {
     const portfolio = await prisma.portfolio.findFirst({
       where: {
         id: portfolioId,
@@ -125,7 +138,11 @@ export class PortfolioService {
     return portfolio;
   }
 
-  async updatePortfolio(userId: string, portfolioId: string, data: UpdatePortfolioInput) {
+  async updatePortfolio(
+    userId: string,
+    portfolioId: string,
+    data: UpdatePortfolioInput
+  ): Promise<unknown> {
     await this.getPortfolioById(userId, portfolioId);
 
     // Prepare update data with proper Decimal conversion
@@ -164,7 +181,7 @@ export class PortfolioService {
     return updatedPortfolio;
   }
 
-  async deletePortfolio(userId: string, portfolioId: string) {
+  async deletePortfolio(userId: string, portfolioId: string): Promise<{ message: string }> {
     await this.getPortfolioById(userId, portfolioId);
 
     // Check if portfolio has investments
@@ -183,7 +200,20 @@ export class PortfolioService {
     return { message: 'Portfolio deleted successfully' };
   }
 
-  async getPortfolioAllocation(userId: string, portfolioId: string) {
+  async getPortfolioAllocation(
+    userId: string,
+    portfolioId: string
+  ): Promise<{
+    portfolioId: string;
+    totalValue: Decimal;
+    allocation: Array<{
+      id: string;
+      name: string;
+      type: string;
+      value: Decimal;
+      percentage: Decimal;
+    }>;
+  }> {
     const portfolio = await this.getPortfolioById(userId, portfolioId);
 
     const investments = await prisma.investment.findMany({
@@ -207,7 +237,27 @@ export class PortfolioService {
     };
   }
 
-  async getPortfolioPerformance(userId: string, portfolioId: string) {
+  async getPortfolioPerformance(
+    userId: string,
+    portfolioId: string
+  ): Promise<{
+    portfolio: unknown;
+    performanceByType: Record<
+      string,
+      {
+        count: number;
+        totalValue: Decimal;
+        totalGain: Decimal;
+      }
+    >;
+    summary: {
+      totalValue: Decimal;
+      totalInvested: Decimal;
+      totalGain: Decimal;
+      gainPercentage: Decimal;
+      investmentCount: number;
+    };
+  }> {
     const portfolio = await this.getPortfolioById(userId, portfolioId);
 
     const investments = await prisma.investment.findMany({
@@ -258,7 +308,15 @@ export class PortfolioService {
     userId: string,
     portfolioId: string,
     targetAllocation: Record<string, number>
-  ) {
+  ): Promise<
+    Array<{
+      type: string;
+      currentValue: Decimal;
+      targetValue: Decimal;
+      difference: Decimal;
+      action: string;
+    }>
+  > {
     const portfolio = await this.getPortfolioById(userId, portfolioId);
 
     const investments = await prisma.investment.findMany({
