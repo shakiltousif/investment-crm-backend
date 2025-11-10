@@ -96,9 +96,9 @@ export class PortfolioService {
           }, 0),
         })),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Check if it's a database connection error
-      if (error.message?.includes("Can't reach database server")) {
+      if (error instanceof Error && error.message?.includes("Can't reach database server")) {
         throw new Error(
           'Database connection failed. Please ensure PostgreSQL is running on localhost:5432'
         );
@@ -126,10 +126,10 @@ export class PortfolioService {
   }
 
   async updatePortfolio(userId: string, portfolioId: string, data: UpdatePortfolioInput) {
-    const portfolio = await this.getPortfolioById(userId, portfolioId);
+    await this.getPortfolioById(userId, portfolioId);
 
     // Prepare update data with proper Decimal conversion
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
 
     if (data.name !== undefined) {
       updateData.name = data.name;
@@ -165,7 +165,7 @@ export class PortfolioService {
   }
 
   async deletePortfolio(userId: string, portfolioId: string) {
-    const portfolio = await this.getPortfolioById(userId, portfolioId);
+    await this.getPortfolioById(userId, portfolioId);
 
     // Check if portfolio has investments
     const investmentCount = await prisma.investment.count({
@@ -214,7 +214,14 @@ export class PortfolioService {
       where: { portfolioId },
     });
 
-    const performanceByType: any = {};
+    const performanceByType: Record<
+      string,
+      {
+        count: number;
+        totalValue: Decimal;
+        totalGain: Decimal;
+      }
+    > = {};
 
     for (const investment of investments) {
       if (!performanceByType[investment.type]) {

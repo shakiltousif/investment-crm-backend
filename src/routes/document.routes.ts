@@ -56,7 +56,7 @@ router.post('/', authenticate, upload.single('file'), async (req: AuthRequest, r
  */
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const filters: any = {};
+    const filters: Record<string, unknown> = {};
     if (req.query.type) {
       filters.type = req.query.type;
     }
@@ -125,7 +125,7 @@ router.post(
  */
 router.get('/statements', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const filters: any = {};
+    const filters: Record<string, unknown> = {};
     if (req.query.period) {
       filters.period = req.query.period;
     }
@@ -169,7 +169,7 @@ router.get('/statements/:id', authenticate, async (req: AuthRequest, res: Respon
     const statement = await documentService.getStatementById(req.params.id, req.userId);
 
     // Construct full URL for fileUrl
-    const apiBaseUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 4000}`;
+    const apiBaseUrl = process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
     const statementWithFullUrl = {
       ...statement,
       fileUrl: statement.fileUrl.startsWith('http')
@@ -237,7 +237,7 @@ router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
     const document = await documentService.getDocumentById(req.params.id, req.userId, isAdmin);
 
     // Construct full URL for fileUrl
-    const apiBaseUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 4000}`;
+    const apiBaseUrl = process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
     const documentWithFullUrl = {
       ...document,
       fileUrl: document.fileUrl.startsWith('http')

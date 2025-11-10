@@ -35,12 +35,16 @@ export class TwoFactorService {
   /**
    * Enable two-factor authentication
    */
-  async enableTwoFactor(userId: string, secret: string, backupCodes: string[]) {
+  async enableTwoFactor(
+    userId: string,
+    secret: string,
+    backupCodes: string[]
+  ): Promise<{ success: boolean; message: string; backupCodes: string[] }> {
     // Hash backup codes
     const hashedBackupCodes = backupCodes.map((code) => this.hashCode(code));
 
     // Update user
-    const user = await prisma.user.update({
+    await prisma.user.update({
       where: { id: userId },
       data: {
         twoFactorEnabled: true,
@@ -59,7 +63,7 @@ export class TwoFactorService {
   /**
    * Disable two-factor authentication
    */
-  async disableTwoFactor(userId: string) {
+  async disableTwoFactor(userId: string): Promise<{ success: boolean; message: string }> {
     await prisma.user.update({
       where: { id: userId },
       data: {
@@ -133,7 +137,9 @@ export class TwoFactorService {
   /**
    * Get 2FA status
    */
-  async getTwoFactorStatus(userId: string) {
+  async getTwoFactorStatus(
+    userId: string
+  ): Promise<{ enabled: boolean; backupCodesRemaining: number }> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -144,14 +150,16 @@ export class TwoFactorService {
 
     return {
       enabled: user.twoFactorEnabled,
-      backupCodesRemaining: user.twoFactorBackupCodes?.length || 0,
+      backupCodesRemaining: user.twoFactorBackupCodes?.length ?? 0,
     };
   }
 
   /**
    * Regenerate backup codes
    */
-  async regenerateBackupCodes(userId: string) {
+  async regenerateBackupCodes(
+    userId: string
+  ): Promise<{ success: boolean; message: string; backupCodes: string[] }> {
     const backupCodes = Array.from({ length: 10 }, () =>
       crypto.randomBytes(4).toString('hex').toUpperCase()
     );

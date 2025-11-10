@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { CreateInvestmentInput, UpdateInvestmentInput } from '../lib/validators';
-import { NotFoundError, ValidationError } from '../middleware/errorHandler';
+import { NotFoundError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export class InvestmentService {
@@ -51,7 +51,7 @@ export class InvestmentService {
   }
 
   async getInvestments(userId: string, portfolioId?: string) {
-    const where: any = { userId };
+    const where: Record<string, unknown> = { userId };
     if (portfolioId) {
       where.portfolioId = portfolioId;
     }
@@ -83,7 +83,7 @@ export class InvestmentService {
     const investment = await this.getInvestmentById(userId, investmentId);
 
     // Recalculate totals if price or quantity changed
-    let updateData: any = data;
+    let updateData: Record<string, unknown> = data;
     if (data.currentPrice || data.quantity) {
       const quantity = data.quantity || investment.quantity;
       const currentPrice = data.currentPrice || investment.currentPrice;

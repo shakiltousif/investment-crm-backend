@@ -12,7 +12,11 @@ export interface AuthRequest extends Request {
   };
 }
 
-export const authenticate = async (req: AuthRequest, _res: Response, next: NextFunction) => {
+export const authenticate = async (
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -42,9 +46,9 @@ export const authenticate = async (req: AuthRequest, _res: Response, next: NextF
           isActive: true,
         },
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Fallback if role column doesn't exist yet (database not migrated)
-      if (error.message?.includes('does not exist')) {
+      if (error instanceof Error && error.message?.includes('does not exist')) {
         user = await prisma.user.findUnique({
           where: { id: decoded.userId },
           select: {
@@ -91,7 +95,7 @@ export const authenticate = async (req: AuthRequest, _res: Response, next: NextF
 /**
  * Middleware to require admin role
  */
-export const requireAdmin = (req: AuthRequest, _res: Response, next: NextFunction) => {
+export const requireAdmin = (req: AuthRequest, _res: Response, next: NextFunction): void => {
   if (req.user?.role !== 'ADMIN') {
     throw new AuthorizationError('Admin access required');
   }
@@ -102,7 +106,7 @@ export const requireAdmin = (req: AuthRequest, _res: Response, next: NextFunctio
  * Helper to check if user has specific role
  */
 export const requireRole = (role: string) => {
-  return (req: AuthRequest, _res: Response, next: NextFunction) => {
+  return (req: AuthRequest, _res: Response, next: NextFunction): void => {
     if (req.user?.role !== role) {
       throw new AuthorizationError(`Access denied. Required role: ${role}`);
     }
@@ -112,7 +116,7 @@ export const requireRole = (role: string) => {
 
 export const generateToken = (userId: string, email: string): string => {
   const secret = process.env.JWT_SECRET;
-  const expiresIn = process.env.JWT_EXPIRY || '7d';
+  const expiresIn = process.env.JWT_EXPIRY ?? '7d';
 
   if (!secret) {
     throw new Error('JWT_SECRET is not defined');
@@ -123,7 +127,7 @@ export const generateToken = (userId: string, email: string): string => {
 
 export const generateRefreshToken = (userId: string): string => {
   const secret = process.env.JWT_REFRESH_SECRET;
-  const expiresIn = process.env.JWT_REFRESH_EXPIRY || '30d';
+  const expiresIn = process.env.JWT_REFRESH_EXPIRY ?? '30d';
 
   if (!secret) {
     throw new Error('JWT_REFRESH_SECRET is not defined');

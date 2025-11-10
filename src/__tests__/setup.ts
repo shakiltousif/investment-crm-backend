@@ -1,5 +1,3 @@
-import { prisma } from '../lib/prisma';
-
 // Mock Prisma client
 jest.mock('../lib/prisma', () => ({
   prisma: {

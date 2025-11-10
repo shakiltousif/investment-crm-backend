@@ -123,7 +123,7 @@ export class BankAccountService {
   }
 
   async setPrimaryAccount(userId: string, accountId: string) {
-    const account = await this.getBankAccountById(userId, accountId);
+    await this.getBankAccountById(userId, accountId);
 
     // Remove primary from all other accounts
     await prisma.bankAccount.updateMany({
@@ -144,7 +144,7 @@ export class BankAccountService {
   }
 
   async verifyBankAccount(userId: string, accountId: string) {
-    const account = await this.getBankAccountById(userId, accountId);
+    await this.getBankAccountById(userId, accountId);
 
     const verifiedAccount = await prisma.bankAccount.update({
       where: { id: accountId },
@@ -185,7 +185,7 @@ export class BankAccountService {
   }
 
   async getAccountTransactions(userId: string, accountId: string) {
-    const account = await this.getBankAccountById(userId, accountId);
+    await this.getBankAccountById(userId, accountId);
 
     const transactions = await prisma.transaction.findMany({
       where: {

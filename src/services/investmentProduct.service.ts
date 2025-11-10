@@ -215,7 +215,7 @@ export class InvestmentProductService {
    * Get user's investment applications
    */
   async getUserApplications(userId: string, filters?: { status?: string; type?: string }) {
-    const where: any = { userId };
+    const where: Record<string, unknown> = { userId };
 
     if (filters?.status) {
       where.status = filters.status;
@@ -242,7 +242,7 @@ export class InvestmentProductService {
    * Get application by ID
    */
   async getApplicationById(applicationId: string, userId?: string) {
-    const where: any = { id: applicationId };
+    const where: Record<string, unknown> = { id: applicationId };
     if (userId) {
       where.userId = userId;
     }
@@ -272,7 +272,16 @@ export class InvestmentProductService {
   /**
    * Calculate bond payout schedule
    */
-  calculateBondPayoutSchedule(bond: any, investmentAmount: number) {
+  calculateBondPayoutSchedule(
+    bond: {
+      type: string;
+      couponRate?: unknown;
+      maturityDate?: Date | null;
+      payoutFrequency?: string;
+      nextPayoutDate?: Date | null;
+    },
+    investmentAmount: number
+  ) {
     if (bond.type !== 'CORPORATE_BOND' || !bond.couponRate || !bond.maturityDate) {
       return null;
     }
@@ -325,7 +334,14 @@ export class InvestmentProductService {
   /**
    * Calculate savings account interest
    */
-  calculateSavingsInterest(savings: any, balance: number, days: number = 30) {
+  calculateSavingsInterest(
+    savings: {
+      type: string;
+      interestRate?: unknown;
+    },
+    balance: number,
+    days: number = 30
+  ) {
     if (savings.type !== 'HIGH_INTEREST_SAVINGS' || !savings.interestRate) {
       return null;
     }
@@ -347,7 +363,15 @@ export class InvestmentProductService {
   /**
    * Calculate fixed deposit maturity
    */
-  calculateFixedDepositMaturity(fixedDeposit: any, investmentAmount: number) {
+  calculateFixedDepositMaturity(
+    fixedDeposit: {
+      type: string;
+      interestRate?: unknown;
+      lockPeriodMonths?: number;
+      earlyWithdrawalPenalty?: unknown;
+    },
+    investmentAmount: number
+  ) {
     if (
       fixedDeposit.type !== 'FIXED_RATE_DEPOSIT' ||
       !fixedDeposit.interestRate ||

@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PrismaClient } from '@prisma/client';
 import { InvestmentService } from '../../services/investment.service';
-import { NotFoundError, ValidationError, InsufficientFundsError } from '../../middleware/errorHandler';
+import {
+  NotFoundError,
+  ValidationError,
+  InsufficientFundsError,
+} from '../../middleware/errorHandler';
 
 // Mock Prisma
 const mockPrisma = {
@@ -26,7 +29,29 @@ const mockPrisma = {
     create: vi.fn(),
   },
   $disconnect: vi.fn(),
-} as any;
+} as unknown as {
+  investment: {
+    findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
+    aggregate: ReturnType<typeof vi.fn>;
+  };
+  portfolio: {
+    findUnique: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+  };
+  bankAccount: {
+    findUnique: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+  };
+  transaction: {
+    create: ReturnType<typeof vi.fn>;
+  };
+  $disconnect: ReturnType<typeof vi.fn>;
+};
 
 vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(() => mockPrisma),

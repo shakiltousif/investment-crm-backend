@@ -261,7 +261,7 @@ router.get('/savings/:id/interest', authenticate, async (req: AuthRequest, res: 
     const interest = investmentProductService.calculateSavingsInterest(
       savings,
       balance,
-      days || 30
+      days ?? 30
     );
     res.status(200).json({
       message: 'Interest calculated successfully',

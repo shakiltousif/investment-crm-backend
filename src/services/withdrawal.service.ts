@@ -25,7 +25,17 @@ export class WithdrawalService {
   /**
    * Create withdrawal request
    */
-  async createWithdrawal(userId: string, data: CreateWithdrawalInput) {
+  async createWithdrawal(
+    userId: string,
+    data: CreateWithdrawalInput
+  ): Promise<{
+    withdrawal: unknown;
+    details: {
+      bankAccount: unknown;
+      availableBalance: Decimal;
+      balanceAfterWithdrawal: Decimal;
+    };
+  }> {
     // Verify bank account exists and belongs to user
     const bankAccount = await prisma.bankAccount.findFirst({
       where: {
@@ -62,7 +72,7 @@ export class WithdrawalService {
         amount: new Decimal(data.amount),
         currency: data.currency,
         status: 'PENDING',
-        description: data.description || 'Withdrawal request',
+        description: data.description ?? 'Withdrawal request',
         bankAccountId: data.bankAccountId,
         transactionDate: new Date(),
       },
@@ -99,8 +109,14 @@ export class WithdrawalService {
   /**
    * Get withdrawals
    */
-  async getWithdrawals(userId: string, filters: WithdrawalFilters) {
-    const where: any = {
+  async getWithdrawals(
+    userId: string,
+    filters: WithdrawalFilters
+  ): Promise<{
+    data: unknown[];
+    pagination: { total: number; limit: number; offset: number; pages: number };
+  }> {
+    const where: Record<string, unknown> = {
       userId,
       type: 'WITHDRAWAL',
     };
@@ -137,8 +153,8 @@ export class WithdrawalService {
       }
     }
 
-    const limit = Math.min(filters.limit || 20, 100);
-    const offset = filters.offset || 0;
+    const limit = Math.min(filters.limit ?? 20, 100);
+    const offset = filters.offset ?? 0;
 
     const [withdrawals, total] = await Promise.all([
       prisma.transaction.findMany({
@@ -167,7 +183,7 @@ export class WithdrawalService {
   /**
    * Get withdrawal by ID
    */
-  async getWithdrawalById(userId: string, withdrawalId: string) {
+  async getWithdrawalById(userId: string, withdrawalId: string): Promise<unknown> {
     const withdrawal = await prisma.transaction.findFirst({
       where: {
         id: withdrawalId,
@@ -189,7 +205,7 @@ export class WithdrawalService {
   /**
    * Approve withdrawal
    */
-  async approveWithdrawal(userId: string, withdrawalId: string) {
+  async approveWithdrawal(userId: string, withdrawalId: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
     if (withdrawal.status !== 'PENDING') {
@@ -201,7 +217,7 @@ export class WithdrawalService {
       where: { id: withdrawal.bankAccountId! },
     });
 
-    if (bankAccount && bankAccount.balance.lessThan(withdrawal.amount)) {
+    if (bankAccount?.balance.lessThan(withdrawal.amount)) {
       throw new ValidationError('Insufficient balance for withdrawal');
     }
 
@@ -219,7 +235,7 @@ export class WithdrawalService {
   /**
    * Complete withdrawal
    */
-  async completeWithdrawal(userId: string, withdrawalId: string) {
+  async completeWithdrawal(userId: string, withdrawalId: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
     if (withdrawal.status !== 'PROCESSING') {
@@ -258,7 +274,7 @@ export class WithdrawalService {
   /**
    * Reject withdrawal
    */
-  async rejectWithdrawal(userId: string, withdrawalId: string, reason?: string) {
+  async rejectWithdrawal(userId: string, withdrawalId: string, reason?: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
     if (!['PENDING', 'PROCESSING'].includes(withdrawal.status)) {
@@ -270,7 +286,7 @@ export class WithdrawalService {
       data: {
         status: 'FAILED',
         description: reason
-          ? `${withdrawal.description} - Rejected: ${reason}`
+          ? `${withdrawal.description ?? ''} - Rejected: ${reason}`
           : withdrawal.description,
       },
       include: {
@@ -284,7 +300,7 @@ export class WithdrawalService {
   /**
    * Cancel withdrawal (user-initiated)
    */
-  async cancelWithdrawal(userId: string, withdrawalId: string) {
+  async cancelWithdrawal(userId: string, withdrawalId: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
     if (!['PENDING'].includes(withdrawal.status)) {
@@ -326,7 +342,12 @@ export class WithdrawalService {
   /**
    * Get withdrawal summary
    */
-  async getWithdrawalSummary(userId: string) {
+  async getWithdrawalSummary(userId: string): Promise<{
+    totalWithdrawals: number;
+    totalAmount: Decimal;
+    byStatus: Record<string, number>;
+    byCurrency: Record<string, Decimal>;
+  }> {
     const withdrawals = await prisma.transaction.findMany({
       where: {
         userId,

@@ -1,10 +1,9 @@
 import { prisma } from '../lib/prisma';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';
-import { Decimal } from '@prisma/client/runtime/library';
 import fs from 'fs/promises';
 import path from 'path';
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads';
+const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './uploads';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 // Ensure upload directory exists
@@ -18,7 +17,7 @@ async function ensureUploadDir() {
   }
 }
 
-ensureUploadDir();
+void ensureUploadDir();
 
 export interface UploadDocumentInput {
   type: string;
@@ -75,7 +74,7 @@ export class DocumentService {
     const document = await prisma.document.create({
       data: {
         userId,
-        type: data.type as any,
+        type: data.type,
         fileName: data.fileName,
         fileUrl: `/uploads/documents/${uniqueFileName}`,
         fileSize: data.fileSize,
@@ -93,7 +92,7 @@ export class DocumentService {
    * Get user documents
    */
   async getUserDocuments(userId: string, filters?: { type?: string; isImportant?: boolean }) {
-    const where: any = { userId };
+    const where: Record<string, unknown> = { userId };
 
     if (filters?.type) {
       where.type = filters.type;
@@ -109,7 +108,7 @@ export class DocumentService {
     });
 
     // Construct full URLs for each document
-    const apiBaseUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 4000}`;
+    const apiBaseUrl = process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
     return documents.map((doc) => ({
       ...doc,
       fileUrl: doc.fileUrl.startsWith('http') ? doc.fileUrl : `${apiBaseUrl}${doc.fileUrl}`,
@@ -239,7 +238,7 @@ export class DocumentService {
    * Get user statements
    */
   async getUserStatements(userId: string, filters?: { period?: string }) {
-    const where: any = { userId };
+    const where: Record<string, unknown> = { userId };
 
     if (filters?.period) {
       where.period = filters.period;
@@ -251,7 +250,7 @@ export class DocumentService {
     });
 
     // Construct full URLs for each statement
-    const apiBaseUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 4000}`;
+    const apiBaseUrl = process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
     return statements.map((stmt) => ({
       ...stmt,
       fileUrl: stmt.fileUrl.startsWith('http') ? stmt.fileUrl : `${apiBaseUrl}${stmt.fileUrl}`,
@@ -288,7 +287,7 @@ export class DocumentService {
    * Get statement by ID
    */
   async getStatementById(statementId: string, userId?: string) {
-    const where: any = { id: statementId };
+    const where: Record<string, unknown> = { id: statementId };
     if (userId) {
       where.userId = userId;
     }

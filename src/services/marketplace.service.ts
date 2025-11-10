@@ -33,7 +33,7 @@ export class MarketplaceService {
   async getAvailableInvestments(filters: MarketplaceFilters) {
     try {
       // Build where clause based on filters
-      const where: any = {
+      const where: Record<string, unknown> = {
         isAvailable: true,
       };
 
@@ -61,7 +61,7 @@ export class MarketplaceService {
       }
 
       // Build orderBy clause
-      let orderBy: any = { createdAt: 'desc' };
+      let orderBy: Record<string, string> = { createdAt: 'desc' };
       if (filters.sortBy) {
         switch (filters.sortBy) {
           case 'name':
@@ -420,7 +420,7 @@ export class MarketplaceService {
       data: {
         userId,
         portfolioId: input.portfolioId,
-        type: marketplaceInvestment.type as any,
+        type: marketplaceInvestment.type,
         name: marketplaceInvestment.name,
         symbol: marketplaceInvestment.symbol,
         quantity: new Decimal(input.quantity),
@@ -641,7 +641,7 @@ export class MarketplaceService {
       throw new NotFoundError('Marketplace item not found');
     }
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (input.name !== undefined) {
       updateData.name = input.name;
     }

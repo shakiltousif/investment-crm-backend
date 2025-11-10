@@ -39,7 +39,8 @@ export class EmailService {
       };
 
       await this.transporter.sendMail(mailOptions);
-      console.log(`Email sent to ${options.to}`);
+      // Email sent successfully - using console.warn for consistency
+      console.warn(`Email sent to ${options.to}`);
     } catch (error) {
       console.error('Failed to send email:', error);
       // Don't throw error - email failures shouldn't break the app

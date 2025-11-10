@@ -89,7 +89,7 @@ export class AdminService {
     limit?: number;
     offset?: number;
   }) {
-    const where: any = {};
+    const where: Record<string, unknown> = {};
 
     if (filters.search) {
       where.OR = [
@@ -110,8 +110,8 @@ export class AdminService {
     const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
-        take: filters.limit || 50,
-        skip: filters.offset || 0,
+        take: filters.limit ?? 50,
+        skip: filters.offset ?? 0,
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
@@ -132,8 +132,8 @@ export class AdminService {
     return {
       users,
       total,
-      limit: filters.limit || 50,
-      offset: filters.offset || 0,
+      limit: filters.limit ?? 50,
+      offset: filters.offset ?? 0,
     };
   }
 
@@ -209,7 +209,7 @@ export class AdminService {
     }
 
     // Generate temporary password if not provided
-    const tempPassword = data.password || this.generateTemporaryPassword();
+    const tempPassword = data.password ?? this.generateTemporaryPassword();
     const isTemporaryPassword = !data.password;
 
     const bcrypt = await import('bcryptjs');
@@ -222,7 +222,7 @@ export class AdminService {
         firstName: data.firstName,
         lastName: data.lastName,
         phoneNumber: data.phoneNumber,
-        role: (data.role as any) || 'CLIENT',
+        role: (data.role as 'CLIENT' | 'ADMIN') ?? 'CLIENT',
       },
       select: {
         id: true,
@@ -238,7 +238,7 @@ export class AdminService {
 
     // Send welcome email with credentials if requested
     if (data.sendCredentialsEmail !== false) {
-      const loginUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/login`;
+      const loginUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/login`;
 
       const html = `
         <!DOCTYPE html>
@@ -319,7 +319,7 @@ export class AdminService {
       throw new NotFoundError('User not found');
     }
 
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     if (data.firstName !== undefined) {
       updateData.firstName = data.firstName;
     }
@@ -384,8 +384,8 @@ export class AdminService {
           type: 'DEPOSIT',
           status: 'PENDING',
         },
-        take: filters.limit || 50,
-        skip: filters.offset || 0,
+        take: filters.limit ?? 50,
+        skip: filters.offset ?? 0,
         orderBy: { createdAt: 'desc' },
         include: {
           user: {
@@ -410,8 +410,8 @@ export class AdminService {
     return {
       deposits,
       total,
-      limit: filters.limit || 50,
-      offset: filters.offset || 0,
+      limit: filters.limit ?? 50,
+      offset: filters.offset ?? 0,
     };
   }
 
@@ -425,8 +425,8 @@ export class AdminService {
           type: 'WITHDRAWAL',
           status: 'PENDING',
         },
-        take: filters.limit || 50,
-        skip: filters.offset || 0,
+        take: filters.limit ?? 50,
+        skip: filters.offset ?? 0,
         orderBy: { createdAt: 'desc' },
         include: {
           user: {
@@ -451,8 +451,8 @@ export class AdminService {
     return {
       withdrawals,
       total,
-      limit: filters.limit || 50,
-      offset: filters.offset || 0,
+      limit: filters.limit ?? 50,
+      offset: filters.offset ?? 0,
     };
   }
 
@@ -489,7 +489,7 @@ export class AdminService {
         status: dbStatus,
         completedAt: status === 'COMPLETED' ? new Date() : null,
         description: notes
-          ? `${transaction.description || ''} - ${notes}`.trim()
+          ? `${transaction.description ?? ''} - ${notes}`.trim()
           : transaction.description,
       },
     });
@@ -541,7 +541,7 @@ export class AdminService {
     limit?: number;
     offset?: number;
   }) {
-    const where: any = {};
+    const where: Record<string, unknown> = {};
 
     if (filters.type) {
       where.type = filters.type;
@@ -565,8 +565,8 @@ export class AdminService {
       }
     }
 
-    const limit = Math.min(filters.limit || 100, 500);
-    const offset = filters.offset || 0;
+    const limit = Math.min(filters.limit ?? 100, 500);
+    const offset = filters.offset ?? 0;
 
     const [transactions, total] = await Promise.all([
       prisma.transaction.findMany({

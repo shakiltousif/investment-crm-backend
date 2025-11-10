@@ -5,7 +5,7 @@ export interface AuditLogEntry {
   action: string;
   resource: string;
   resourceId?: string;
-  changes?: Record<string, any>;
+  changes?: Record<string, unknown>;
   ipAddress?: string;
   userAgent?: string;
   status: 'SUCCESS' | 'FAILURE';
@@ -50,7 +50,7 @@ export class AuditLogService {
    * Get audit logs
    */
   async getAuditLogs(filters: AuditLogFilters) {
-    const where: any = {};
+    const where: Record<string, unknown> = {};
 
     if (filters.userId) {
       where.userId = filters.userId;

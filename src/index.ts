@@ -1,4 +1,4 @@
-import express, { Express, Request, Response, NextFunction } from 'express';
+import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
@@ -9,7 +9,7 @@ import path from 'path';
 import { logger } from './config/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
-import { rateLimiter } from './middleware/rateLimiter';
+// import { rateLimiter } from './middleware/rateLimiter';
 
 // Import routes
 import authRoutes from './routes/auth.routes';
@@ -38,19 +38,19 @@ const app: Express = express();
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: process.env.SOCKET_IO_CORS_ORIGIN || 'http://localhost:3000',
+    origin: process.env.SOCKET_IO_CORS_ORIGIN ?? 'http://localhost:3000',
     methods: ['GET', 'POST'],
   },
 });
 
-const PORT = process.env.PORT || 3001;
-const NODE_ENV = process.env.NODE_ENV || 'development';
+const PORT = process.env.PORT ?? 3001;
+const NODE_ENV = process.env.NODE_ENV ?? 'development';
 
 // Middleware
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
     credentials: true,
   })
 );
@@ -118,7 +118,7 @@ io.on('connection', (socket) => {
 // Start server
 httpServer.listen(PORT, () => {
   logger.info(`Server running on port ${PORT} in ${NODE_ENV} mode`);
-  logger.info(`API URL: ${process.env.API_URL || `http://localhost:${PORT}`}`);
+  logger.info(`API URL: ${process.env.API_URL ?? `http://localhost:${PORT}`}`);
 });
 
 // Graceful shutdown

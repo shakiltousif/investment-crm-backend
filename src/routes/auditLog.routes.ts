@@ -126,11 +126,11 @@ router.get('/export', authenticate, async (req: AuthRequest, res: Response) => {
           log.userId,
           log.action,
           log.resource,
-          log.resourceId || '',
+          log.resourceId ?? '',
           log.status,
-          log.ipAddress || '',
-          log.userAgent || '',
-          log.details || '',
+          log.ipAddress ?? '',
+          log.userAgent ?? '',
+          log.details ?? '',
         ]
           .map((field) => `"${field}"`)
           .join(',')

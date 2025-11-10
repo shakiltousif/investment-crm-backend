@@ -1,6 +1,5 @@
 import { prisma } from '../lib/prisma';
 import { NotFoundError } from '../middleware/errorHandler';
-import { Decimal } from '@prisma/client/runtime/library';
 
 export interface PortfolioReportData {
   userId: string;
@@ -85,7 +84,7 @@ export class ReportService {
     });
 
     // Get transactions within date range
-    const transactionWhere: any = { userId };
+    const transactionWhere: Record<string, unknown> = { userId };
     if (startDate || endDate) {
       transactionWhere.createdAt = {};
       if (startDate) {

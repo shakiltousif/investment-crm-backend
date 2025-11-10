@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PrismaClient } from '@prisma/client';
 import { AuthService } from '../../services/auth.service';
-import { ConflictError, AuthenticationError, ValidationError } from '../../middleware/errorHandler';
+import { ConflictError, AuthenticationError } from '../../middleware/errorHandler';
 
 // Mock Prisma
 const mockPrisma = {
@@ -12,7 +11,15 @@ const mockPrisma = {
     update: vi.fn(),
   },
   $disconnect: vi.fn(),
-} as any;
+} as unknown as {
+  user: {
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+  };
+  $disconnect: ReturnType<typeof vi.fn>;
+};
 
 vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(() => mockPrisma),
@@ -32,7 +39,10 @@ vi.mock('../src/middleware/auth', () => ({
 
 describe('AuthService', () => {
   let authService: AuthService;
-  let bcrypt: any;
+  let bcrypt: {
+    hash: ReturnType<typeof vi.fn>;
+    compare: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(async () => {
     authService = new AuthService();

@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { AuthRequest } from '../middleware/auth';
 import { quotesService } from '../services/quotes.service';
 import { z } from 'zod';
 
@@ -22,16 +22,17 @@ const searchSymbolsSchema = z.object({
  * GET /api/quotes/:symbol
  * Get live quote for a single symbol
  */
-router.get('/:symbol', async (req: AuthRequest, res: Response) => {
+router.get('/:symbol', async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const { symbol } = getQuoteSchema.parse({ symbol: req.params.symbol });
     const quote = await quotesService.getQuote(symbol);
 
     if (!quote) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         message: `No quote data available for ${symbol}`,
       });
+      return;
     }
 
     res.status(200).json({
@@ -95,7 +96,7 @@ router.get('/search/:query', async (req: AuthRequest, res: Response) => {
  * GET /api/quotes/cache/stats
  * Get cache statistics
  */
-router.get('/cache/stats', async (req: AuthRequest, res: Response) => {
+router.get('/cache/stats', async (_req: AuthRequest, res: Response) => {
   try {
     const stats = quotesService.getCacheStats();
 
@@ -116,7 +117,7 @@ router.get('/cache/stats', async (req: AuthRequest, res: Response) => {
  * DELETE /api/quotes/cache
  * Clear quote cache
  */
-router.delete('/cache', async (req: AuthRequest, res: Response) => {
+router.delete('/cache', async (_req: AuthRequest, res: Response) => {
   try {
     quotesService.clearCache();
 

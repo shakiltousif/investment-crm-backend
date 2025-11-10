@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
-import { PrismaClient } from '@prisma/client';
 import app from '../../index';
 
 // Mock Prisma
@@ -42,7 +41,45 @@ const mockPrisma = {
     count: vi.fn(),
   },
   $disconnect: vi.fn(),
-} as any;
+} as unknown as {
+  user: {
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+  };
+  portfolio: {
+    findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
+  };
+  bankAccount: {
+    findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
+  };
+  investment: {
+    findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
+    aggregate: ReturnType<typeof vi.fn>;
+  };
+  transaction: {
+    findMany: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
+  };
+  $disconnect: ReturnType<typeof vi.fn>;
+};
 
 vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(() => mockPrisma),
@@ -90,10 +127,7 @@ describe('API Integration Tests', () => {
         mockPrisma.user.findUnique.mockResolvedValue(null);
         mockPrisma.user.create.mockResolvedValue(createdUser);
 
-        const response = await request(app)
-          .post('/api/auth/register')
-          .send(userData)
-          .expect(201);
+        const response = await request(app).post('/api/auth/register').send(userData).expect(201);
 
         expect(response.body).toHaveProperty('user');
         expect(response.body).toHaveProperty('accessToken');
@@ -116,10 +150,7 @@ describe('API Integration Tests', () => {
 
         mockPrisma.user.findUnique.mockResolvedValue(existingUser);
 
-        const response = await request(app)
-          .post('/api/auth/register')
-          .send(userData)
-          .expect(409);
+        const response = await request(app).post('/api/auth/register').send(userData).expect(409);
 
         expect(response.body).toHaveProperty('message');
         expect(response.body.message).toContain('already exists');
@@ -163,10 +194,7 @@ describe('API Integration Tests', () => {
         mockPrisma.user.findUnique.mockResolvedValue(user);
         mockPrisma.user.update.mockResolvedValue(user);
 
-        const response = await request(app)
-          .post('/api/auth/login')
-          .send(loginData)
-          .expect(200);
+        const response = await request(app).post('/api/auth/login').send(loginData).expect(200);
 
         expect(response.body).toHaveProperty('user');
         expect(response.body).toHaveProperty('accessToken');
@@ -182,10 +210,7 @@ describe('API Integration Tests', () => {
 
         mockPrisma.user.findUnique.mockResolvedValue(null);
 
-        const response = await request(app)
-          .post('/api/auth/login')
-          .send(loginData)
-          .expect(401);
+        const response = await request(app).post('/api/auth/login').send(loginData).expect(401);
 
         expect(response.body).toHaveProperty('message');
         expect(response.body.message).toContain('Invalid credentials');
@@ -207,10 +232,7 @@ describe('API Integration Tests', () => {
 
         mockPrisma.user.findFirst.mockResolvedValue(user);
 
-        const response = await request(app)
-          .post('/api/auth/refresh')
-          .send(refreshData)
-          .expect(200);
+        const response = await request(app).post('/api/auth/refresh').send(refreshData).expect(200);
 
         expect(response.body).toHaveProperty('accessToken');
         expect(response.body).toHaveProperty('refreshToken');
@@ -223,10 +245,7 @@ describe('API Integration Tests', () => {
 
         mockPrisma.user.findFirst.mockResolvedValue(null);
 
-        const response = await request(app)
-          .post('/api/auth/refresh')
-          .send(refreshData)
-          .expect(401);
+        const response = await request(app).post('/api/auth/refresh').send(refreshData).expect(401);
 
         expect(response.body).toHaveProperty('message');
         expect(response.body.message).toContain('Invalid refresh token');
@@ -258,18 +277,13 @@ describe('API Integration Tests', () => {
 
         mockPrisma.portfolio.findMany.mockResolvedValue(portfolios);
 
-        const response = await request(app)
-          .get('/api/portfolios')
-          .set(authHeaders)
-          .expect(200);
+        const response = await request(app).get('/api/portfolios').set(authHeaders).expect(200);
 
         expect(response.body).toEqual(portfolios);
       });
 
       it('should return 401 without authentication', async () => {
-        const response = await request(app)
-          .get('/api/portfolios')
-          .expect(401);
+        const response = await request(app).get('/api/portfolios').expect(401);
 
         expect(response.body).toHaveProperty('message');
         expect(response.body.message).toContain('Authentication required');
@@ -442,10 +456,7 @@ describe('API Integration Tests', () => {
 
         mockPrisma.bankAccount.findMany.mockResolvedValue(bankAccounts);
 
-        const response = await request(app)
-          .get('/api/bank-accounts')
-          .set(authHeaders)
-          .expect(200);
+        const response = await request(app).get('/api/bank-accounts').set(authHeaders).expect(200);
 
         expect(response.body).toEqual(bankAccounts);
       });
@@ -584,10 +595,7 @@ describe('API Integration Tests', () => {
         mockPrisma.investment.findMany.mockResolvedValue(investments);
         mockPrisma.investment.count.mockResolvedValue(1);
 
-        const response = await request(app)
-          .get('/api/investments')
-          .set(authHeaders)
-          .expect(200);
+        const response = await request(app).get('/api/investments').set(authHeaders).expect(200);
 
         expect(response.body).toHaveProperty('data');
         expect(response.body).toHaveProperty('pagination');
@@ -826,10 +834,7 @@ describe('API Integration Tests', () => {
         mockPrisma.transaction.findMany.mockResolvedValue(transactions);
         mockPrisma.transaction.count.mockResolvedValue(1);
 
-        const response = await request(app)
-          .get('/api/transactions')
-          .set(authHeaders)
-          .expect(200);
+        const response = await request(app).get('/api/transactions').set(authHeaders).expect(200);
 
         expect(response.body).toHaveProperty('data');
         expect(response.body).toHaveProperty('pagination');
@@ -862,9 +867,7 @@ describe('API Integration Tests', () => {
 
   describe('Error Handling', () => {
     it('should return 404 for non-existent routes', async () => {
-      const response = await request(app)
-        .get('/api/non-existent-route')
-        .expect(404);
+      const response = await request(app).get('/api/non-existent-route').expect(404);
 
       expect(response.body).toHaveProperty('message');
       expect(response.body.message).toContain('not found');

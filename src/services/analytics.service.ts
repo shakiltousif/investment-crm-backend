@@ -191,13 +191,12 @@ export class AnalyticsService {
       : new Decimal(0);
 
     // Get historical data for day/week/month/year changes
-    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
-
     // For now, calculate based on current data
     // In production, you'd have historical snapshots
+    // const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    // const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    // const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    // const yearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
     const dayChange = new Decimal(0);
     const dayChangePercentage = new Decimal(0);
     const weekChange = new Decimal(0);

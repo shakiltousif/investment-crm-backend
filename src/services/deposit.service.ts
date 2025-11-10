@@ -58,7 +58,7 @@ export class DepositService {
         amount: new Decimal(data.amount),
         currency: data.currency,
         status: 'PENDING',
-        description: data.description || `Deposit via ${data.transferMethod}`,
+        description: data.description ?? `Deposit via ${data.transferMethod}`,
         bankAccountId: data.bankAccountId,
         transactionDate: new Date(),
       },
@@ -91,7 +91,7 @@ export class DepositService {
    * Get deposits
    */
   async getDeposits(userId: string, filters: DepositFilters) {
-    const where: any = {
+    const where: Record<string, unknown> = {
       userId,
       type: 'DEPOSIT',
     };
@@ -128,8 +128,8 @@ export class DepositService {
       }
     }
 
-    const limit = Math.min(filters.limit || 20, 100);
-    const offset = filters.offset || 0;
+    const limit = Math.min(filters.limit ?? 20, 100);
+    const offset = filters.offset ?? 0;
 
     const [deposits, total] = await Promise.all([
       prisma.transaction.findMany({

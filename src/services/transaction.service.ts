@@ -3,8 +3,18 @@ import { CreateTransactionInput } from '../lib/validators';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
 
+export interface TransactionFilters {
+  type?: string;
+  status?: string;
+  bankAccountId?: string;
+  investmentId?: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+}
+
 export class TransactionService {
-  async createTransaction(userId: string, data: CreateTransactionInput) {
+  async createTransaction(userId: string, data: CreateTransactionInput): Promise<unknown> {
     // Verify bank account exists if provided
     if (data.bankAccountId) {
       const bankAccount = await prisma.bankAccount.findFirst({
@@ -49,8 +59,8 @@ export class TransactionService {
     return transaction;
   }
 
-  async getTransactions(userId: string, filters?: any) {
-    const where: any = { userId };
+  async getTransactions(userId: string, filters?: TransactionFilters): Promise<unknown[]> {
+    const where: Record<string, unknown> = { userId };
 
     if (filters?.type) {
       where.type = filters.type;
@@ -85,13 +95,13 @@ export class TransactionService {
         investment: true,
       },
       orderBy: { transactionDate: 'desc' },
-      take: filters?.limit || 100,
+      take: filters?.limit ?? 100,
     });
 
     return transactions;
   }
 
-  async getTransactionById(userId: string, transactionId: string) {
+  async getTransactionById(userId: string, transactionId: string): Promise<unknown> {
     const transaction = await prisma.transaction.findFirst({
       where: {
         id: transactionId,
@@ -110,7 +120,7 @@ export class TransactionService {
     return transaction;
   }
 
-  async approveTransaction(userId: string, transactionId: string) {
+  async approveTransaction(userId: string, transactionId: string): Promise<unknown> {
     const transaction = await this.getTransactionById(userId, transactionId);
 
     if (transaction.status !== 'PENDING') {
@@ -127,7 +137,7 @@ export class TransactionService {
     return updatedTransaction;
   }
 
-  async completeTransaction(userId: string, transactionId: string) {
+  async completeTransaction(userId: string, transactionId: string): Promise<unknown> {
     const transaction = await this.getTransactionById(userId, transactionId);
 
     if (transaction.status !== 'PROCESSING') {
@@ -167,7 +177,7 @@ export class TransactionService {
     return updatedTransaction;
   }
 
-  async rejectTransaction(userId: string, transactionId: string) {
+  async rejectTransaction(userId: string, transactionId: string): Promise<unknown> {
     const transaction = await this.getTransactionById(userId, transactionId);
 
     if (!['PENDING', 'PROCESSING'].includes(transaction.status)) {
@@ -184,7 +194,7 @@ export class TransactionService {
     return updatedTransaction;
   }
 
-  async getTransactionSummary(userId: string) {
+  async getTransactionSummary(userId: string): Promise<unknown> {
     const transactions = await prisma.transaction.findMany({
       where: { userId },
     });

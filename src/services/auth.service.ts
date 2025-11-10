@@ -71,10 +71,10 @@ export class AuthService {
     if (!isPasswordValid) {
       // Increment failed login attempts
       const failedAttempts = user.failedLoginAttempts + 1;
-      const maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS || '5', 10);
+      const maxAttempts = parseInt(process.env.MAX_LOGIN_ATTEMPTS ?? '5', 10);
 
       if (failedAttempts >= maxAttempts) {
-        const lockTimeMinutes = parseInt(process.env.LOCK_TIME_MINUTES || '15', 10);
+        const lockTimeMinutes = parseInt(process.env.LOCK_TIME_MINUTES ?? '15', 10);
         const lockedUntil = new Date(Date.now() + lockTimeMinutes * 60 * 1000);
 
         await prisma.user.update({
@@ -116,7 +116,7 @@ export class AuthService {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        role: user.role || 'CLIENT',
+        role: user.role ?? 'CLIENT',
       },
       accessToken,
       refreshToken,

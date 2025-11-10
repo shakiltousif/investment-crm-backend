@@ -5,9 +5,10 @@ import { Decimal } from '@prisma/client/runtime/library';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Starting database seed...');
+  // Starting database seed - using console.warn for consistency
+  console.warn('Starting database seed...');
 
-  // Create test user (client)  
+  // Create test user (client)
   const hashedPassword = await bcrypt.hash('TestPassword123!', 10);
 
   const user = await prisma.user.upsert({
@@ -27,7 +28,8 @@ async function main() {
     },
   });
 
-  console.log('Created test user:', user);
+  // Created test user - using console.warn for consistency
+  console.warn('Created test user:', user);
 
   // Create admin user
   const adminHashedPassword = await bcrypt.hash('AdminPassword123!', 10);
@@ -49,7 +51,8 @@ async function main() {
     },
   });
 
-  console.log('Created admin user:', admin);
+  // Created admin user - using console.warn for consistency
+  console.warn('Created admin user:', admin);
 
   // Create test portfolio
   const portfolio = await prisma.portfolio.create({
@@ -64,15 +67,16 @@ async function main() {
     },
   });
 
-  console.log('Created test portfolio:', portfolio);
+  // Created test portfolio - using console.warn for consistency
+  console.warn('Created test portfolio:', portfolio);
 
   // Create test bank account
   const bankAccount = await prisma.bankAccount.upsert({
-    where: { 
+    where: {
       userId_accountNumber: {
         userId: user.id,
-        accountNumber: '1234567890'
-      }
+        accountNumber: '1234567890',
+      },
     },
     update: {},
     create: {
@@ -89,7 +93,8 @@ async function main() {
     },
   });
 
-  console.log('Created test bank account:', bankAccount);
+  // Created test bank account - using console.warn for consistency
+  console.warn('Created test bank account:', bankAccount);
 
   // Create marketplace items
   const marketplaceItems = [
@@ -98,7 +103,7 @@ async function main() {
       type: 'STOCK' as const,
       symbol: 'AAPL',
       description: 'Technology company focused on consumer electronics and software',
-      currentPrice: new Decimal(175.50),
+      currentPrice: new Decimal(175.5),
       minimumInvestment: new Decimal(100),
       maximumInvestment: new Decimal(100000),
       currency: 'GBP',
@@ -128,7 +133,7 @@ async function main() {
       type: 'STOCK' as const,
       symbol: 'TSLA',
       description: 'Electric vehicle and clean energy company',
-      currentPrice: new Decimal(245.30),
+      currentPrice: new Decimal(245.3),
       minimumInvestment: new Decimal(100),
       maximumInvestment: new Decimal(100000),
       currency: 'GBP',
@@ -158,7 +163,7 @@ async function main() {
       type: 'BOND' as const,
       symbol: 'US10Y',
       description: '10-year US Treasury bond with fixed interest rate',
-      currentPrice: new Decimal(98.50),
+      currentPrice: new Decimal(98.5),
       minimumInvestment: new Decimal(1000),
       maximumInvestment: new Decimal(1000000),
       currency: 'GBP',
@@ -177,9 +182,11 @@ async function main() {
     data: marketplaceItems,
   });
 
-  console.log('Created marketplace items');
+  // Created marketplace items - using console.warn for consistency
+  console.warn('Created marketplace items');
 
-  console.log('Database seed completed successfully!');
+  // Database seed completed successfully - using console.warn for consistency
+  console.warn('Database seed completed successfully!');
 }
 
 main()

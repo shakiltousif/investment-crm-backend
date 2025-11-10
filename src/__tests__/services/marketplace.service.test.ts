@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MarketplaceService } from '../../services/marketplace.service';
 import { ValidationError } from '../../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
@@ -92,9 +92,7 @@ describe('MarketplaceService', () => {
     it('should throw error if investment not found', async () => {
       (prisma.investment.findUnique as any).mockResolvedValue(null);
 
-      await expect(service.previewBuyTransaction('inv-1', 10)).rejects.toThrow(
-        ValidationError,
-      );
+      await expect(service.previewBuyTransaction('inv-1', 10)).rejects.toThrow(ValidationError);
     });
   });
 
@@ -126,7 +124,7 @@ describe('MarketplaceService', () => {
       (prisma.portfolio.findUnique as any).mockResolvedValue(null);
 
       await expect(service.buyInvestment('user-1', 'port-1', 'inv-1', 10)).rejects.toThrow(
-        ValidationError,
+        ValidationError
       );
     });
   });
@@ -158,9 +156,7 @@ describe('MarketplaceService', () => {
     it('should throw error if transaction not found', async () => {
       (prisma.transaction.findUnique as any).mockResolvedValue(null);
 
-      await expect(service.previewSellTransaction('trans-1', 10)).rejects.toThrow(
-        ValidationError,
-      );
+      await expect(service.previewSellTransaction('trans-1', 10)).rejects.toThrow(ValidationError);
     });
   });
 
@@ -192,9 +188,8 @@ describe('MarketplaceService', () => {
       });
 
       await expect(service.sellInvestment('user-1', 'trans-1', 10)).rejects.toThrow(
-        ValidationError,
+        ValidationError
       );
     });
   });
 });
-

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import authRoutes from '../../routes/auth.routes';
@@ -13,7 +13,16 @@ const mockPrisma = {
   auditLog: {
     create: vi.fn(),
   },
-} as any;
+} as unknown as {
+  user: {
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+  };
+  auditLog: {
+    create: ReturnType<typeof vi.fn>;
+  };
+};
 
 vi.mock('../../lib/prisma', () => ({
   prisma: mockPrisma,
@@ -136,11 +145,9 @@ describe('Auth Integration Tests', () => {
 
   describe('POST /api/auth/refresh', () => {
     it('should refresh token successfully', async () => {
-      const response = await request(app)
-        .post('/api/auth/refresh')
-        .send({
-          refreshToken: 'valid-refresh-token',
-        });
+      const response = await request(app).post('/api/auth/refresh').send({
+        refreshToken: 'valid-refresh-token',
+      });
 
       // This will depend on your JWT implementation
       expect(response.status).toBeOneOf([200, 401]);
@@ -157,4 +164,3 @@ describe('Auth Integration Tests', () => {
     });
   });
 });
-

@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PrismaClient } from '@prisma/client';
 import { BankAccountService } from '../../services/bankAccount.service';
 import { NotFoundError, ValidationError, ConflictError } from '../../middleware/errorHandler';
 
@@ -17,7 +16,20 @@ const mockPrisma = {
     findMany: vi.fn(),
   },
   $disconnect: vi.fn(),
-} as any;
+} as unknown as {
+  bankAccount: {
+    findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
+  };
+  transaction: {
+    findMany: ReturnType<typeof vi.fn>;
+  };
+  $disconnect: ReturnType<typeof vi.fn>;
+};
 
 vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(() => mockPrisma),
@@ -238,7 +250,9 @@ describe('BankAccountService', () => {
 
       mockPrisma.bankAccount.findUnique.mockResolvedValue(null);
 
-      await expect(bankAccountService.update(userId, accountId, updateData)).rejects.toThrow(NotFoundError);
+      await expect(bankAccountService.update(userId, accountId, updateData)).rejects.toThrow(
+        NotFoundError
+      );
     });
   });
 

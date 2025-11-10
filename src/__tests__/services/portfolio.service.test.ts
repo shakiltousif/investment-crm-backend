@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PrismaClient } from '@prisma/client';
 import { PortfolioService } from '../../services/portfolio.service';
 import { NotFoundError, ValidationError } from '../../middleware/errorHandler';
 
@@ -18,7 +17,21 @@ const mockPrisma = {
     aggregate: vi.fn(),
   },
   $disconnect: vi.fn(),
-} as any;
+} as unknown as {
+  portfolio: {
+    findMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
+  };
+  investment: {
+    findMany: ReturnType<typeof vi.fn>;
+    aggregate: ReturnType<typeof vi.fn>;
+  };
+  $disconnect: ReturnType<typeof vi.fn>;
+};
 
 vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(() => mockPrisma),
@@ -109,7 +122,9 @@ describe('PortfolioService', () => {
 
       mockPrisma.portfolio.findUnique.mockResolvedValue(null);
 
-      await expect(portfolioService.getPortfolioById(userId, portfolioId)).rejects.toThrow(NotFoundError);
+      await expect(portfolioService.getPortfolioById(userId, portfolioId)).rejects.toThrow(
+        NotFoundError
+      );
     });
   });
 
@@ -150,7 +165,9 @@ describe('PortfolioService', () => {
         description: 'A portfolio without a name',
       };
 
-      await expect(portfolioService.createPortfolio(userId, portfolioData)).rejects.toThrow(ValidationError);
+      await expect(portfolioService.createPortfolio(userId, portfolioData)).rejects.toThrow(
+        ValidationError
+      );
     });
   });
 
@@ -195,7 +212,9 @@ describe('PortfolioService', () => {
 
       mockPrisma.portfolio.findUnique.mockResolvedValue(null);
 
-      await expect(portfolioService.updatePortfolio(userId, portfolioId, updateData)).rejects.toThrow(NotFoundError);
+      await expect(
+        portfolioService.updatePortfolio(userId, portfolioId, updateData)
+      ).rejects.toThrow(NotFoundError);
     });
   });
 
@@ -223,8 +242,9 @@ describe('PortfolioService', () => {
 
       mockPrisma.portfolio.findUnique.mockResolvedValue(null);
 
-      await expect(portfolioService.deletePortfolio(userId, portfolioId)).rejects.toThrow(NotFoundError);
+      await expect(portfolioService.deletePortfolio(userId, portfolioId)).rejects.toThrow(
+        NotFoundError
+      );
     });
   });
-
 });

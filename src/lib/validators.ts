@@ -90,7 +90,7 @@ export const createPortfolioSchema = z
         data.totalInvested > 0
       ) {
         const calculatedGainPercentage =
-          (((data.totalValue || 0) - data.totalInvested) / data.totalInvested) * 100;
+          (((data.totalValue ?? 0) - data.totalInvested) / data.totalInvested) * 100;
         if (Math.abs(data.gainPercentage - calculatedGainPercentage) > 0.01) {
           return false;
         }

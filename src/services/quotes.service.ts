@@ -35,7 +35,8 @@ export class QuotesService {
         return cached.data;
       }
 
-      console.log(`Fetching live quote for ${symbol}`);
+      // Fetching live quote - using console.warn for consistency
+      console.warn(`Fetching live quote for ${symbol}`);
 
       // Try Alpha Vantage first if configured
       if (this.useAlphaVantage) {
@@ -151,7 +152,8 @@ export class QuotesService {
     }
 
     try {
-      console.log(`Fetching live quotes for ${uncachedSymbols.length} symbols`);
+      // Fetching live quotes - using console.warn for consistency
+      console.warn(`Fetching live quotes for ${uncachedSymbols.length} symbols`);
 
       // Fetch quotes for each symbol individually
       const quotePromises = uncachedSymbols.map(async (symbol) => {
@@ -202,7 +204,8 @@ export class QuotesService {
     query: string
   ): Promise<Array<{ symbol: string; name: string; exchange: string }>> {
     try {
-      console.log(`Searching symbols for: ${query}`);
+      // Searching symbols - using console.warn for consistency
+      console.warn(`Searching symbols for: ${query}`);
       const results = await this.yahooFinance.search(query);
 
       return results.map((item) => ({

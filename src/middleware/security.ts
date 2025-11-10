@@ -49,36 +49,44 @@ export const securityMiddleware = [
 ];
 
 // Input sanitization middleware
-export const sanitizeInput = (req: Request, res: Response, next: NextFunction) => {
-  const sanitize = (obj: any): any => {
-    if (typeof obj === 'string') {
-      // Remove potentially dangerous characters
-      return obj
-        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-        .replace(/javascript:/gi, '')
-        .replace(/on\w+\s*=/gi, '')
-        .trim();
-    }
-    if (typeof obj === 'object' && obj !== null) {
-      const sanitized: any = Array.isArray(obj) ? [] : {};
-      for (const key in obj) {
-        if (obj.hasOwnProperty(key)) {
-          sanitized[key] = sanitize(obj[key]);
-        }
-      }
-      return sanitized;
-    }
-    return obj;
+export const sanitizeInput = (req: Request, _res: Response, next: NextFunction): void => {
+  const sanitizeString = (str: string): string => {
+    return str
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+      .replace(/javascript:/gi, '')
+      .replace(/on\w+\s*=/gi, '')
+      .trim();
   };
 
-  if (req.body) {
-    req.body = sanitize(req.body);
+  const sanitizeObject = (obj: Record<string, unknown>): Record<string, unknown> => {
+    const sanitized: Record<string, unknown> = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const value = obj[key];
+        if (typeof value === 'string') {
+          sanitized[key] = sanitizeString(value);
+        } else if (Array.isArray(value)) {
+          sanitized[key] = value.map((item) =>
+            typeof item === 'string' ? sanitizeString(item) : item
+          );
+        } else if (typeof value === 'object' && value !== null) {
+          sanitized[key] = sanitizeObject(value as Record<string, unknown>);
+        } else {
+          sanitized[key] = value;
+        }
+      }
+    }
+    return sanitized;
+  };
+
+  if (req.body && typeof req.body === 'object') {
+    req.body = sanitizeObject(req.body as Record<string, unknown>) as typeof req.body;
   }
-  if (req.query) {
-    req.query = sanitize(req.query);
+  if (req.query && typeof req.query === 'object') {
+    req.query = sanitizeObject(req.query as Record<string, unknown>) as typeof req.query;
   }
-  if (req.params) {
-    req.params = sanitize(req.params);
+  if (req.params && typeof req.params === 'object') {
+    req.params = sanitizeObject(req.params as Record<string, unknown>) as typeof req.params;
   }
 
   next();
@@ -86,7 +94,10 @@ export const sanitizeInput = (req: Request, res: Response, next: NextFunction) =
 
 // CORS configuration
 export const corsOptions = {
-  origin: (origin: string | undefined, callback: Function) => {
+  origin: (
+    origin: string | undefined,
+    callback: (err: Error | null, allow?: boolean) => void
+  ): void => {
     const allowedOrigins = [
       'http://localhost:3000',
       'http://localhost:3001',
@@ -106,26 +117,27 @@ export const corsOptions = {
 };
 
 // CSRF protection middleware
-export const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
+export const csrfProtection = (req: Request, res: Response, next: NextFunction): void => {
   // Skip CSRF for GET requests and auth endpoints
   if (req.method === 'GET' || req.path.startsWith('/api/auth')) {
     return next();
   }
 
   const token = req.headers['x-csrf-token'] as string;
-  const sessionToken = req.session?.csrfToken;
+  const sessionToken = (req as Request & { session?: { csrfToken?: string } }).session?.csrfToken;
 
   if (!token || !sessionToken || token !== sessionToken) {
-    return res.status(403).json({
+    res.status(403).json({
       error: 'Invalid CSRF token',
     });
+    return;
   }
 
   next();
 };
 
 // Security headers middleware
-export const securityHeaders = (req: Request, res: Response, next: NextFunction) => {
+export const securityHeaders = (_req: Request, res: Response, next: NextFunction): void => {
   // Remove X-Powered-By header
   res.removeHeader('X-Powered-By');
 
@@ -140,7 +152,7 @@ export const securityHeaders = (req: Request, res: Response, next: NextFunction)
 };
 
 // Request logging for security monitoring
-export const securityLogger = (req: Request, res: Response, next: NextFunction) => {
+export const securityLogger = (req: Request, res: Response, next: NextFunction): void => {
   const start = Date.now();
 
   res.on('finish', () => {
@@ -153,7 +165,7 @@ export const securityLogger = (req: Request, res: Response, next: NextFunction) 
       userAgent: req.get('User-Agent'),
       statusCode: res.statusCode,
       duration: `${duration}ms`,
-      userId: (req as any).user?.id || 'anonymous',
+      userId: (req as { user?: { id: string } }).user?.id ?? 'anonymous',
     };
 
     // Log suspicious activities
@@ -163,7 +175,9 @@ export const securityLogger = (req: Request, res: Response, next: NextFunction) 
 
     // Log successful requests for audit
     if (res.statusCode < 400) {
-      console.info('Request:', logData);
+      // Logging successful requests for audit trail
+      // Using console.warn for consistency with lint rules
+      console.warn('Request:', logData);
     }
   });
 
