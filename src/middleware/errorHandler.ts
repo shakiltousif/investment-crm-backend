@@ -17,7 +17,7 @@ export const errorHandler = (
     const zodError = err as { issues: Array<{ message: string; path: Array<string | number> }> };
     const firstIssue = zodError.issues[0];
     const message = firstIssue ? firstIssue.message : 'Validation failed';
-    
+
     logger.error({
       message: 'Validation error',
       statusCode: 400,

@@ -234,7 +234,6 @@ describe('AuthService', () => {
       await expect(authService.login(loginData)).rejects.toThrow(AuthenticationError);
     });
 
-
     it('should throw AuthenticationError for locked account', async () => {
       const loginData = {
         email: 'test@example.com',
@@ -255,5 +254,4 @@ describe('AuthService', () => {
       await expect(authService.login(loginData)).rejects.toThrow(AuthenticationError);
     });
   });
-
 });

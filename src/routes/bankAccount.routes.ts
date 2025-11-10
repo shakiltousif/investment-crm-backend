@@ -58,52 +58,68 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response, next
 });
 
 // Set primary account
-router.post('/:id/set-primary', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const account = await bankAccountService.setPrimaryAccount(req.userId!, req.params.id);
-    res.status(200).json(account);
-  } catch (error) {
-    next(error);
+router.post(
+  '/:id/set-primary',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const account = await bankAccountService.setPrimaryAccount(req.userId!, req.params.id);
+      res.status(200).json(account);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Verify bank account
-router.post('/:id/verify', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const account = await bankAccountService.verifyBankAccount(req.userId!, req.params.id);
-    res.status(200).json(account);
-  } catch (error) {
-    next(error);
+router.post(
+  '/:id/verify',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const account = await bankAccountService.verifyBankAccount(req.userId!, req.params.id);
+      res.status(200).json(account);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Get account balance
-router.get('/:id/balance', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const balance = await bankAccountService.getAccountBalance(req.userId!, req.params.id);
-    res.status(200).json({
-      success: true,
-      data: balance,
-    });
-  } catch (error) {
-    next(error);
+router.get(
+  '/:id/balance',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const balance = await bankAccountService.getAccountBalance(req.userId!, req.params.id);
+      res.status(200).json({
+        success: true,
+        data: balance,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Get account transactions
-router.get('/:id/transactions', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const transactions = await bankAccountService.getAccountTransactions(
-      req.userId!,
-      req.params.id
-    );
-    res.status(200).json({
-      success: true,
-      data: transactions,
-    });
-  } catch (error) {
-    next(error);
+router.get(
+  '/:id/transactions',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const transactions = await bankAccountService.getAccountTransactions(
+        req.userId!,
+        req.params.id
+      );
+      res.status(200).json({
+        success: true,
+        data: transactions,
+      });
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 export default router;

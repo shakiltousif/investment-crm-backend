@@ -1,42 +1,42 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PortfolioService } from '../../services/portfolio.service';
-import { NotFoundError, ValidationError } from '../../middleware/errorHandler';
+import { NotFoundError } from '../../middleware/errorHandler';
 
 // Mock Prisma
 const { mockPrisma } = vi.hoisted(() => {
   return {
-      mockPrisma: {
-  portfolio: {
-    findMany: vi.fn(),
-    findUnique: vi.fn(),
-          findFirst: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    count: vi.fn(),
-  },
-  investment: {
-    findMany: vi.fn(),
-    aggregate: vi.fn(),
+    mockPrisma: {
+      portfolio: {
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
         count: vi.fn(),
-  },
-  $disconnect: vi.fn(),
-} as unknown as {
-  portfolio: {
-    findMany: ReturnType<typeof vi.fn>;
-    findUnique: ReturnType<typeof vi.fn>;
+      },
+      investment: {
+        findMany: vi.fn(),
+        aggregate: vi.fn(),
+        count: vi.fn(),
+      },
+      $disconnect: vi.fn(),
+    } as unknown as {
+      portfolio: {
+        findMany: ReturnType<typeof vi.fn>;
+        findUnique: ReturnType<typeof vi.fn>;
         findFirst: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    count: ReturnType<typeof vi.fn>;
-  };
-  investment: {
-    findMany: ReturnType<typeof vi.fn>;
-    aggregate: ReturnType<typeof vi.fn>;
+        create: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+        delete: ReturnType<typeof vi.fn>;
         count: ReturnType<typeof vi.fn>;
-  };
-  $disconnect: ReturnType<typeof vi.fn>;
+      };
+      investment: {
+        findMany: ReturnType<typeof vi.fn>;
+        aggregate: ReturnType<typeof vi.fn>;
+        count: ReturnType<typeof vi.fn>;
+      };
+      $disconnect: ReturnType<typeof vi.fn>;
     },
   };
 });
@@ -219,7 +219,11 @@ describe('PortfolioService', () => {
         updatedAt: new Date(),
       };
 
-      mockPrisma.portfolio.findFirst.mockResolvedValue({ id: portfolioId, userId, investments: [] });
+      mockPrisma.portfolio.findFirst.mockResolvedValue({
+        id: portfolioId,
+        userId,
+        investments: [],
+      });
       mockPrisma.portfolio.update.mockResolvedValue(updatedPortfolio);
 
       const result = await portfolioService.updatePortfolio(userId, portfolioId, updateData);
@@ -252,7 +256,11 @@ describe('PortfolioService', () => {
       const userId = 'user-1';
       const portfolioId = 'portfolio-1';
 
-      mockPrisma.portfolio.findFirst.mockResolvedValue({ id: portfolioId, userId, investments: [] });
+      mockPrisma.portfolio.findFirst.mockResolvedValue({
+        id: portfolioId,
+        userId,
+        investments: [],
+      });
       mockPrisma.portfolio.delete.mockResolvedValue({});
 
       await portfolioService.deletePortfolio(userId, portfolioId);

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../../index';
 import { Decimal } from '@prisma/client/runtime/library';
+import { Request, Response, NextFunction } from 'express';
 
 // Mock Prisma
 const { mockPrisma } = vi.hoisted(() => {
@@ -136,16 +137,17 @@ vi.mock('bcryptjs', () => {
 
 // Mock JWT functions and middleware
 vi.mock('../../middleware/auth', () => {
-  const authenticate = vi.fn((req: any, _res: any, next: any) => {
-    req.userId = 'user-1';
-    req.user = {
+  const authenticate = vi.fn((req: Request, _res: Response, next: NextFunction) => {
+    (req as { userId?: string; user?: { id: string; email: string; role: string } }).userId =
+      'user-1';
+    (req as { userId?: string; user?: { id: string; email: string; role: string } }).user = {
       id: 'user-1',
       email: 'test@example.com',
       role: 'CLIENT',
     };
     next();
   });
-  const requireAdmin = vi.fn((req: any, _res: any, next: any) => {
+  const requireAdmin = vi.fn((_req: Request, _res: Response, next: NextFunction) => {
     next();
   });
   return {

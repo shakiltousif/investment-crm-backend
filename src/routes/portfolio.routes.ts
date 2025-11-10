@@ -16,14 +16,18 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response, next: Next
 });
 
 // Get portfolio overview
-router.get('/overview', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const overview = await portfolioService.getPortfolioOverview(req.userId!);
-    res.status(200).json(overview);
-  } catch (error) {
-    next(error);
+router.get(
+  '/overview',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const overview = await portfolioService.getPortfolioOverview(req.userId!);
+      res.status(200).json(overview);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Create portfolio
 router.post('/', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -68,38 +72,53 @@ router.delete('/:id', authenticate, async (req: AuthRequest, res: Response, next
 });
 
 // Get portfolio allocation
-router.get('/:id/allocation', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const allocation = await portfolioService.getPortfolioAllocation(req.userId!, req.params.id);
-    res.status(200).json(allocation);
-  } catch (error) {
-    next(error);
+router.get(
+  '/:id/allocation',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const allocation = await portfolioService.getPortfolioAllocation(req.userId!, req.params.id);
+      res.status(200).json(allocation);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Get portfolio performance
-router.get('/:id/performance', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const performance = await portfolioService.getPortfolioPerformance(req.userId!, req.params.id);
-    res.status(200).json(performance);
-  } catch (error) {
-    next(error);
+router.get(
+  '/:id/performance',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const performance = await portfolioService.getPortfolioPerformance(
+        req.userId!,
+        req.params.id
+      );
+      res.status(200).json(performance);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 // Rebalance portfolio
-router.post('/:id/rebalance', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const { targetAllocation } = req.body;
-    const plan = await portfolioService.rebalancePortfolio(
-      req.userId!,
-      req.params.id,
-      targetAllocation
-    );
-    res.status(200).json(plan);
-  } catch (error) {
-    next(error);
+router.post(
+  '/:id/rebalance',
+  authenticate,
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { targetAllocation } = req.body;
+      const plan = await portfolioService.rebalancePortfolio(
+        req.userId!,
+        req.params.id,
+        targetAllocation
+      );
+      res.status(200).json(plan);
+    } catch (error) {
+      next(error);
+    }
   }
-});
+);
 
 export default router;

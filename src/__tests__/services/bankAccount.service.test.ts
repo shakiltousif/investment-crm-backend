@@ -6,35 +6,35 @@ import { NotFoundError, ValidationError } from '../../middleware/errorHandler';
 const { mockPrisma } = vi.hoisted(() => {
   return {
     mockPrisma: {
-  bankAccount: {
-    findMany: vi.fn(),
-    findUnique: vi.fn(),
+      bankAccount: {
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
         findFirst: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
         updateMany: vi.fn(),
-    delete: vi.fn(),
-    count: vi.fn(),
-  },
-  transaction: {
-    findMany: vi.fn(),
-  },
-  $disconnect: vi.fn(),
-} as unknown as {
-  bankAccount: {
-    findMany: ReturnType<typeof vi.fn>;
-    findUnique: ReturnType<typeof vi.fn>;
+        delete: vi.fn(),
+        count: vi.fn(),
+      },
+      transaction: {
+        findMany: vi.fn(),
+      },
+      $disconnect: vi.fn(),
+    } as unknown as {
+      bankAccount: {
+        findMany: ReturnType<typeof vi.fn>;
+        findUnique: ReturnType<typeof vi.fn>;
         findFirst: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
+        create: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
         updateMany: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    count: ReturnType<typeof vi.fn>;
-  };
-  transaction: {
-    findMany: ReturnType<typeof vi.fn>;
-  };
-  $disconnect: ReturnType<typeof vi.fn>;
+        delete: ReturnType<typeof vi.fn>;
+        count: ReturnType<typeof vi.fn>;
+      };
+      transaction: {
+        findMany: ReturnType<typeof vi.fn>;
+      };
+      $disconnect: ReturnType<typeof vi.fn>;
     },
   };
 });

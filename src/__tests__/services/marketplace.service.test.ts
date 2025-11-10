@@ -6,71 +6,71 @@ import { Decimal } from '@prisma/client/runtime/library';
 // Mock Prisma
 const { mockPrisma } = vi.hoisted(() => {
   return {
-      mockPrisma: {
-        marketplaceItem: {
-          findMany: vi.fn(),
-          findUnique: vi.fn(),
-          create: vi.fn(),
-          update: vi.fn(),
-          delete: vi.fn(),
-        },
-  investment: {
-    findMany: vi.fn(),
-    findUnique: vi.fn(),
-          findFirst: vi.fn(),
-          create: vi.fn(),
-          update: vi.fn(),
-    count: vi.fn(),
-  },
-  portfolio: {
-    findUnique: vi.fn(),
-    findFirst: vi.fn(),
-    update: vi.fn(),
-  },
-  bankAccount: {
-    findFirst: vi.fn(),
-  },
-  transaction: {
-    create: vi.fn(),
-    findUnique: vi.fn(),
-  },
-  $disconnect: vi.fn(),
-} as unknown as {
-        marketplaceItem: {
-          findMany: ReturnType<typeof vi.fn>;
-          findUnique: ReturnType<typeof vi.fn>;
-          create: ReturnType<typeof vi.fn>;
-          update: ReturnType<typeof vi.fn>;
-          delete: ReturnType<typeof vi.fn>;
-        };
-  investment: {
-    findMany: ReturnType<typeof vi.fn>;
-    findUnique: ReturnType<typeof vi.fn>;
-          findFirst: ReturnType<typeof vi.fn>;
-          create: ReturnType<typeof vi.fn>;
-          update: ReturnType<typeof vi.fn>;
-    count: ReturnType<typeof vi.fn>;
-  };
-  portfolio: {
-    findUnique: ReturnType<typeof vi.fn>;
-    findFirst: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-  };
-  bankAccount: {
-    findFirst: ReturnType<typeof vi.fn>;
-  };
-  transaction: {
-    create: ReturnType<typeof vi.fn>;
-    findUnique: ReturnType<typeof vi.fn>;
-  };
-  $disconnect: ReturnType<typeof vi.fn>;
+    mockPrisma: {
+      marketplaceItem: {
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
       },
-};
+      investment: {
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        count: vi.fn(),
+      },
+      portfolio: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+      bankAccount: {
+        findFirst: vi.fn(),
+      },
+      transaction: {
+        create: vi.fn(),
+        findUnique: vi.fn(),
+      },
+      $disconnect: vi.fn(),
+    } as unknown as {
+      marketplaceItem: {
+        findMany: ReturnType<typeof vi.fn>;
+        findUnique: ReturnType<typeof vi.fn>;
+        create: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+        delete: ReturnType<typeof vi.fn>;
+      };
+      investment: {
+        findMany: ReturnType<typeof vi.fn>;
+        findUnique: ReturnType<typeof vi.fn>;
+        findFirst: ReturnType<typeof vi.fn>;
+        create: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+        count: ReturnType<typeof vi.fn>;
+      };
+      portfolio: {
+        findUnique: ReturnType<typeof vi.fn>;
+        findFirst: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+      };
+      bankAccount: {
+        findFirst: ReturnType<typeof vi.fn>;
+      };
+      transaction: {
+        create: ReturnType<typeof vi.fn>;
+        findUnique: ReturnType<typeof vi.fn>;
+      };
+      $disconnect: ReturnType<typeof vi.fn>;
+    },
+  };
 });
 
 vi.mock('../../lib/prisma', () => {
   return {
-  prisma: mockPrisma,
+    prisma: mockPrisma,
   };
 });
 
@@ -172,7 +172,7 @@ describe('MarketplaceService', () => {
       });
 
       expect(result.quantity).toBe(10);
-      expect(result.unitPrice).toEqual(100.00);
+      expect(result.unitPrice).toEqual(100.0);
       // Fee should be 1% of total cost (1000 * 0.01 = 10)
       expect(result.estimatedFee).toEqual(new Decimal('10.00'));
       expect(result.totalCost).toEqual(new Decimal('1000.00'));
