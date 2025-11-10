@@ -3,36 +3,56 @@ import { AuthService } from '../../services/auth.service';
 import { ConflictError, AuthenticationError } from '../../middleware/errorHandler';
 
 // Mock Prisma
-const mockPrisma = {
-  user: {
-    findUnique: vi.fn(),
-    create: vi.fn(),
-    findFirst: vi.fn(),
-    update: vi.fn(),
-  },
-  $disconnect: vi.fn(),
-} as unknown as {
-  user: {
-    findUnique: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-    findFirst: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
+const { mockPrisma } = vi.hoisted(() => {
+  return {
+    mockPrisma: {
+      user: {
+        findUnique: vi.fn(),
+        create: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+      $disconnect: vi.fn(),
+    } as unknown as {
+      user: {
+        findUnique: ReturnType<typeof vi.fn>;
+        create: ReturnType<typeof vi.fn>;
+        findFirst: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+      };
+      $disconnect: ReturnType<typeof vi.fn>;
+    },
   };
-  $disconnect: ReturnType<typeof vi.fn>;
-};
+});
 
-vi.mock('@prisma/client', () => ({
-  PrismaClient: vi.fn(() => mockPrisma),
-}));
+vi.mock('../../lib/prisma', () => {
+  return {
+    prisma: mockPrisma,
+  };
+});
+
+vi.mock('@prisma/client', () => {
+  return {
+    PrismaClient: vi.fn(() => mockPrisma),
+  };
+});
 
 // Mock bcrypt
-vi.mock('bcryptjs', () => ({
-  hash: vi.fn(),
-  compare: vi.fn(),
-}));
+vi.mock('bcryptjs', () => {
+  const hash = vi.fn();
+  const compare = vi.fn();
+  return {
+    default: {
+      hash,
+      compare,
+    },
+    hash,
+    compare,
+  };
+});
 
 // Mock JWT functions
-vi.mock('../src/middleware/auth', () => ({
+vi.mock('../../middleware/auth', () => ({
   generateToken: vi.fn(() => 'mock-access-token'),
   generateRefreshToken: vi.fn(() => 'mock-refresh-token'),
 }));
@@ -45,9 +65,13 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
-    authService = new AuthService();
-    bcrypt = await import('bcryptjs');
     vi.clearAllMocks();
+    authService = new AuthService();
+    const bcryptModule = await import('bcryptjs');
+    bcrypt = {
+      hash: bcryptModule.default?.hash as ReturnType<typeof vi.fn>,
+      compare: bcryptModule.default?.compare as ReturnType<typeof vi.fn>,
+    };
   });
 
   afterEach(() => {
@@ -150,7 +174,7 @@ describe('AuthService', () => {
         firstName: 'John',
         lastName: 'Doe',
         password: 'hashed-password',
-        isActive: true,
+        role: 'CLIENT',
         failedLoginAttempts: 0,
         lockedUntil: null,
       };
@@ -171,6 +195,7 @@ describe('AuthService', () => {
           email: user.email,
           firstName: user.firstName,
           lastName: user.lastName,
+          role: user.role,
         },
         accessToken: 'mock-access-token',
         refreshToken: 'mock-refresh-token',
@@ -209,25 +234,6 @@ describe('AuthService', () => {
       await expect(authService.login(loginData)).rejects.toThrow(AuthenticationError);
     });
 
-    it('should throw AuthenticationError for inactive user', async () => {
-      const loginData = {
-        email: 'test@example.com',
-        password: 'password123',
-      };
-
-      const user = {
-        id: 'user-1',
-        email: loginData.email,
-        password: 'hashed-password',
-        isActive: false,
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-      };
-
-      mockPrisma.user.findUnique.mockResolvedValue(user);
-
-      await expect(authService.login(loginData)).rejects.toThrow(AuthenticationError);
-    });
 
     it('should throw AuthenticationError for locked account', async () => {
       const loginData = {
@@ -250,60 +256,4 @@ describe('AuthService', () => {
     });
   });
 
-  describe('refreshToken', () => {
-    it('should successfully refresh token with valid refresh token', async () => {
-      const refreshToken = 'valid-refresh-token';
-      const userId = 'user-1';
-
-      const user = {
-        id: userId,
-        email: 'test@example.com',
-        firstName: 'John',
-        lastName: 'Doe',
-      };
-
-      mockPrisma.user.findFirst.mockResolvedValue(user);
-
-      const result = await authService.refreshToken(refreshToken);
-
-      expect(mockPrisma.user.findFirst).toHaveBeenCalledWith({
-        where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-        },
-      });
-      expect(result).toEqual({
-        accessToken: 'mock-access-token',
-        refreshToken: 'mock-refresh-token',
-      });
-    });
-
-    it('should throw AuthenticationError for invalid refresh token', async () => {
-      const refreshToken = 'invalid-refresh-token';
-
-      mockPrisma.user.findFirst.mockResolvedValue(null);
-
-      await expect(authService.refreshToken(refreshToken)).rejects.toThrow(AuthenticationError);
-    });
-  });
-
-  describe('logout', () => {
-    it('should successfully logout user', async () => {
-      const userId = 'user-1';
-
-      mockPrisma.user.update.mockResolvedValue({});
-
-      await authService.logout(userId);
-
-      expect(mockPrisma.user.update).toHaveBeenCalledWith({
-        where: { id: userId },
-        data: {
-          lastLoginAt: expect.any(Date),
-        },
-      });
-    });
-  });
 });

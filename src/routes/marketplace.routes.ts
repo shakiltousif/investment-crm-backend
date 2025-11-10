@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { marketplaceService } from '../services/marketplace.service';
 import { z } from 'zod';
@@ -111,13 +111,13 @@ router.post('/buy/preview', authenticate, async (req: AuthRequest, res: Response
  * POST /api/marketplace/buy
  * Execute buy transaction
  */
-router.post('/buy', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/buy', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const data = buyInvestmentSchema.parse(req.body);
     const result = await marketplaceService.buyInvestment(req.userId!, data);
     res.status(201).json(result);
   } catch (error) {
-    throw error;
+    next(error);
   }
 });
 
@@ -139,13 +139,13 @@ router.post('/sell/preview', authenticate, async (req: AuthRequest, res: Respons
  * POST /api/marketplace/sell
  * Execute sell transaction
  */
-router.post('/sell', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/sell', authenticate, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const data = sellInvestmentSchema.parse(req.body);
     const result = await marketplaceService.sellInvestment(req.userId!, data);
     res.status(201).json(result);
   } catch (error) {
-    throw error;
+    next(error);
   }
 });
 

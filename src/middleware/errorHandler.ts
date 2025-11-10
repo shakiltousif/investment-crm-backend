@@ -7,19 +7,41 @@ export interface ApiError extends Error {
 }
 
 export const errorHandler = (
-  err: ApiError,
+  err: ApiError | Error,
   _req: Request,
   res: Response,
   _next: NextFunction
 ): void => {
-  const statusCode = err.statusCode ?? 500;
+  // Handle ZodError
+  if (err && typeof err === 'object' && 'issues' in err) {
+    const zodError = err as { issues: Array<{ message: string; path: Array<string | number> }> };
+    const firstIssue = zodError.issues[0];
+    const message = firstIssue ? firstIssue.message : 'Validation failed';
+    
+    logger.error({
+      message: 'Validation error',
+      statusCode: 400,
+      details: zodError.issues,
+    });
+
+    res.status(400).json({
+      error: {
+        message,
+        statusCode: 400,
+        ...(process.env.NODE_ENV === 'development' && { details: zodError.issues }),
+      },
+    });
+    return;
+  }
+
+  const statusCode = (err as ApiError).statusCode ?? 500;
   const message = err.message ?? 'Internal Server Error';
 
   logger.error({
     message,
     statusCode,
     stack: err.stack,
-    details: err.details,
+    details: (err as ApiError).details,
   });
 
   res.status(statusCode).json({

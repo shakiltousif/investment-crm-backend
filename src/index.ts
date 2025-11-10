@@ -115,11 +115,13 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start server
+// Start server (skip in test environment)
+if (NODE_ENV !== 'test' && !process.env.VITEST) {
 httpServer.listen(PORT, () => {
   logger.info(`Server running on port ${PORT} in ${NODE_ENV} mode`);
   logger.info(`API URL: ${process.env.API_URL ?? `http://localhost:${PORT}`}`);
 });
+}
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

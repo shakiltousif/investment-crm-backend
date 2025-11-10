@@ -3,59 +3,69 @@ import { InvestmentService } from '../../services/investment.service';
 import {
   NotFoundError,
   ValidationError,
-  InsufficientFundsError,
 } from '../../middleware/errorHandler';
+import { Decimal } from '@prisma/client/runtime/library';
 
 // Mock Prisma
-const mockPrisma = {
-  investment: {
-    findMany: vi.fn(),
-    findUnique: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-    count: vi.fn(),
-    aggregate: vi.fn(),
-  },
-  portfolio: {
-    findUnique: vi.fn(),
-    update: vi.fn(),
-  },
-  bankAccount: {
-    findUnique: vi.fn(),
-    update: vi.fn(),
-  },
-  transaction: {
-    create: vi.fn(),
-  },
-  $disconnect: vi.fn(),
-} as unknown as {
-  investment: {
-    findMany: ReturnType<typeof vi.fn>;
-    findUnique: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-    delete: ReturnType<typeof vi.fn>;
-    count: ReturnType<typeof vi.fn>;
-    aggregate: ReturnType<typeof vi.fn>;
+const { mockPrisma } = vi.hoisted(() => {
+  return {
+    mockPrisma: {
+      investment: {
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        count: vi.fn(),
+        aggregate: vi.fn(),
+      },
+      portfolio: {
+        findUnique: vi.fn(),
+        findFirst: vi.fn(),
+        update: vi.fn(),
+      },
+      bankAccount: {
+        findUnique: vi.fn(),
+        update: vi.fn(),
+      },
+      transaction: {
+        create: vi.fn(),
+      },
+      $disconnect: vi.fn(),
+    } as unknown as {
+      investment: {
+        findMany: ReturnType<typeof vi.fn>;
+        findUnique: ReturnType<typeof vi.fn>;
+        findFirst: ReturnType<typeof vi.fn>;
+        create: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+        delete: ReturnType<typeof vi.fn>;
+        count: ReturnType<typeof vi.fn>;
+        aggregate: ReturnType<typeof vi.fn>;
+      };
+      portfolio: {
+        findUnique: ReturnType<typeof vi.fn>;
+        findFirst: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+      };
+      bankAccount: {
+        findUnique: ReturnType<typeof vi.fn>;
+        update: ReturnType<typeof vi.fn>;
+      };
+      transaction: {
+        create: ReturnType<typeof vi.fn>;
+      };
+      $disconnect: ReturnType<typeof vi.fn>;
+    },
   };
-  portfolio: {
-    findUnique: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-  };
-  bankAccount: {
-    findUnique: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-  };
-  transaction: {
-    create: ReturnType<typeof vi.fn>;
-  };
-  $disconnect: ReturnType<typeof vi.fn>;
-};
+});
 
-vi.mock('@prisma/client', () => ({
-  PrismaClient: vi.fn(() => mockPrisma),
-}));
+vi.mock('../../lib/prisma', () => {
+  return {
+    prisma: mockPrisma,
+  };
+});
 
 describe('InvestmentService', () => {
   let investmentService: InvestmentService;
@@ -69,17 +79,9 @@ describe('InvestmentService', () => {
     vi.clearAllMocks();
   });
 
-  describe('getAll', () => {
-    it('should return all investments for a user with filters', async () => {
+  describe('getInvestments', () => {
+    it('should return all investments for a user', async () => {
       const userId = 'user-1';
-      const filters = {
-        portfolioId: 'portfolio-1',
-        type: 'STOCK',
-        search: 'Apple',
-        limit: 10,
-        offset: 0,
-      };
-
       const investments = [
         {
           id: 'investment-1',
@@ -88,13 +90,13 @@ describe('InvestmentService', () => {
           name: 'Apple Inc.',
           symbol: 'AAPL',
           type: 'STOCK',
-          quantity: 10,
-          purchasePrice: 150,
-          currentPrice: 160,
-          totalValue: 1600,
-          totalInvested: 1500,
-          totalGain: 100,
-          gainPercentage: 6.67,
+          quantity: new Decimal(10),
+          purchasePrice: new Decimal(150),
+          currentPrice: new Decimal(160),
+          totalValue: new Decimal(1600),
+          totalInvested: new Decimal(1500),
+          totalGain: new Decimal(100),
+          gainPercentage: new Decimal(6.67),
           purchaseDate: new Date(),
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -102,57 +104,63 @@ describe('InvestmentService', () => {
       ];
 
       mockPrisma.investment.findMany.mockResolvedValue(investments);
-      mockPrisma.investment.count.mockResolvedValue(1);
 
-      const result = await investmentService.getAll(userId, filters);
+      const result = await investmentService.getInvestments(userId);
 
       expect(mockPrisma.investment.findMany).toHaveBeenCalledWith({
-        where: {
-          userId,
-          portfolioId: filters.portfolioId,
-          type: filters.type,
-          OR: [
-            { name: { contains: filters.search, mode: 'insensitive' } },
-            { symbol: { contains: filters.search, mode: 'insensitive' } },
-          ],
-        },
+        where: { userId },
         orderBy: { createdAt: 'desc' },
-        take: filters.limit,
-        skip: filters.offset,
       });
-      expect(result).toEqual({
-        data: investments,
-        pagination: {
-          total: 1,
-          pages: 1,
-          currentPage: 1,
-          limit: filters.limit,
+      expect(result).toEqual(investments);
+    });
+
+    it('should return investments filtered by portfolio', async () => {
+      const userId = 'user-1';
+      const portfolioId = 'portfolio-1';
+      const investments = [
+        {
+          id: 'investment-1',
+          userId,
+          portfolioId,
+          name: 'Apple Inc.',
+          symbol: 'AAPL',
+          type: 'STOCK',
+          quantity: new Decimal(10),
+          purchasePrice: new Decimal(150),
+          currentPrice: new Decimal(160),
+          totalValue: new Decimal(1600),
+          totalInvested: new Decimal(1500),
+          totalGain: new Decimal(100),
+          gainPercentage: new Decimal(6.67),
+          purchaseDate: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
         },
+      ];
+
+      mockPrisma.investment.findMany.mockResolvedValue(investments);
+
+      const result = await investmentService.getInvestments(userId, portfolioId);
+
+      expect(mockPrisma.investment.findMany).toHaveBeenCalledWith({
+        where: { userId, portfolioId },
+        orderBy: { createdAt: 'desc' },
       });
+      expect(result).toEqual(investments);
     });
 
     it('should handle empty investment list', async () => {
       const userId = 'user-1';
-      const filters = {};
 
       mockPrisma.investment.findMany.mockResolvedValue([]);
-      mockPrisma.investment.count.mockResolvedValue(0);
 
-      const result = await investmentService.getAll(userId, filters);
+      const result = await investmentService.getInvestments(userId);
 
-      expect(result).toEqual({
-        data: [],
-        pagination: {
-          total: 0,
-          pages: 0,
-          currentPage: 1,
-          limit: 20,
-        },
-      });
+      expect(result).toEqual([]);
     });
   });
 
-  describe('getById', () => {
+  describe('getInvestmentById', () => {
     it('should return an investment by ID', async () => {
       const userId = 'user-1';
       const investmentId = 'investment-1';
@@ -163,23 +171,26 @@ describe('InvestmentService', () => {
         name: 'Apple Inc.',
         symbol: 'AAPL',
         type: 'STOCK',
-        quantity: 10,
-        purchasePrice: 150,
-        currentPrice: 160,
-        totalValue: 1600,
-        totalInvested: 1500,
-        totalGain: 100,
-        gainPercentage: 6.67,
+        quantity: new Decimal(10),
+        purchasePrice: new Decimal(150),
+        currentPrice: new Decimal(160),
+        totalValue: new Decimal(1600),
+        totalInvested: new Decimal(1500),
+        totalGain: new Decimal(100),
+        gainPercentage: new Decimal(6.67),
         purchaseDate: new Date(),
+        maturityDate: null,
+        interestRate: null,
+        status: 'ACTIVE',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      mockPrisma.investment.findUnique.mockResolvedValue(investment);
+      mockPrisma.investment.findFirst.mockResolvedValue(investment);
 
-      const result = await investmentService.getById(userId, investmentId);
+      const result = await investmentService.getInvestmentById(userId, investmentId);
 
-      expect(mockPrisma.investment.findUnique).toHaveBeenCalledWith({
+      expect(mockPrisma.investment.findFirst).toHaveBeenCalledWith({
         where: { id: investmentId, userId },
       });
       expect(result).toEqual(investment);
@@ -189,318 +200,205 @@ describe('InvestmentService', () => {
       const userId = 'user-1';
       const investmentId = 'non-existent';
 
-      mockPrisma.investment.findUnique.mockResolvedValue(null);
+      mockPrisma.investment.findFirst.mockResolvedValue(null);
 
-      await expect(investmentService.getById(userId, investmentId)).rejects.toThrow(NotFoundError);
+      await expect(investmentService.getInvestmentById(userId, investmentId)).rejects.toThrow(
+        NotFoundError
+      );
     });
   });
 
-  describe('buy', () => {
-    it('should successfully buy an investment', async () => {
+  describe('createInvestment', () => {
+    it('should successfully create an investment', async () => {
       const userId = 'user-1';
-      const buyData = {
-        investmentId: 'investment-1',
+      const investmentData = {
         portfolioId: 'portfolio-1',
+        type: 'STOCK' as const,
+        name: 'Apple Inc.',
+        symbol: 'AAPL',
         quantity: 10,
         purchasePrice: 150,
-        bankAccountId: 'account-1',
+        currentPrice: 150,
+        purchaseDate: new Date().toISOString(),
       };
 
       const portfolio = {
         id: 'portfolio-1',
         userId,
-        totalValue: 1000,
-        totalInvested: 800,
-      };
-
-      const bankAccount = {
-        id: 'account-1',
-        userId,
-        balance: 2000,
-        isVerified: true,
-      };
-
-      const investment = {
-        id: 'investment-1',
-        name: 'Apple Inc.',
-        symbol: 'AAPL',
-        type: 'STOCK',
       };
 
       const createdInvestment = {
         id: 'investment-1',
         userId,
         portfolioId: 'portfolio-1',
-        investmentId: 'investment-1',
-        quantity: 10,
-        purchasePrice: 150,
-        currentPrice: 150,
-        totalValue: 1500,
-        totalInvested: 1500,
-        totalGain: 0,
-        gainPercentage: 0,
+        type: 'STOCK',
+        name: 'Apple Inc.',
+        symbol: 'AAPL',
+        quantity: new Decimal(10),
+        purchasePrice: new Decimal(150),
+        currentPrice: new Decimal(150),
+        totalValue: new Decimal(1500),
+        totalInvested: new Decimal(1500),
+        totalGain: new Decimal(0),
+        gainPercentage: new Decimal(0),
         purchaseDate: new Date(),
+        maturityDate: null,
+        interestRate: null,
+        status: 'ACTIVE',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      mockPrisma.portfolio.findUnique.mockResolvedValue(portfolio);
-      mockPrisma.bankAccount.findUnique.mockResolvedValue(bankAccount);
-      mockPrisma.investment.findUnique.mockResolvedValue(investment);
+      mockPrisma.portfolio.findFirst.mockResolvedValue(portfolio);
       mockPrisma.investment.create.mockResolvedValue(createdInvestment);
-      mockPrisma.transaction.create.mockResolvedValue({});
       mockPrisma.portfolio.update.mockResolvedValue({});
-      mockPrisma.bankAccount.update.mockResolvedValue({});
 
-      const result = await investmentService.buy(userId, buyData);
+      const result = await investmentService.createInvestment(userId, investmentData);
 
-      expect(mockPrisma.portfolio.findUnique).toHaveBeenCalledWith({
-        where: { id: buyData.portfolioId, userId },
-      });
-      expect(mockPrisma.bankAccount.findUnique).toHaveBeenCalledWith({
-        where: { id: buyData.bankAccountId, userId },
+      expect(mockPrisma.portfolio.findFirst).toHaveBeenCalledWith({
+        where: { id: investmentData.portfolioId, userId },
       });
       expect(result).toEqual(createdInvestment);
     });
 
     it('should throw NotFoundError for non-existent portfolio', async () => {
       const userId = 'user-1';
-      const buyData = {
-        investmentId: 'investment-1',
+      const investmentData = {
         portfolioId: 'non-existent',
+        type: 'STOCK' as const,
+        name: 'Apple Inc.',
+        symbol: 'AAPL',
         quantity: 10,
         purchasePrice: 150,
-        bankAccountId: 'account-1',
+        currentPrice: 150,
+        purchaseDate: new Date().toISOString(),
       };
 
-      mockPrisma.portfolio.findUnique.mockResolvedValue(null);
+      mockPrisma.portfolio.findFirst.mockResolvedValue(null);
 
-      await expect(investmentService.buy(userId, buyData)).rejects.toThrow(NotFoundError);
-    });
-
-    it('should throw NotFoundError for non-existent bank account', async () => {
-      const userId = 'user-1';
-      const buyData = {
-        investmentId: 'investment-1',
-        portfolioId: 'portfolio-1',
-        quantity: 10,
-        purchasePrice: 150,
-        bankAccountId: 'non-existent',
-      };
-
-      const portfolio = {
-        id: 'portfolio-1',
-        userId,
-        totalValue: 1000,
-        totalInvested: 800,
-      };
-
-      mockPrisma.portfolio.findUnique.mockResolvedValue(portfolio);
-      mockPrisma.bankAccount.findUnique.mockResolvedValue(null);
-
-      await expect(investmentService.buy(userId, buyData)).rejects.toThrow(NotFoundError);
-    });
-
-    it('should throw InsufficientFundsError for insufficient balance', async () => {
-      const userId = 'user-1';
-      const buyData = {
-        investmentId: 'investment-1',
-        portfolioId: 'portfolio-1',
-        quantity: 10,
-        purchasePrice: 150,
-        bankAccountId: 'account-1',
-      };
-
-      const portfolio = {
-        id: 'portfolio-1',
-        userId,
-        totalValue: 1000,
-        totalInvested: 800,
-      };
-
-      const bankAccount = {
-        id: 'account-1',
-        userId,
-        balance: 100, // Insufficient balance
-        isVerified: true,
-      };
-
-      mockPrisma.portfolio.findUnique.mockResolvedValue(portfolio);
-      mockPrisma.bankAccount.findUnique.mockResolvedValue(bankAccount);
-
-      await expect(investmentService.buy(userId, buyData)).rejects.toThrow(InsufficientFundsError);
-    });
-
-    it('should throw ValidationError for unverified bank account', async () => {
-      const userId = 'user-1';
-      const buyData = {
-        investmentId: 'investment-1',
-        portfolioId: 'portfolio-1',
-        quantity: 10,
-        purchasePrice: 150,
-        bankAccountId: 'account-1',
-      };
-
-      const portfolio = {
-        id: 'portfolio-1',
-        userId,
-        totalValue: 1000,
-        totalInvested: 800,
-      };
-
-      const bankAccount = {
-        id: 'account-1',
-        userId,
-        balance: 2000,
-        isVerified: false, // Unverified account
-      };
-
-      mockPrisma.portfolio.findUnique.mockResolvedValue(portfolio);
-      mockPrisma.bankAccount.findUnique.mockResolvedValue(bankAccount);
-
-      await expect(investmentService.buy(userId, buyData)).rejects.toThrow(ValidationError);
+      await expect(investmentService.createInvestment(userId, investmentData)).rejects.toThrow(
+        NotFoundError
+      );
     });
   });
 
-  describe('sell', () => {
-    it('should successfully sell an investment', async () => {
+  describe('updateInvestment', () => {
+    it('should successfully update an investment', async () => {
       const userId = 'user-1';
-      const sellData = {
-        investmentId: 'investment-1',
-        quantity: 5,
-        sellPrice: 160,
-        bankAccountId: 'account-1',
+      const investmentId = 'investment-1';
+      const updateData = {
+        currentPrice: 170,
       };
 
-      const investment = {
-        id: 'investment-1',
+      const existingInvestment = {
+        id: investmentId,
         userId,
         portfolioId: 'portfolio-1',
-        quantity: 10,
-        purchasePrice: 150,
-        currentPrice: 160,
-        totalValue: 1600,
-        totalInvested: 1500,
-      };
-
-      const bankAccount = {
-        id: 'account-1',
-        userId,
-        balance: 1000,
-        isVerified: true,
+        quantity: new Decimal(10),
+        purchasePrice: new Decimal(150),
+        currentPrice: new Decimal(160),
+        totalValue: new Decimal(1600),
+        totalInvested: new Decimal(1500),
+        totalGain: new Decimal(100),
+        gainPercentage: new Decimal(6.67),
+        purchaseDate: new Date(),
+        maturityDate: null,
+        interestRate: null,
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
       const updatedInvestment = {
-        ...investment,
-        quantity: 5,
-        totalValue: 800,
-        totalInvested: 750,
-        totalGain: 50,
-        gainPercentage: 6.67,
+        ...existingInvestment,
+        currentPrice: new Decimal(170),
+        totalValue: new Decimal(1700),
+        totalGain: new Decimal(200),
+        gainPercentage: new Decimal(13.33),
       };
 
-      mockPrisma.investment.findUnique.mockResolvedValue(investment);
-      mockPrisma.bankAccount.findUnique.mockResolvedValue(bankAccount);
+      mockPrisma.investment.findFirst.mockResolvedValue(existingInvestment);
       mockPrisma.investment.update.mockResolvedValue(updatedInvestment);
-      mockPrisma.transaction.create.mockResolvedValue({});
-      mockPrisma.bankAccount.update.mockResolvedValue({});
+      mockPrisma.portfolio.update.mockResolvedValue({});
 
-      const result = await investmentService.sell(userId, sellData);
+      const result = await investmentService.updateInvestment(userId, investmentId, updateData);
 
-      expect(mockPrisma.investment.findUnique).toHaveBeenCalledWith({
-        where: { id: sellData.investmentId, userId },
+      expect(mockPrisma.investment.findFirst).toHaveBeenCalledWith({
+        where: { id: investmentId, userId },
       });
       expect(result).toEqual(updatedInvestment);
     });
 
     it('should throw NotFoundError for non-existent investment', async () => {
       const userId = 'user-1';
-      const sellData = {
-        investmentId: 'non-existent',
-        quantity: 5,
-        sellPrice: 160,
-        bankAccountId: 'account-1',
+      const investmentId = 'non-existent';
+      const updateData = {
+        currentPrice: 170,
       };
 
-      mockPrisma.investment.findUnique.mockResolvedValue(null);
+      mockPrisma.investment.findFirst.mockResolvedValue(null);
 
-      await expect(investmentService.sell(userId, sellData)).rejects.toThrow(NotFoundError);
-    });
-
-    it('should throw ValidationError for insufficient quantity', async () => {
-      const userId = 'user-1';
-      const sellData = {
-        investmentId: 'investment-1',
-        quantity: 15, // More than available
-        sellPrice: 160,
-        bankAccountId: 'account-1',
-      };
-
-      const investment = {
-        id: 'investment-1',
-        userId,
-        portfolioId: 'portfolio-1',
-        quantity: 10, // Only 10 available
-        purchasePrice: 150,
-        currentPrice: 160,
-        totalValue: 1600,
-        totalInvested: 1500,
-      };
-
-      mockPrisma.investment.findUnique.mockResolvedValue(investment);
-
-      await expect(investmentService.sell(userId, sellData)).rejects.toThrow(ValidationError);
+      await expect(
+        investmentService.updateInvestment(userId, investmentId, updateData)
+      ).rejects.toThrow(NotFoundError);
     });
   });
 
-  describe('updatePrice', () => {
-    it('should update investment prices', async () => {
+  describe('updateInvestmentPrice', () => {
+    it('should update investment price', async () => {
       const userId = 'user-1';
-      const priceUpdates = [
-        { investmentId: 'investment-1', currentPrice: 160 },
-        { investmentId: 'investment-2', currentPrice: 200 },
-      ];
+      const investmentId = 'investment-1';
+      const newPrice = new Decimal(170);
 
-      const investments = [
-        {
-          id: 'investment-1',
-          userId,
-          quantity: 10,
-          purchasePrice: 150,
-          currentPrice: 160,
-          totalValue: 1600,
-          totalInvested: 1500,
-          totalGain: 100,
-          gainPercentage: 6.67,
-        },
-        {
-          id: 'investment-2',
-          userId,
-          quantity: 5,
-          purchasePrice: 180,
-          currentPrice: 200,
-          totalValue: 1000,
-          totalInvested: 900,
-          totalGain: 100,
-          gainPercentage: 11.11,
-        },
-      ];
+      const existingInvestment = {
+        id: investmentId,
+        userId,
+        portfolioId: 'portfolio-1',
+        quantity: new Decimal(10),
+        purchasePrice: new Decimal(150),
+        currentPrice: new Decimal(160),
+        totalValue: new Decimal(1600),
+        totalInvested: new Decimal(1500),
+        totalGain: new Decimal(100),
+        gainPercentage: new Decimal(6.67),
+        purchaseDate: new Date(),
+        maturityDate: null,
+        interestRate: null,
+        status: 'ACTIVE',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
 
-      mockPrisma.investment.findMany.mockResolvedValue(investments);
-      mockPrisma.investment.update.mockResolvedValue({});
+      const updatedInvestment = {
+        ...existingInvestment,
+        currentPrice: newPrice,
+        totalValue: new Decimal(1700),
+        totalGain: new Decimal(200),
+        gainPercentage: new Decimal(13.33),
+      };
 
-      const result = await investmentService.updatePrice(userId, priceUpdates);
+      mockPrisma.investment.findFirst.mockResolvedValue(existingInvestment);
+      mockPrisma.investment.update.mockResolvedValue(updatedInvestment);
+      mockPrisma.portfolio.update.mockResolvedValue({});
 
-      expect(mockPrisma.investment.findMany).toHaveBeenCalledWith({
-        where: { userId },
+      const result = await investmentService.updateInvestmentPrice(userId, investmentId, newPrice);
+
+      expect(mockPrisma.investment.findFirst).toHaveBeenCalledWith({
+        where: { id: investmentId, userId },
       });
-      expect(result).toEqual({
-        updated: 2,
-        totalValue: 2600,
-        totalInvested: 2400,
-        totalGain: 200,
-        averageGainPercentage: 8.89,
-      });
+      expect(result).toEqual(updatedInvestment);
+    });
+
+    it('should throw NotFoundError for non-existent investment', async () => {
+      const userId = 'user-1';
+      const investmentId = 'non-existent';
+      const newPrice = new Decimal(170);
+
+      mockPrisma.investment.findFirst.mockResolvedValue(null);
+
+      await expect(
+        investmentService.updateInvestmentPrice(userId, investmentId, newPrice)
+      ).rejects.toThrow(NotFoundError);
     });
   });
 });
