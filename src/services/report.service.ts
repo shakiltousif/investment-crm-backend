@@ -164,23 +164,46 @@ export class ReportService {
       reportDate: new Date(),
       startDate,
       endDate,
-      portfolios: portfolioData.map((p: { id: string; name: string; totalValue: number; totalInvested: number; totalGain: number; gainPercentage: number; investments: { id: string; name: string; symbol: string | null; type: InvestmentType; quantity: Decimal; purchasePrice: number; currentPrice: number; totalValue: number; totalGain: number; gainPercentage: number; purchaseDate: Date; maturityDate: Date | undefined; }[]; }) => ({
-        ...p,
-        investments: p.investments.map((i) => ({
-          id: i.id,
-          name: i.name,
-          symbol: i.symbol ?? undefined,
-          type: i.type,
-          quantity: Number(i.quantity),
-          purchasePrice: i.purchasePrice,
-          currentPrice: i.currentPrice,
-          totalValue: i.totalValue,
-          totalGain: i.totalGain,
-          gainPercentage: i.gainPercentage,
-          purchaseDate: i.purchaseDate,
-          maturityDate: i.maturityDate,
-        })),
-      })),
+      portfolios: portfolioData.map(
+        (p: {
+          id: string;
+          name: string;
+          totalValue: number;
+          totalInvested: number;
+          totalGain: number;
+          gainPercentage: number;
+          investments: {
+            id: string;
+            name: string;
+            symbol: string | null;
+            type: InvestmentType;
+            quantity: Decimal;
+            purchasePrice: number;
+            currentPrice: number;
+            totalValue: number;
+            totalGain: number;
+            gainPercentage: number;
+            purchaseDate: Date;
+            maturityDate: Date | undefined;
+          }[];
+        }) => ({
+          ...p,
+          investments: p.investments.map((i) => ({
+            id: i.id,
+            name: i.name,
+            symbol: i.symbol ?? undefined,
+            type: i.type,
+            quantity: Number(i.quantity),
+            purchasePrice: i.purchasePrice,
+            currentPrice: i.currentPrice,
+            totalValue: i.totalValue,
+            totalGain: i.totalGain,
+            gainPercentage: i.gainPercentage,
+            purchaseDate: i.purchaseDate,
+            maturityDate: i.maturityDate,
+          })),
+        })
+      ),
       transactions: transactions.map((t) => ({
         id: t.id,
         type: t.type,

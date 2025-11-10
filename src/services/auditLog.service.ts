@@ -204,16 +204,18 @@ export class AuditLogService {
       limit: 10000, // Max export limit
     });
 
-    return (logs.data as Array<{
-      createdAt: Date;
-      userId: string;
-      action: string;
-      entity: string;
-      entityId: string | null;
-      ipAddress: string | null;
-      userAgent: string | null;
-      changes: unknown;
-    }>).map((log) => ({
+    return (
+      logs.data as Array<{
+        createdAt: Date;
+        userId: string;
+        action: string;
+        entity: string;
+        entityId: string | null;
+        ipAddress: string | null;
+        userAgent: string | null;
+        changes: unknown;
+      }>
+    ).map((log) => ({
       timestamp: log.createdAt.toISOString(),
       userId: log.userId,
       action: log.action,

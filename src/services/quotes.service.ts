@@ -208,7 +208,14 @@ export class QuotesService {
       console.warn(`Searching symbols for: ${query}`);
       const results = await this.yahooFinance.search(query);
 
-      return (results as unknown as Array<{ symbol: string; shortName: string | null; longName: string | null; exchange: string | null }>).map((item) => ({
+      return (
+        results as unknown as Array<{
+          symbol: string;
+          shortName: string | null;
+          longName: string | null;
+          exchange: string | null;
+        }>
+      ).map((item) => ({
         symbol: item.symbol,
         name: item.shortName ?? item.longName ?? item.symbol,
         exchange: item.exchange ?? 'Unknown',
