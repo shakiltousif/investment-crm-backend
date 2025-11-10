@@ -118,5 +118,28 @@ router.post('/request-password-reset', authRateLimiter, async (req: Request, res
   }
 });
 
+// Reset password endpoint
+router.post('/reset-password', authRateLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      throw new ValidationError('Token and new password are required');
+    }
+
+    if (newPassword.length < 8) {
+      throw new ValidationError('Password must be at least 8 characters long');
+    }
+
+    const result = await authService.resetPassword(token, newPassword);
+
+    res.status(200).json({
+      message: result.message,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
 

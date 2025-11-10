@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
+import { emailService } from './email.service';
 
 export interface CreateDepositInput {
   amount: number;
@@ -43,6 +44,12 @@ export class DepositService {
       throw new ValidationError('Amount must be greater than 0');
     }
 
+    // Get user email for notification
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, firstName: true },
+    });
+
     // Create deposit request
     const deposit = await prisma.transaction.create({
       data: {
@@ -59,6 +66,19 @@ export class DepositService {
         bankAccount: true,
       },
     });
+
+    // Send email notification (non-blocking)
+    if (user?.email) {
+      emailService.sendDepositNotification(
+        user.email,
+        Number(deposit.amount),
+        deposit.currency,
+        'PENDING'
+      ).catch((error) => {
+        console.error('Failed to send deposit notification email:', error);
+        // Don't throw - email failure shouldn't break the deposit creation
+      });
+    }
 
     return {
       deposit,
@@ -245,6 +265,46 @@ export class DepositService {
   }
 
   /**
+   * Cancel deposit (user-initiated)
+   */
+  async cancelDeposit(userId: string, depositId: string) {
+    const deposit = await this.getDepositById(userId, depositId);
+
+    if (!['PENDING'].includes(deposit.status)) {
+      throw new ValidationError('Only pending deposits can be cancelled');
+    }
+
+    const updated = await prisma.transaction.update({
+      where: { id: depositId },
+      data: {
+        status: 'CANCELLED',
+      },
+      include: {
+        bankAccount: true,
+      },
+    });
+
+    // Send email notification (non-blocking)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, firstName: true },
+    });
+
+    if (user?.email) {
+      emailService.sendDepositNotification(
+        user.email,
+        Number(deposit.amount),
+        deposit.currency,
+        'CANCELLED'
+      ).catch((error) => {
+        console.error('Failed to send cancellation email:', error);
+      });
+    }
+
+    return updated;
+  }
+
+  /**
    * Get deposit summary
    */
   async getDepositSummary(userId: string) {
@@ -263,6 +323,7 @@ export class DepositService {
         PROCESSING: 0,
         COMPLETED: 0,
         FAILED: 0,
+        CANCELLED: 0,
       },
       byCurrency: {} as Record<string, Decimal>,
     };

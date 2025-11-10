@@ -29,6 +29,7 @@ router.get('/profile', authenticate, async (req: AuthRequest, res: Response, nex
         state: true,
         zipCode: true,
         country: true,
+        role: true,
         kycStatus: true,
         isEmailVerified: true,
         isActive: true,

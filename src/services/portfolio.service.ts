@@ -40,44 +40,69 @@ export class PortfolioService {
   }
 
   async getPortfolioOverview(userId: string) {
-    const portfolios = await prisma.portfolio.findMany({
-      where: { userId },
-      include: {
-        investments: true,
-      },
-    });
+    try {
+      const portfolios = await prisma.portfolio.findMany({
+        where: { userId },
+        include: {
+          investments: true,
+        },
+      });
 
-    const totalValue = portfolios.reduce((sum, portfolio) => {
-      const portfolioValue = portfolio.investments.reduce((pSum, investment) => {
-        return pSum + Number(investment.currentPrice) * investment.quantity;
+      const totalValue = portfolios.reduce((sum, portfolio) => {
+        const portfolioValue = portfolio.investments.reduce((pSum, investment) => {
+          const price = Number(investment.currentPrice) || 0;
+          const qty = Number(investment.quantity) || 0;
+          return pSum + price * qty;
+        }, 0);
+        return sum + portfolioValue;
       }, 0);
-      return sum + portfolioValue;
-    }, 0);
 
-    const totalInvested = portfolios.reduce((sum, portfolio) => {
-      const portfolioInvested = portfolio.investments.reduce((pSum, investment) => {
-        return pSum + Number(investment.purchasePrice) * investment.quantity;
+      const totalInvested = portfolios.reduce((sum, portfolio) => {
+        const portfolioInvested = portfolio.investments.reduce((pSum, investment) => {
+          const price = Number(investment.purchasePrice) || 0;
+          const qty = Number(investment.quantity) || 0;
+          return pSum + price * qty;
+        }, 0);
+        return sum + portfolioInvested;
       }, 0);
-      return sum + portfolioInvested;
-    }, 0);
 
-    const totalGain = totalValue - totalInvested;
-    const gainPercentage = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
+      const totalGain = totalValue - totalInvested;
+      const gainPercentage = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
 
-    return {
-      totalPortfolios: portfolios.length,
-      totalValue,
-      totalInvested,
-      totalGain,
-      gainPercentage,
-      portfolios: portfolios.map(portfolio => ({
-        id: portfolio.id,
-        name: portfolio.name,
-        value: portfolio.investments.reduce((sum, inv) => sum + Number(inv.currentPrice) * inv.quantity, 0),
-        invested: portfolio.investments.reduce((sum, inv) => sum + Number(inv.purchasePrice) * inv.quantity, 0),
-        gain: portfolio.investments.reduce((sum, inv) => sum + (Number(inv.currentPrice) - Number(inv.purchasePrice)) * inv.quantity, 0),
-      })),
-    };
+      return {
+        totalPortfolios: portfolios.length,
+        totalValue,
+        totalInvested,
+        totalGain,
+        gainPercentage,
+        portfolios: portfolios.map(portfolio => ({
+          id: portfolio.id,
+          name: portfolio.name,
+          value: portfolio.investments.reduce((sum, inv) => {
+            const price = Number(inv.currentPrice) || 0;
+            const qty = Number(inv.quantity) || 0;
+            return sum + price * qty;
+          }, 0),
+          invested: portfolio.investments.reduce((sum, inv) => {
+            const price = Number(inv.purchasePrice) || 0;
+            const qty = Number(inv.quantity) || 0;
+            return sum + price * qty;
+          }, 0),
+          gain: portfolio.investments.reduce((sum, inv) => {
+            const currentPrice = Number(inv.currentPrice) || 0;
+            const purchasePrice = Number(inv.purchasePrice) || 0;
+            const qty = Number(inv.quantity) || 0;
+            return sum + (currentPrice - purchasePrice) * qty;
+          }, 0),
+        })),
+      };
+    } catch (error: any) {
+      // Check if it's a database connection error
+      if (error.message && error.message.includes("Can't reach database server")) {
+        throw new Error('Database connection failed. Please ensure PostgreSQL is running on localhost:5432');
+      }
+      throw error;
+    }
   }
 
   async getPortfolioById(userId: string, portfolioId: string) {

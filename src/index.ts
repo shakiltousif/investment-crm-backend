@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import path from 'path';
 
 import { logger } from './config/logger';
 import { errorHandler } from './middleware/errorHandler';
@@ -24,6 +25,11 @@ import withdrawalRoutes from './routes/withdrawal.routes';
 import analyticsRoutes from './routes/analytics.routes';
 import twoFactorRoutes from './routes/twoFactor.routes';
 import auditLogRoutes from './routes/auditLog.routes';
+import adminRoutes from './routes/admin.routes';
+import documentRoutes from './routes/document.routes';
+import supportRoutes from './routes/support.routes';
+import investmentProductRoutes from './routes/investmentProduct.routes';
+import reportRoutes from './routes/report.routes';
 
 // Load environment variables
 dotenv.config();
@@ -48,6 +54,9 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Request logging
 app.use(requestLogger);
@@ -78,6 +87,11 @@ app.use('/api/withdrawals', withdrawalRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/2fa', twoFactorRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/documents', documentRoutes);
+app.use('/api/support', supportRoutes);
+app.use('/api/investment-products', investmentProductRoutes);
+app.use('/api/reports', reportRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {

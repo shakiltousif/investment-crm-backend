@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';
 import { Decimal } from '@prisma/client/runtime/library';
+import { emailService } from './email.service';
 
 export interface CreateWithdrawalInput {
   amount: number;
@@ -47,6 +48,12 @@ export class WithdrawalService {
       throw new ValidationError('Insufficient balance for withdrawal');
     }
 
+    // Get user email for notification
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, firstName: true },
+    });
+
     // Create withdrawal request
     const withdrawal = await prisma.transaction.create({
       data: {
@@ -63,6 +70,19 @@ export class WithdrawalService {
         bankAccount: true,
       },
     });
+
+    // Send email notification (non-blocking)
+    if (user?.email) {
+      emailService.sendWithdrawalNotification(
+        user.email,
+        Number(withdrawal.amount),
+        withdrawal.currency,
+        'PENDING'
+      ).catch((error) => {
+        console.error('Failed to send withdrawal notification email:', error);
+        // Don't throw - email failure shouldn't break the withdrawal creation
+      });
+    }
 
     return {
       withdrawal,
@@ -260,6 +280,46 @@ export class WithdrawalService {
   }
 
   /**
+   * Cancel withdrawal (user-initiated)
+   */
+  async cancelWithdrawal(userId: string, withdrawalId: string) {
+    const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
+
+    if (!['PENDING'].includes(withdrawal.status)) {
+      throw new ValidationError('Only pending withdrawals can be cancelled');
+    }
+
+    const updated = await prisma.transaction.update({
+      where: { id: withdrawalId },
+      data: {
+        status: 'CANCELLED',
+      },
+      include: {
+        bankAccount: true,
+      },
+    });
+
+    // Send email notification (non-blocking)
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, firstName: true },
+    });
+
+    if (user?.email) {
+      emailService.sendWithdrawalNotification(
+        user.email,
+        Number(withdrawal.amount),
+        withdrawal.currency,
+        'CANCELLED'
+      ).catch((error) => {
+        console.error('Failed to send cancellation email:', error);
+      });
+    }
+
+    return updated;
+  }
+
+  /**
    * Get withdrawal summary
    */
   async getWithdrawalSummary(userId: string) {
@@ -278,6 +338,7 @@ export class WithdrawalService {
         PROCESSING: 0,
         COMPLETED: 0,
         FAILED: 0,
+        CANCELLED: 0,
       },
       byCurrency: {} as Record<string, Decimal>,
     };

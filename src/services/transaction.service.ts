@@ -40,7 +40,7 @@ export class TransactionService {
         investmentId: data.investmentId,
         type: data.type,
         amount: data.amount,
-        currency: data.currency || 'USD',
+        currency: data.currency || 'GBP',
         status: 'PENDING',
         description: data.description,
       },

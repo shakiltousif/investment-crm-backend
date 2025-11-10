@@ -1,4 +1,5 @@
 import YahooFinance from 'yahoo-finance2';
+import axios from 'axios';
 
 export interface QuoteData {
   symbol: string;
@@ -14,13 +15,17 @@ export class QuotesService {
   private cache: Map<string, { data: QuoteData; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 60000; // 1 minute cache
   private yahooFinance: YahooFinance;
+  private alphaVantageApiKey: string;
+  private useAlphaVantage: boolean;
 
   constructor() {
     this.yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
+    this.alphaVantageApiKey = process.env.ALPHA_VANTAGE_API_KEY || '9AVY0Z60WGSX4C1W';
+    this.useAlphaVantage = !!this.alphaVantageApiKey;
   }
 
   /**
-   * Get live quote for a single symbol
+   * Get live quote for a single symbol using Alpha Vantage (primary) or Yahoo Finance (fallback)
    */
   async getQuote(symbol: string): Promise<QuoteData | null> {
     try {
@@ -31,6 +36,21 @@ export class QuotesService {
       }
 
       console.log(`Fetching live quote for ${symbol}`);
+      
+      // Try Alpha Vantage first if configured
+      if (this.useAlphaVantage) {
+        try {
+          const alphaQuote = await this.getQuoteFromAlphaVantage(symbol);
+          if (alphaQuote) {
+            this.cache.set(symbol, { data: alphaQuote, timestamp: Date.now() });
+            return alphaQuote;
+          }
+        } catch (alphaError) {
+          console.warn(`Alpha Vantage failed for ${symbol}, trying fallback:`, alphaError);
+        }
+      }
+
+      // Fallback to Yahoo Finance
       const result = await this.yahooFinance.quote(symbol);
       
       if (!result || !result.regularMarketPrice) {
@@ -54,6 +74,54 @@ export class QuotesService {
       return quoteData;
     } catch (error) {
       console.error(`Error fetching quote for ${symbol}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Get quote from Alpha Vantage API
+   */
+  private async getQuoteFromAlphaVantage(symbol: string): Promise<QuoteData | null> {
+    try {
+      // Alpha Vantage Global Quote endpoint
+      const response = await axios.get('https://www.alphavantage.co/query', {
+        params: {
+          function: 'GLOBAL_QUOTE',
+          symbol: symbol.toUpperCase(),
+          apikey: this.alphaVantageApiKey,
+        },
+        timeout: 5000,
+      });
+
+      const data = response.data;
+      
+      // Check for API errors
+      if (data['Error Message'] || data['Note']) {
+        console.warn(`Alpha Vantage API error for ${symbol}:`, data['Error Message'] || data['Note']);
+        return null;
+      }
+
+      const quote = data['Global Quote'];
+      if (!quote || !quote['05. price']) {
+        return null;
+      }
+
+      const price = parseFloat(quote['05. price']);
+      const previousClose = parseFloat(quote['08. previous close']) || price;
+      const change = price - previousClose;
+      const changePercent = previousClose !== 0 ? (change / previousClose) * 100 : 0;
+      const volume = quote['06. volume'] ? parseInt(quote['06. volume']) : undefined;
+
+      return {
+        symbol: symbol.toUpperCase(),
+        price,
+        change,
+        changePercent,
+        volume,
+        lastUpdated: new Date(),
+      };
+    } catch (error) {
+      console.error(`Alpha Vantage API error for ${symbol}:`, error);
       return null;
     }
   }
@@ -85,6 +153,17 @@ export class QuotesService {
       // Fetch quotes for each symbol individually
       const quotePromises = uncachedSymbols.map(async (symbol) => {
         try {
+          // Try Alpha Vantage first if configured
+          if (this.useAlphaVantage) {
+            const alphaQuote = await this.getQuoteFromAlphaVantage(symbol);
+            if (alphaQuote) {
+              quotes.set(symbol.toUpperCase(), alphaQuote);
+              this.cache.set(symbol.toUpperCase(), { data: alphaQuote, timestamp: Date.now() });
+              return;
+            }
+          }
+
+          // Fallback to Yahoo Finance
           const result = await this.yahooFinance.quote(symbol);
           if (result && result.regularMarketPrice) {
             const quoteData: QuoteData = {

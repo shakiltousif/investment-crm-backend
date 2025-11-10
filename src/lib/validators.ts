@@ -47,7 +47,7 @@ export const createBankAccountSchema = z.object({
   bankName: z.string().min(1, 'Bank name is required'),
   bankCode: z.string().optional(),
   accountType: z.string().min(1, 'Account type is required'),
-  currency: z.string().default('USD'),
+  currency: z.string().default('GBP'),
 });
 
 export const updateBankAccountSchema = createBankAccountSchema.partial();
@@ -117,7 +117,7 @@ export const updateInvestmentSchema = createInvestmentSchema.partial();
 export const createTransactionSchema = z.object({
   type: z.enum(['DEPOSIT', 'WITHDRAWAL', 'BUY', 'SELL', 'DIVIDEND', 'INTEREST', 'TRANSFER', 'FEE']),
   amount: z.number().positive('Amount must be positive'),
-  currency: z.string().default('USD'),
+  currency: z.string().default('GBP'),
   description: z.string().optional(),
   bankAccountId: z.string().optional(),
   investmentId: z.string().optional(),
@@ -132,7 +132,7 @@ export const createMarketplaceItemSchema = z.object({
   currentPrice: z.coerce.number().positive('Current price must be positive'),
   minimumInvestment: z.coerce.number().positive('Minimum investment must be positive'),
   maximumInvestment: z.coerce.number().positive('Maximum investment must be positive').optional(),
-  currency: z.string().default('USD'),
+  currency: z.string().default('GBP'),
   riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']),
   expectedReturn: z.coerce.number().min(0, 'Expected return must be non-negative').optional(),
   category: z.string().optional(),

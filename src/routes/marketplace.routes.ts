@@ -19,13 +19,13 @@ const sellInvestmentSchema = z.object({
 
 const marketplaceFiltersSchema = z.object({
   type: z.string().optional(),
-  minPrice: z.number().optional(),
-  maxPrice: z.number().optional(),
+  minPrice: z.coerce.number().optional(),
+  maxPrice: z.coerce.number().optional(),
   search: z.string().optional(),
   sortBy: z.enum(['name', 'price', 'return', 'popularity']).optional(),
   sortOrder: z.enum(['asc', 'desc']).optional(),
-  limit: z.number().optional(),
-  offset: z.number().optional(),
+  limit: z.coerce.number().optional(),
+  offset: z.coerce.number().optional(),
 });
 
 /**

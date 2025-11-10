@@ -142,3 +142,11 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# Uploaded files (ignore all files but keep directory structure)
+uploads/*
+!uploads/.gitkeep
+!uploads/documents/
+!uploads/documents/.gitkeep
+!uploads/statements/
+!uploads/statements/.gitkeep

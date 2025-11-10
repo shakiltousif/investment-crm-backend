@@ -16,12 +16,12 @@ const createWithdrawalSchema = z.object({
 const withdrawalFiltersSchema = z.object({
   status: z.string().optional(),
   currency: z.string().optional(),
-  minAmount: z.number().optional(),
-  maxAmount: z.number().optional(),
+  minAmount: z.coerce.number().optional(),
+  maxAmount: z.coerce.number().optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
-  limit: z.number().optional(),
-  offset: z.number().optional(),
+  limit: z.coerce.number().optional(),
+  offset: z.coerce.number().optional(),
 });
 
 /**
@@ -99,7 +99,26 @@ router.post('/:id/reject', authenticate, async (req: AuthRequest, res: Response)
   try {
     const { reason } = req.body;
     const withdrawal = await withdrawalService.rejectWithdrawal(req.userId!, req.params.id, reason);
-    res.status(200).json(withdrawal);
+    res.status(200).json({
+      message: 'Withdrawal rejected successfully',
+      data: withdrawal,
+    });
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
+ * POST /api/withdrawals/:id/cancel
+ * Cancel withdrawal (user-initiated)
+ */
+router.post('/:id/cancel', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const withdrawal = await withdrawalService.cancelWithdrawal(req.userId!, req.params.id);
+    res.status(200).json({
+      message: 'Withdrawal cancelled successfully',
+      data: withdrawal,
+    });
   } catch (error) {
     throw error;
   }

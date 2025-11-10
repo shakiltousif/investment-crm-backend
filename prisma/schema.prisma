@@ -34,6 +34,7 @@ model User {
   documentExpiryDate    DateTime?
   
   // Account Status
+  role                  UserRole    @default(CLIENT)
   isEmailVerified       Boolean     @default(false)
   emailVerifiedAt       DateTime?
   isActive              Boolean     @default(true)
@@ -42,6 +43,8 @@ model User {
   lockedUntil           DateTime?
   twoFactorEnabled      Boolean     @default(false)
   twoFactorSecret       String?
+  passwordResetToken    String?
+  passwordResetExpires  DateTime?
   
   // Timestamps
   createdAt             DateTime    @default(now())
@@ -53,9 +56,13 @@ model User {
   transactions          Transaction[]
   portfolios            Portfolio[]
   auditLogs             AuditLog[]
+  documents             Document[]
+  statements            Statement[]
+  investmentApplications InvestmentApplication[]
   
   @@index([email])
   @@index([kycStatus])
+  @@index([role])
 }
 
 // Bank Account model
@@ -69,7 +76,7 @@ model BankAccount {
   bankName              String
   bankCode              String?
   accountType           String      // Savings, Checking, etc.
-  currency              String      @default("USD")
+  currency              String      @default("GBP")
   balance               Decimal     @default(0) @db.Decimal(15, 2)
   
   isVerified            Boolean     @default(false)
@@ -155,7 +162,7 @@ model Transaction {
   
   type                  TransactionType
   amount                Decimal     @db.Decimal(15, 2)
-  currency              String      @default("USD")
+  currency              String      @default("GBP")
   status                TransactionStatus @default(PENDING)
   description           String?
   
@@ -192,6 +199,11 @@ model AuditLog {
 }
 
 // Enums
+enum UserRole {
+  CLIENT
+  ADMIN
+}
+
 enum KYCStatus {
   PENDING
   VERIFIED
@@ -202,7 +214,11 @@ enum KYCStatus {
 enum InvestmentType {
   STOCK
   BOND
+  CORPORATE_BOND
   TERM_DEPOSIT
+  FIXED_RATE_DEPOSIT
+  HIGH_INTEREST_SAVINGS
+  IPO
   PRIVATE_EQUITY
   MUTUAL_FUND
   ETF
@@ -242,11 +258,21 @@ enum RiskLevel {
   HIGH
 }
 
+enum DocumentType {
+  KYC
+  IDENTIFICATION
+  PROOF_OF_ADDRESS
+  BANK_STATEMENT
+  TAX_DOCUMENT
+  AGREEMENT
+  OTHER
+}
+
 model MarketplaceItem {
   id                String          @id @default(cuid())
   name              String
   type              InvestmentType
-  symbol            String?         @unique
+  symbol            String?
   description       String?
   currentPrice      Decimal         @db.Decimal(15, 2)
   minimumInvestment Decimal         @db.Decimal(15, 2)
@@ -259,9 +285,120 @@ model MarketplaceItem {
   maturityDate      DateTime?
   isAvailable       Boolean         @default(true)
   lastPriceUpdate   DateTime?
+  
+  // Product-specific fields
+  couponRate        Decimal?        @db.Decimal(5, 2)  // For Corporate Bonds
+  interestRate      Decimal?        @db.Decimal(5, 2)   // For Savings/Fixed Deposits
+  lockPeriodMonths  Int?                                // For Fixed Rate Deposits
+  earlyWithdrawalPenalty Decimal?   @db.Decimal(5, 2)   // For Fixed Rate Deposits
+  payoutFrequency   String?                             // For Bonds (monthly, quarterly, annual)
+  nextPayoutDate    DateTime?                           // For Bonds
+  applicationDeadline DateTime?                          // For IPO
+  allocationDate    DateTime?                           // For IPO
+  ipoStatus         String?                             // For IPO (OPEN, CLOSED, ALLOCATED)
+  minimumLockAmount  Decimal?        @db.Decimal(15, 2) // For Fixed Deposits
+  
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
+  investmentApplications InvestmentApplication[]
+  
   @@map("marketplace_items")
+}
+
+// Investment Application model for IPO and other application-based products
+model InvestmentApplication {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  marketplaceItemId String
+  marketplaceItem   MarketplaceItem @relation(fields: [marketplaceItemId], references: [id], onDelete: Cascade)
+  
+  requestedAmount   Decimal         @db.Decimal(15, 2)
+  requestedQuantity Decimal?        @db.Decimal(15, 4)
+  status            ApplicationStatus @default(PENDING)
+  referenceNumber   String          @unique
+  allocatedAmount   Decimal?        @db.Decimal(15, 2)
+  allocatedQuantity Decimal?        @db.Decimal(15, 4)
+  notes             String?
+  
+  submittedAt        DateTime        @default(now())
+  allocatedAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@index([userId])
+  @@index([marketplaceItemId])
+  @@index([status])
+  @@map("investment_applications")
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  ALLOCATED
+  REJECTED
+  CANCELLED
+}
+
+// Document model for client uploads
+model Document {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  type              DocumentType
+  fileName          String
+  fileUrl           String
+  fileSize          Int             // Size in bytes
+  mimeType          String
+  description       String?
+  
+  uploadedBy        String          // User ID who uploaded
+  isImportant       Boolean         @default(false) // Admin-uploaded important docs
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@index([userId])
+  @@index([type])
+}
+
+// Statement model for admin-uploaded statements
+model Statement {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  period            String          // e.g., "2024-Q1", "2024-01"
+  fileName          String
+  fileUrl           String
+  fileSize          Int
+  mimeType          String
+  description       String?
+  
+  uploadedBy        String          // Admin user ID
+  uploadedAt        DateTime        @default(now())
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@index([userId])
+  @@index([period])
+}
+
+// Support Settings model for admin-managed support information
+model SupportSettings {
+  id                String          @id @default(cuid())
+  key               String          @unique  // e.g., "phone", "email", "hours", "address"
+  value             String
+  label             String?         // Display label (e.g., "Support Phone", "Support Email")
+  displayOrder      Int             @default(0)  // For ordering in UI
+  isActive          Boolean         @default(true)
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@map("support_settings")
 }
 
