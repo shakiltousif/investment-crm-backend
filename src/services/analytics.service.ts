@@ -180,7 +180,8 @@ export class AnalyticsService {
       totalValue: Number(investment.currentPrice) * Number(investment.quantity),
       costBasis: Number(investment.purchasePrice) * Number(investment.quantity),
       gain:
-        (Number(investment.currentPrice) - Number(investment.purchasePrice)) * Number(investment.quantity),
+        (Number(investment.currentPrice) - Number(investment.purchasePrice)) *
+        Number(investment.quantity),
       gainPercentage:
         Number(investment.purchasePrice) > 0
           ? ((Number(investment.currentPrice) - Number(investment.purchasePrice)) /

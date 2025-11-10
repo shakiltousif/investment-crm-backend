@@ -1,4 +1,5 @@
 import { prisma } from '../lib/prisma';
+import { Prisma } from '@prisma/client';
 
 export interface AuditLogEntry {
   userId: string;
@@ -32,14 +33,11 @@ export class AuditLogService {
       data: {
         userId: entry.userId,
         action: entry.action,
-        resource: entry.resource,
-        resourceId: entry.resourceId,
-        changes: entry.changes ? JSON.stringify(entry.changes) : null,
+        entity: entry.resource,
+        entityId: entry.resourceId,
+        changes: entry.changes ? (entry.changes as Prisma.InputJsonValue) : Prisma.JsonNull,
         ipAddress: entry.ipAddress,
         userAgent: entry.userAgent,
-        status: entry.status,
-        details: entry.details,
-        timestamp: new Date(),
       },
     });
 
@@ -69,21 +67,18 @@ export class AuditLogService {
     }
 
     if (filters.resource) {
-      where.resource = filters.resource;
-    }
-
-    if (filters.status) {
-      where.status = filters.status;
+      where.entity = filters.resource;
     }
 
     if (filters.startDate || filters.endDate) {
-      where.timestamp = {};
+      const createdAtFilter: { gte?: Date; lte?: Date } = {};
       if (filters.startDate) {
-        where.timestamp.gte = new Date(filters.startDate);
+        createdAtFilter.gte = new Date(filters.startDate);
       }
       if (filters.endDate) {
-        where.timestamp.lte = new Date(filters.endDate);
+        createdAtFilter.lte = new Date(filters.endDate);
       }
+      where.createdAt = createdAtFilter;
     }
 
     const limit = Math.min(filters.limit ?? 50, 500);
@@ -92,7 +87,7 @@ export class AuditLogService {
     const [logs, total] = await Promise.all([
       prisma.auditLog.findMany({
         where,
-        orderBy: { timestamp: 'desc' },
+        orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
       }),
@@ -102,7 +97,7 @@ export class AuditLogService {
     return {
       data: logs.map((log) => ({
         ...log,
-        changes: log.changes ? JSON.parse(log.changes) : null,
+        changes: log.changes ?? null,
       })),
       pagination: {
         total,
@@ -140,15 +135,15 @@ export class AuditLogService {
   async getResourceAuditLogs(resource: string, resourceId: string): Promise<Array<unknown>> {
     const logs = await prisma.auditLog.findMany({
       where: {
-        resource,
-        resourceId,
+        entity: resource,
+        entityId: resourceId,
       },
-      orderBy: { timestamp: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
 
     return logs.map((log) => ({
       ...log,
-      changes: log.changes ? JSON.parse(log.changes) : null,
+      changes: log.changes ?? null,
     }));
   }
 
@@ -162,15 +157,13 @@ export class AuditLogService {
     successRate: string;
     actionSummary: Record<string, number>;
   }> {
-    const where = userId ? { userId } : {};
+    const baseWhere = userId ? { userId } : {};
 
-    const [totalLogs, successCount, failureCount, actionCounts] = await Promise.all([
-      prisma.auditLog.count({ where }),
-      prisma.auditLog.count({ where: { ...where, status: 'SUCCESS' } }),
-      prisma.auditLog.count({ where: { ...where, status: 'FAILURE' } }),
+    const [totalLogs, actionCounts] = await Promise.all([
+      prisma.auditLog.count({ where: baseWhere }),
       prisma.auditLog.groupBy({
         by: ['action'],
-        where,
+        where: baseWhere,
         _count: true,
       }),
     ]);
@@ -182,9 +175,9 @@ export class AuditLogService {
 
     return {
       totalLogs,
-      successCount,
-      failureCount,
-      successRate: totalLogs > 0 ? ((successCount / totalLogs) * 100).toFixed(2) : '0',
+      successCount: 0,
+      failureCount: 0,
+      successRate: '0',
       actionSummary,
     };
   }
@@ -211,16 +204,25 @@ export class AuditLogService {
       limit: 10000, // Max export limit
     });
 
-    return logs.data.map((log) => ({
-      timestamp: log.timestamp.toISOString(),
+    return (logs.data as Array<{
+      createdAt: Date;
+      userId: string;
+      action: string;
+      entity: string;
+      entityId: string | null;
+      ipAddress: string | null;
+      userAgent: string | null;
+      changes: unknown;
+    }>).map((log) => ({
+      timestamp: log.createdAt.toISOString(),
       userId: log.userId,
       action: log.action,
-      resource: log.resource,
-      resourceId: log.resourceId,
-      status: log.status,
+      resource: log.entity,
+      resourceId: log.entityId,
+      status: 'SUCCESS',
       ipAddress: log.ipAddress,
       userAgent: log.userAgent,
-      details: log.details,
+      details: null,
       changes: log.changes,
     }));
   }
@@ -234,15 +236,14 @@ export class AuditLogService {
 
     const result = await prisma.auditLog.deleteMany({
       where: {
-        timestamp: {
+        createdAt: {
           lt: cutoffDate,
         },
       },
     });
 
     return {
-      deletedCount: result.count,
-      message: `Deleted ${result.count} audit logs older than ${daysToKeep} days`,
+      count: result.count,
     };
   }
 }

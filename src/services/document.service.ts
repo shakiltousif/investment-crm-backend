@@ -78,7 +78,14 @@ export class DocumentService {
     const document = await prisma.document.create({
       data: {
         userId,
-        type: data.type as 'KYC' | 'IDENTIFICATION' | 'PROOF_OF_ADDRESS' | 'BANK_STATEMENT' | 'TAX_DOCUMENT' | 'AGREEMENT' | 'OTHER',
+        type: data.type as
+          | 'KYC'
+          | 'IDENTIFICATION'
+          | 'PROOF_OF_ADDRESS'
+          | 'BANK_STATEMENT'
+          | 'TAX_DOCUMENT'
+          | 'AGREEMENT'
+          | 'OTHER',
         fileName: data.fileName,
         fileUrl: `/uploads/documents/${uniqueFileName}`,
         fileSize: data.fileSize,

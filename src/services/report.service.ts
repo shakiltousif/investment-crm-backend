@@ -1,3 +1,5 @@
+import { InvestmentType } from '@prisma/client';
+import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../lib/prisma';
 import { NotFoundError } from '../middleware/errorHandler';
 
@@ -86,13 +88,14 @@ export class ReportService {
     // Get transactions within date range
     const transactionWhere: Record<string, unknown> = { userId };
     if (startDate || endDate) {
-      transactionWhere.createdAt = {};
+      const createdAtFilter: { gte?: Date; lte?: Date } = {};
       if (startDate) {
-        transactionWhere.createdAt.gte = startDate;
+        createdAtFilter.gte = startDate;
       }
       if (endDate) {
-        transactionWhere.createdAt.lte = endDate;
+        createdAtFilter.lte = endDate;
       }
+      transactionWhere.createdAt = createdAtFilter;
     }
 
     const transactions = await prisma.transaction.findMany({
@@ -111,8 +114,8 @@ export class ReportService {
         quantity: inv.quantity,
         purchasePrice: Number(inv.purchasePrice),
         currentPrice: Number(inv.currentPrice),
-        totalValue: Number(inv.currentPrice) * inv.quantity,
-        totalGain: (Number(inv.currentPrice) - Number(inv.purchasePrice)) * inv.quantity,
+        totalValue: Number(inv.currentPrice) * Number(inv.quantity),
+        totalGain: (Number(inv.currentPrice) - Number(inv.purchasePrice)) * Number(inv.quantity),
         gainPercentage:
           Number(inv.purchasePrice) > 0
             ? ((Number(inv.currentPrice) - Number(inv.purchasePrice)) / Number(inv.purchasePrice)) *
@@ -124,7 +127,7 @@ export class ReportService {
 
       const totalValue = investments.reduce((sum, inv) => sum + inv.totalValue, 0);
       const totalInvested = investments.reduce(
-        (sum, inv) => sum + inv.purchasePrice * inv.quantity,
+        (sum, inv) => sum + inv.purchasePrice * Number(inv.quantity),
         0
       );
       const totalGain = totalValue - totalInvested;
@@ -161,7 +164,23 @@ export class ReportService {
       reportDate: new Date(),
       startDate,
       endDate,
-      portfolios: portfolioData,
+      portfolios: portfolioData.map((p: { id: string; name: string; totalValue: number; totalInvested: number; totalGain: number; gainPercentage: number; investments: { id: string; name: string; symbol: string | null; type: InvestmentType; quantity: Decimal; purchasePrice: number; currentPrice: number; totalValue: number; totalGain: number; gainPercentage: number; purchaseDate: Date; maturityDate: Date | undefined; }[]; }) => ({
+        ...p,
+        investments: p.investments.map((i) => ({
+          id: i.id,
+          name: i.name,
+          symbol: i.symbol ?? undefined,
+          type: i.type,
+          quantity: Number(i.quantity),
+          purchasePrice: i.purchasePrice,
+          currentPrice: i.currentPrice,
+          totalValue: i.totalValue,
+          totalGain: i.totalGain,
+          gainPercentage: i.gainPercentage,
+          purchaseDate: i.purchaseDate,
+          maturityDate: i.maturityDate,
+        })),
+      })),
       transactions: transactions.map((t) => ({
         id: t.id,
         type: t.type,

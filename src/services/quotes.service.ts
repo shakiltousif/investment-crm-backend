@@ -14,7 +14,7 @@ export interface QuoteData {
 export class QuotesService {
   private cache: Map<string, { data: QuoteData; timestamp: number }> = new Map();
   private readonly CACHE_DURATION = 60000; // 1 minute cache
-  private yahooFinance: YahooFinance;
+  private yahooFinance: InstanceType<typeof YahooFinance>;
   private alphaVantageApiKey: string;
   private useAlphaVantage: boolean;
 
@@ -208,7 +208,7 @@ export class QuotesService {
       console.warn(`Searching symbols for: ${query}`);
       const results = await this.yahooFinance.search(query);
 
-      return results.map((item) => ({
+      return (results as unknown as Array<{ symbol: string; shortName: string | null; longName: string | null; exchange: string | null }>).map((item) => ({
         symbol: item.symbol,
         name: item.shortName ?? item.longName ?? item.symbol,
         exchange: item.exchange ?? 'Unknown',

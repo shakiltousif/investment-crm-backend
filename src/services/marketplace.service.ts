@@ -52,7 +52,7 @@ export class MarketplaceService {
       if (filters.maxPrice !== undefined) {
         const currentPriceFilter = where.currentPrice as { gte?: number } | undefined;
         where.currentPrice = {
-          ...(currentPriceFilter || {}),
+          ...(currentPriceFilter ?? {}),
           lte: filters.maxPrice,
         };
       }
@@ -281,6 +281,7 @@ export class MarketplaceService {
             expectedReturn: 8.5,
             category: 'Technology',
             issuer: 'Apple Inc.',
+            maturityDate: null,
             isAvailable: true,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -299,6 +300,7 @@ export class MarketplaceService {
             expectedReturn: 9.2,
             category: 'Technology',
             issuer: 'Microsoft Corp.',
+            maturityDate: null,
             isAvailable: true,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -317,6 +319,7 @@ export class MarketplaceService {
             expectedReturn: 12.0,
             category: 'Automotive',
             issuer: 'Tesla Inc.',
+            maturityDate: null,
             isAvailable: true,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -335,8 +338,8 @@ export class MarketplaceService {
         ...investment,
         currentPrice: investment.currentPrice.toNumber(),
         minimumInvestment: investment.minimumInvestment.toNumber(),
-        maximumInvestment: investment.maximumInvestment?.toNumber(),
-        expectedReturn: investment.expectedReturn?.toNumber(),
+        maximumInvestment: investment.maximumInvestment?.toNumber() ?? null,
+        expectedReturn: investment.expectedReturn?.toNumber() ?? null,
       };
     } catch (error) {
       console.error('Database error in getInvestmentDetails:', error);
@@ -410,9 +413,10 @@ export class MarketplaceService {
     }
 
     // Calculate transaction details
-    const currentPrice = typeof investment.currentPrice === 'number' 
-      ? new Decimal(investment.currentPrice) 
-      : investment.currentPrice;
+    const currentPrice =
+      typeof investment.currentPrice === 'number'
+        ? new Decimal(investment.currentPrice)
+        : investment.currentPrice;
     const totalCost = new Decimal(input.quantity).times(currentPrice);
     const estimatedFee = totalCost.times(new Decimal(0.01)); // 1% fee
     const totalAmount = totalCost.plus(estimatedFee);
@@ -420,7 +424,10 @@ export class MarketplaceService {
     return {
       investment,
       quantity: input.quantity,
-      unitPrice: typeof investment.currentPrice === 'number' ? investment.currentPrice : investment.currentPrice.toNumber(),
+      unitPrice:
+        typeof investment.currentPrice === 'number'
+          ? investment.currentPrice
+          : investment.currentPrice.toNumber(),
       totalCost,
       estimatedFee,
       totalAmount,
@@ -462,27 +469,41 @@ export class MarketplaceService {
     }
 
     // Calculate transaction details
-    const currentPrice = typeof marketplaceInvestment.currentPrice === 'number'
-      ? new Decimal(marketplaceInvestment.currentPrice)
-      : marketplaceInvestment.currentPrice;
+    const currentPrice =
+      typeof marketplaceInvestment.currentPrice === 'number'
+        ? new Decimal(marketplaceInvestment.currentPrice)
+        : marketplaceInvestment.currentPrice;
     const totalCost = new Decimal(input.quantity).times(currentPrice);
     const estimatedFee = totalCost.times(new Decimal(0.01)); // 1% fee
     const totalAmount = totalCost.plus(estimatedFee);
 
     // Create the investment record in user's portfolio
-    const purchasePrice = typeof marketplaceInvestment.currentPrice === 'number'
-      ? new Decimal(marketplaceInvestment.currentPrice)
-      : marketplaceInvestment.currentPrice;
+    const purchasePrice =
+      typeof marketplaceInvestment.currentPrice === 'number'
+        ? new Decimal(marketplaceInvestment.currentPrice)
+        : marketplaceInvestment.currentPrice;
     const expectedReturn = marketplaceInvestment.expectedReturn
-      ? (typeof marketplaceInvestment.expectedReturn === 'number'
-          ? new Decimal(marketplaceInvestment.expectedReturn)
-          : marketplaceInvestment.expectedReturn)
+      ? typeof marketplaceInvestment.expectedReturn === 'number'
+        ? new Decimal(marketplaceInvestment.expectedReturn)
+        : marketplaceInvestment.expectedReturn
       : null;
     const userInvestment = await prisma.investment.create({
       data: {
         userId,
         portfolioId: input.portfolioId,
-        type: marketplaceInvestment.type as 'STOCK' | 'BOND' | 'CORPORATE_BOND' | 'TERM_DEPOSIT' | 'FIXED_RATE_DEPOSIT' | 'HIGH_INTEREST_SAVINGS' | 'IPO' | 'PRIVATE_EQUITY' | 'MUTUAL_FUND' | 'ETF' | 'CRYPTOCURRENCY' | 'OTHER',
+        type: marketplaceInvestment.type as
+          | 'STOCK'
+          | 'BOND'
+          | 'CORPORATE_BOND'
+          | 'TERM_DEPOSIT'
+          | 'FIXED_RATE_DEPOSIT'
+          | 'HIGH_INTEREST_SAVINGS'
+          | 'IPO'
+          | 'PRIVATE_EQUITY'
+          | 'MUTUAL_FUND'
+          | 'ETF'
+          | 'CRYPTOCURRENCY'
+          | 'OTHER',
         name: marketplaceInvestment.name,
         symbol: marketplaceInvestment.symbol,
         quantity: new Decimal(input.quantity),
@@ -520,7 +541,10 @@ export class MarketplaceService {
       details: {
         marketplaceInvestment,
         quantity: input.quantity,
-        unitPrice: typeof marketplaceInvestment.currentPrice === 'number' ? marketplaceInvestment.currentPrice : marketplaceInvestment.currentPrice.toNumber(),
+        unitPrice:
+          typeof marketplaceInvestment.currentPrice === 'number'
+            ? marketplaceInvestment.currentPrice
+            : marketplaceInvestment.currentPrice.toNumber(),
         totalCost,
         fee: estimatedFee,
         totalAmount,

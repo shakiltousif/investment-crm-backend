@@ -19,36 +19,41 @@ const upload = multer({
  * POST /api/documents
  * Upload document (client or admin)
  */
-router.post('/', authenticate, upload.single('file'), async (req: AuthRequest, res: Response): Promise<Response | void> => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+router.post(
+  '/',
+  authenticate,
+  upload.single('file'),
+  async (req: AuthRequest, res: Response): Promise<Response | void> => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      const schema = z.object({
+        type: z.string().min(1),
+        description: z.string().optional(),
+      });
+
+      const validatedData = schema.parse(req.body);
+
+      const document = await documentService.uploadDocument(req.userId!, req.userId!, {
+        type: validatedData.type,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        description: validatedData.description,
+        fileBuffer: req.file.buffer,
+      });
+
+      res.status(201).json({
+        message: 'Document uploaded successfully',
+        data: document,
+      });
+    } catch (error) {
+      throw error;
     }
-
-    const schema = z.object({
-      type: z.string().min(1),
-      description: z.string().optional(),
-    });
-
-    const validatedData = schema.parse(req.body);
-
-    const document = await documentService.uploadDocument(req.userId!, req.userId!, {
-      type: validatedData.type,
-      fileName: req.file.originalname,
-      fileSize: req.file.size,
-      mimeType: req.file.mimetype,
-      description: validatedData.description,
-      fileBuffer: req.file.buffer,
-    });
-
-    res.status(201).json({
-      message: 'Document uploaded successfully',
-      data: document,
-    });
-  } catch (error) {
-    throw error;
   }
-});
+);
 
 /**
  * GET /api/documents
@@ -164,38 +169,42 @@ router.get('/statements/:id/download', authenticate, async (req: AuthRequest, re
  * Get statement by ID
  * NOTE: Must be defined BEFORE /:id route to avoid route conflicts
  */
-router.get('/statements/:id', authenticate, async (req: AuthRequest, res: Response): Promise<Response> => {
-  try {
-    const statement = await documentService.getStatementById(req.params.id, req.userId);
+router.get(
+  '/statements/:id',
+  authenticate,
+  async (req: AuthRequest, res: Response): Promise<Response> => {
+    try {
+      const statement = await documentService.getStatementById(req.params.id, req.userId);
 
-    // Construct full URL for fileUrl
-    const apiBaseUrl = process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
-    const statementWithFullUrl = {
-      id: statement.id,
-      userId: statement.userId,
-      period: statement.period,
-      fileName: statement.fileName,
-      fileUrl: statement.fileUrl.startsWith('http')
-        ? statement.fileUrl
-        : `${apiBaseUrl}${statement.fileUrl}`,
-      fileSize: statement.fileSize,
-      mimeType: statement.mimeType,
-      description: statement.description,
-      uploadedBy: statement.uploadedBy,
-      uploadedAt: statement.uploadedAt,
-      createdAt: statement.createdAt,
-      updatedAt: statement.updatedAt,
-      downloadUrl: `${apiBaseUrl}/api/documents/statements/${statement.id}/download`,
-    };
+      // Construct full URL for fileUrl
+      const apiBaseUrl = process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
+      const statementWithFullUrl = {
+        id: statement.id,
+        userId: statement.userId,
+        period: statement.period,
+        fileName: statement.fileName,
+        fileUrl: statement.fileUrl.startsWith('http')
+          ? statement.fileUrl
+          : `${apiBaseUrl}${statement.fileUrl}`,
+        fileSize: statement.fileSize,
+        mimeType: statement.mimeType,
+        description: statement.description,
+        uploadedBy: statement.uploadedBy,
+        uploadedAt: statement.uploadedAt,
+        createdAt: statement.createdAt,
+        updatedAt: statement.updatedAt,
+        downloadUrl: `${apiBaseUrl}/api/documents/statements/${statement.id}/download`,
+      };
 
-    return res.status(200).json({
-      message: 'Statement retrieved successfully',
-      data: statementWithFullUrl,
-    });
-  } catch (error) {
-    throw error;
+      return res.status(200).json({
+        message: 'Statement retrieved successfully',
+        data: statementWithFullUrl,
+      });
+    } catch (error) {
+      throw error;
+    }
   }
-});
+);
 
 /**
  * DELETE /api/documents/statements/:id

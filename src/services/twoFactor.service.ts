@@ -176,8 +176,10 @@ export class TwoFactorService {
 
   /**
    * Hash backup code
+   * TODO: Implement backup codes functionality
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, class-methods-use-this
+  // @ts-ignore - Method reserved for future backup codes implementation
   private hashCode(_code: string): string {
     return crypto.createHash('sha256').update(_code).digest('hex');
   }

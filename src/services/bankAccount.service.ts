@@ -1,3 +1,4 @@
+import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../lib/prisma';
 import { CreateBankAccountInput, UpdateBankAccountInput } from '../lib/validators';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler';

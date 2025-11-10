@@ -19,7 +19,8 @@ router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
     } = {
       type: typeof req.query.type === 'string' ? req.query.type : undefined,
       status: typeof req.query.status === 'string' ? req.query.status : undefined,
-      bankAccountId: typeof req.query.bankAccountId === 'string' ? req.query.bankAccountId : undefined,
+      bankAccountId:
+        typeof req.query.bankAccountId === 'string' ? req.query.bankAccountId : undefined,
       investmentId: typeof req.query.investmentId === 'string' ? req.query.investmentId : undefined,
       startDate: typeof req.query.startDate === 'string' ? req.query.startDate : undefined,
       endDate: typeof req.query.endDate === 'string' ? req.query.endDate : undefined,

@@ -419,13 +419,12 @@ export class InvestmentProductService {
     const maturityDate = new Date(startDate.setMonth(startDate.getMonth() + lockPeriodMonths));
 
     return {
-      investmentAmount,
+      investmentAmount: Number(investmentAmount),
       interestRate: Number(fixedDeposit.interestRate),
       lockPeriodMonths,
-      totalInterest,
-      maturityAmount,
-      startDate: new Date().toISOString(),
+      totalInterest: Number(totalInterest),
       maturityDate: maturityDate.toISOString(),
+      totalReturn: Number(maturityAmount),
       earlyWithdrawalPenalty: fixedDeposit.earlyWithdrawalPenalty
         ? Number(fixedDeposit.earlyWithdrawalPenalty)
         : null,

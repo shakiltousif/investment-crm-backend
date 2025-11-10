@@ -114,8 +114,8 @@ export class InvestmentService {
       const quantity = data.quantity ?? investment.quantity;
       const currentPrice = data.currentPrice ?? investment.currentPrice;
 
-      const totalValue = quantity.times(currentPrice);
-      const totalInvested = quantity.times(investment.purchasePrice);
+      const totalValue = new Decimal(quantity).times(currentPrice);
+      const totalInvested = new Decimal(quantity).times(investment.purchasePrice);
       const totalGain = totalValue.minus(totalInvested);
       const gainPercentage = totalInvested.isZero()
         ? new Decimal(0)
