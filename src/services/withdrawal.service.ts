@@ -228,7 +228,7 @@ export class WithdrawalService {
   async approveWithdrawal(userId: string, withdrawalId: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
-    if ((withdrawal.status as string) !== 'PENDING') {
+    if (withdrawal.status !== 'PENDING') {
       throw new ValidationError('Only pending withdrawals can be approved');
     }
 
@@ -237,7 +237,7 @@ export class WithdrawalService {
       where: { id: withdrawal.bankAccountId! },
     });
 
-    if (bankAccount && bankAccount.balance.lessThan(withdrawal.amount)) {
+    if (bankAccount?.balance.lessThan(withdrawal.amount)) {
       throw new ValidationError('Insufficient balance for withdrawal');
     }
 
@@ -258,7 +258,7 @@ export class WithdrawalService {
   async completeWithdrawal(userId: string, withdrawalId: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
-    if ((withdrawal.status as string) !== 'PROCESSING') {
+    if (withdrawal.status !== 'PROCESSING') {
       throw new ValidationError('Only processing withdrawals can be completed');
     }
 
@@ -297,7 +297,7 @@ export class WithdrawalService {
   async rejectWithdrawal(userId: string, withdrawalId: string, reason?: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
-    if (!['PENDING', 'PROCESSING'].includes(withdrawal.status as string)) {
+    if (!['PENDING', 'PROCESSING'].includes(withdrawal.status)) {
       throw new ValidationError('Only pending or processing withdrawals can be rejected');
     }
 
@@ -323,7 +323,7 @@ export class WithdrawalService {
   async cancelWithdrawal(userId: string, withdrawalId: string): Promise<unknown> {
     const withdrawal = await this.getWithdrawalById(userId, withdrawalId);
 
-    if (!['PENDING'].includes(withdrawal.status as string)) {
+    if (!['PENDING'].includes(withdrawal.status)) {
       throw new ValidationError('Only pending withdrawals can be cancelled');
     }
 

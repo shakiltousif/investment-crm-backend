@@ -143,7 +143,7 @@ export class TransactionService {
   async approveTransaction(userId: string, transactionId: string): Promise<unknown> {
     const transaction = await this.getTransactionById(userId, transactionId);
 
-    if ((transaction.status as string) !== 'PENDING') {
+    if (transaction.status !== 'PENDING') {
       throw new ValidationError('Only pending transactions can be approved');
     }
 
@@ -160,7 +160,7 @@ export class TransactionService {
   async completeTransaction(userId: string, transactionId: string): Promise<unknown> {
     const transaction = await this.getTransactionById(userId, transactionId);
 
-    if ((transaction.status as string) !== 'PROCESSING') {
+    if (transaction.status !== 'PROCESSING') {
       throw new ValidationError('Only processing transactions can be completed');
     }
 
@@ -173,9 +173,9 @@ export class TransactionService {
       if (bankAccount) {
         let newBalance = bankAccount.balance;
 
-        if ((transaction.type as string) === 'DEPOSIT') {
+        if (transaction.type === 'DEPOSIT') {
           newBalance = newBalance.plus(transaction.amount);
-        } else if ((transaction.type as string) === 'WITHDRAWAL') {
+        } else if (transaction.type === 'WITHDRAWAL') {
           newBalance = newBalance.minus(transaction.amount);
         }
 
@@ -200,7 +200,7 @@ export class TransactionService {
   async rejectTransaction(userId: string, transactionId: string): Promise<unknown> {
     const transaction = await this.getTransactionById(userId, transactionId);
 
-    if (!['PENDING', 'PROCESSING'].includes(transaction.status as string)) {
+    if (!['PENDING', 'PROCESSING'].includes(transaction.status)) {
       throw new ValidationError('Cannot reject completed or failed transactions');
     }
 
