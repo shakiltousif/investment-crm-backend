@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { AuthenticationError, AuthorizationError } from './errorHandler';
 import { prisma } from '../lib/prisma';
 
@@ -122,7 +122,8 @@ export const generateToken = (userId: string, email: string): string => {
     throw new Error('JWT_SECRET is not defined');
   }
 
-  return jwt.sign({ userId, email }, secret, { expiresIn: expiresIn as string | number });
+  const options: SignOptions = { expiresIn: expiresIn as SignOptions['expiresIn'] };
+  return jwt.sign({ userId, email }, secret, options);
 };
 
 export const generateRefreshToken = (userId: string): string => {
@@ -133,7 +134,8 @@ export const generateRefreshToken = (userId: string): string => {
     throw new Error('JWT_REFRESH_SECRET is not defined');
   }
 
-  return jwt.sign({ userId }, secret, { expiresIn: expiresIn as string | number });
+  const options: SignOptions = { expiresIn: expiresIn as SignOptions['expiresIn'] };
+  return jwt.sign({ userId }, secret, options);
 };
 
 export const verifyRefreshToken = (token: string): { userId: string } => {

@@ -237,7 +237,7 @@ router.get('/items/:id', async (req: AuthRequest, res: Response) => {
  * POST /api/marketplace/update-prices
  * Update all marketplace item prices with live quotes
  */
-router.post('/update-prices', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/update-prices', authenticate, async (_req: AuthRequest, res: Response) => {
   try {
     const result = await marketplaceService.updatePricesWithLiveQuotes();
     res.status(200).json({
