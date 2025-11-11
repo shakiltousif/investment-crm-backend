@@ -729,10 +729,33 @@ jobs:
             
             # Install production dependencies
             cd "$TIMESTAMP"
+            RELEASE_DIR="$(pwd)"
+            echo "📂 Release directory: $RELEASE_DIR"
+            
             if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
               sudo $NPM_CMD ci --production
             else
               $NPM_CMD ci --production
+            fi
+            
+            # Verify Prisma is installed
+            if [ ! -f "node_modules/.bin/prisma" ]; then
+              echo "⚠️  Prisma binary not found after npm ci"
+              echo "   Checking if prisma package is installed..."
+              if [ -d "node_modules/prisma" ]; then
+                echo "   ✅ prisma package found in node_modules"
+                echo "   Listing node_modules/.bin:"
+                ls -la node_modules/.bin/ 2>/dev/null | head -10 || echo "   node_modules/.bin not found"
+              else
+                echo "   ❌ prisma package not found in node_modules"
+                echo "   This might be because prisma is in devDependencies"
+                echo "   Installing prisma as production dependency..."
+                if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+                  sudo $NPM_CMD install prisma@^5.20.0 --save --no-save || true
+                else
+                  $NPM_CMD install prisma@^5.20.0 --save --no-save || true
+                fi
+              fi
             fi
             
             # Create .env file from secret or use shared .env
@@ -970,48 +993,100 @@ jobs:
             
             # Generate Prisma client
             echo "📦 Generating Prisma client..."
-            # We're already in $TIMESTAMP directory where node_modules should be
+            # Ensure we're in the release directory where node_modules exists
+            cd "$RELEASE_DIR"
+            echo "📂 Current directory: $(pwd)"
+            echo "📂 Release directory: $RELEASE_DIR"
+            
             # Use the local Prisma binary directly
             PRISMA_BIN=""
             if [ -f "node_modules/.bin/prisma" ]; then
               PRISMA_BIN="node_modules/.bin/prisma"
               echo "✅ Found local Prisma binary"
-            elif [ -f "./node_modules/.bin/prisma" ]; then
-              PRISMA_BIN="./node_modules/.bin/prisma"
-              echo "✅ Found local Prisma binary (relative path)"
+            elif [ -f "$RELEASE_DIR/node_modules/.bin/prisma" ]; then
+              PRISMA_BIN="$RELEASE_DIR/node_modules/.bin/prisma"
+              echo "✅ Found local Prisma binary (absolute path)"
             else
               echo "⚠️  Prisma binary not found in node_modules/.bin/prisma"
               echo "   Current directory: $(pwd)"
-              echo "   Listing node_modules/.bin:"
-              ls -la node_modules/.bin/ 2>/dev/null | head -10 || echo "   node_modules/.bin not found"
-              echo "   Trying npx as fallback..."
-              PRISMA_BIN="npx prisma"
+              echo "   Release directory: $RELEASE_DIR"
+              echo "   Checking if node_modules exists..."
+              if [ -d "node_modules" ]; then
+                echo "   ✅ node_modules directory exists"
+                echo "   Listing node_modules/.bin:"
+                ls -la node_modules/.bin/ 2>/dev/null | head -10 || echo "   node_modules/.bin not found"
+                echo "   Checking if prisma package exists..."
+                if [ -d "node_modules/prisma" ]; then
+                  echo "   ✅ prisma package found, but binary missing"
+                  echo "   This might be a symlink issue. Trying to run prisma directly..."
+                  if [ -f "node_modules/prisma/build/index.js" ]; then
+                    PRISMA_BIN="node node_modules/prisma/build/index.js"
+                    echo "   ✅ Using Prisma via node"
+                  fi
+                fi
+              else
+                echo "   ❌ node_modules directory not found"
+              fi
+              
+              # If still no binary, use npm run script (which should work)
+              if [ -z "$PRISMA_BIN" ]; then
+                echo "   Using npm run db:generate as fallback..."
+                if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+                  sudo $NPM_CMD run db:generate || {
+                    echo "❌ Error: Failed to generate Prisma client"
+                    exit 1
+                  }
+                else
+                  $NPM_CMD run db:generate || {
+                    echo "❌ Error: Failed to generate Prisma client"
+                    exit 1
+                  }
+                fi
+                PRISMA_BIN="skip" # Skip the direct binary call since we used npm run
+              fi
             fi
             
-            if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-              sudo $PRISMA_BIN generate || {
-                echo "❌ Error: Failed to generate Prisma client"
-                exit 1
-              }
-            else
-              $PRISMA_BIN generate || {
-                echo "❌ Error: Failed to generate Prisma client"
-                exit 1
-              }
+            if [ "$PRISMA_BIN" != "skip" ] && [ -n "$PRISMA_BIN" ]; then
+              if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+                sudo "$PRISMA_BIN" generate || {
+                  echo "❌ Error: Failed to generate Prisma client"
+                  exit 1
+                }
+              else
+                "$PRISMA_BIN" generate || {
+                  echo "❌ Error: Failed to generate Prisma client"
+                  exit 1
+                }
+              fi
             fi
             
             # Run database migrations
             echo "🔄 Running database migrations..."
-            if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-              sudo $PRISMA_BIN migrate deploy || {
-                echo "❌ Error: Database migration failed"
-                exit 1
-              }
+            if [ "$PRISMA_BIN" != "skip" ] && [ -n "$PRISMA_BIN" ]; then
+              if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+                sudo "$PRISMA_BIN" migrate deploy || {
+                  echo "❌ Error: Database migration failed"
+                  exit 1
+                }
+              else
+                "$PRISMA_BIN" migrate deploy || {
+                  echo "❌ Error: Database migration failed"
+                  exit 1
+                }
+              fi
             else
-              $PRISMA_BIN migrate deploy || {
-                echo "❌ Error: Database migration failed"
-                exit 1
-              }
+              # Use npm exec with --yes to prevent package installation
+              if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+                sudo $NPM_CMD exec --yes prisma migrate deploy || {
+                  echo "❌ Error: Database migration failed"
+                  exit 1
+                }
+              else
+                $NPM_CMD exec --yes prisma migrate deploy || {
+                  echo "❌ Error: Database migration failed"
+                  exit 1
+                }
+              fi
             fi
             echo "✅ Database migrations completed"
             
