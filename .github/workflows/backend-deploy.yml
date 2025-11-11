@@ -132,9 +132,11 @@ jobs:
           export XDG_CONFIG_HOME="${{ secrets.BACKEND_DEPLOY_PATH }}/.config"
           export YARN_CACHE_FOLDER="${{ secrets.BACKEND_DEPLOY_PATH }}/.yarn-cache"
           mkdir -p "$XDG_CONFIG_HOME/yarn" "$YARN_CACHE_FOLDER"
-          # Use a local PM2 home to avoid socket permission conflicts
-          export PM2_HOME="${{ secrets.BACKEND_DEPLOY_PATH }}/.pm2"
+          # Use a short, writable PM2 home to avoid socket path length and permission issues
+          export PM2_HOME="/tmp/pm2-$(whoami)"
           mkdir -p "$PM2_HOME"
+          # Clean any stale PM2 socket files
+          rm -f "$PM2_HOME"/*.sock 2>/dev/null || true
           
           # Build the application first if dist doesn't exist
           if [ ! -d "dist" ]; then
@@ -181,4 +183,5 @@ jobs:
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           export PATH="/opt/nodejs/bin:$PATH"
+          export PM2_HOME="/tmp/pm2-$(whoami)"
           /opt/nodejs/bin/pm2 logs investment-crm-backend --nostream --lines 50
