@@ -152,14 +152,7 @@ jobs:
           fi
           echo "Using PM2 at: ${PM2_BIN:-pm2-not-found}"
           
-          # Restart/start PM2 process robustly
-          if ! RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" describe investment-crm-backend >/dev/null 2>&1; then
-            echo "PM2 process not found. Starting..."
-            RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" start dist/index.js --name investment-crm-backend
-          else
-            echo "PM2 process found. Restarting..."
-            RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" restart investment-crm-backend
-          fi
+          RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" restart investment-crm-backend
           
           # Wait up to 10s for process to become online
           for i in $(seq 1 10); do
