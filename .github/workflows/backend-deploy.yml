@@ -126,12 +126,15 @@ jobs:
       - name: Restart PM2 process
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
-          # Set HOME to root for PM2 compatibility
-          export HOME=/root
-          
-          # Redirect Yarn config to writable location to avoid /root/.config/yarn permission errors
+          # Use runner user's HOME to avoid /root permission issues
+          export HOME="${HOME:-/home/$(whoami)}"
+          # Redirect Yarn config/cache to writable locations
           export XDG_CONFIG_HOME="${{ secrets.BACKEND_DEPLOY_PATH }}/.config"
-          mkdir -p "$XDG_CONFIG_HOME/yarn"
+          export YARN_CACHE_FOLDER="${{ secrets.BACKEND_DEPLOY_PATH }}/.yarn-cache"
+          mkdir -p "$XDG_CONFIG_HOME/yarn" "$YARN_CACHE_FOLDER"
+          # Use a local PM2 home to avoid socket permission conflicts
+          export PM2_HOME="${{ secrets.BACKEND_DEPLOY_PATH }}/.pm2"
+          mkdir -p "$PM2_HOME"
           
           # Build the application first if dist doesn't exist
           if [ ! -d "dist" ]; then
@@ -141,7 +144,6 @@ jobs:
           
           # Restart PM2 process
           RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 restart investment-crm-backend || RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend
-          
           # Verify the process is actually running
           sleep 3
           if RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 list 2>&1 | grep -q "investment-crm-backend.*online"; then
