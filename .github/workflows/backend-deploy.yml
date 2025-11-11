@@ -665,475 +665,307 @@ jobs:
             $NPM_CMD --version || echo "npm version check failed"
           fi
 
-      - name: Deploy to server
+      - name: Setup deployment environment (self-hosted)
+        if: env.USE_SELF_HOSTED == 'true'
         run: |
           # Set deployment path (already set in env)
           DEPLOY_PATH="${DEPLOY_PATH:-/var/www/investment-crm/backend}"
           
-          if [ "$USE_SELF_HOSTED" = "true" ]; then
-            # Self-hosted runner: deploy directly
-            echo "🚀 Deploying on self-hosted runner..."
-            
-            # Source profile to ensure PATH is correct
-            [ -f /etc/profile ] && source /etc/profile
-            [ -f ~/.bashrc ] && source ~/.bashrc
-            [ -f ~/.profile ] && source ~/.profile
-            
-            # Use NPM_CMD from environment or find it (including root's installation)
-            if [ -z "$NPM_CMD" ]; then
-              if command -v npm &> /dev/null; then
-                NPM_CMD="npm"
-              else
-                NPM_CMD=$(find /usr/local /usr /opt /root -name npm -type f -executable 2>/dev/null | head -1)
-                if [ -z "$NPM_CMD" ]; then
-                  # Try using root's PATH
-                  ROOT_NPM=$(sudo -n sh -c 'command -v npm' 2>/dev/null || echo "")
-                  if [ -n "$ROOT_NPM" ] && [ -f "$ROOT_NPM" ]; then
-                    NPM_CMD="$ROOT_NPM"
-                  fi
-                fi
-              fi
-            fi
-            
-            if [ -z "$NPM_CMD" ]; then
-              echo "❌ Error: npm not found"
-              echo "💡 Tip: Run this on your server as root to fix:"
-              echo "   sudo ln -s \$(sudo which npm) /usr/local/bin/npm"
-              echo "   sudo ln -s \$(sudo which node) /usr/local/bin/node"
-              exit 1
-            fi
-            
-            echo "Using npm at: $NPM_CMD"
-            
-            # Create deployment directory
-            mkdir -p "$DEPLOY_PATH/releases"
-            mkdir -p "$DEPLOY_PATH/shared"
-            
-            # Move build artifact
-            mv backend-deploy.tar.gz "$DEPLOY_PATH/releases/"
-            
-            # Copy docker-compose.yml to deployment directory for easy access
-            # Check workspace root first (backend and frontend are separate repos)
-            if [ -f "$WORKSPACE_PATH/docker-compose.yml" ]; then
-              echo "📋 Copying docker-compose.yml to deployment directory..."
-              mkdir -p "$DEPLOY_PATH"
-              cp "$WORKSPACE_PATH/docker-compose.yml" "$DEPLOY_PATH/docker-compose.yml" || echo "⚠️  Failed to copy docker-compose.yml (non-critical)"
-            fi
-            
-            # Extract and deploy
-            cd "$DEPLOY_PATH/releases"
-            TIMESTAMP=$(date +%Y%m%d%H%M%S)
-            mkdir -p "$TIMESTAMP"
-            tar -xzf backend-deploy.tar.gz -C "$TIMESTAMP"
-            rm backend-deploy.tar.gz
-            
-            # Install production dependencies
-            cd "$TIMESTAMP"
-            RELEASE_DIR="$(pwd)"
-            echo "📂 Release directory: $RELEASE_DIR"
-            
-            if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-              sudo $NPM_CMD ci --production
+          # Source profile to ensure PATH is correct
+          [ -f /etc/profile ] && source /etc/profile
+          [ -f ~/.bashrc ] && source ~/.bashrc
+          [ -f ~/.profile ] && source ~/.profile
+          
+          # Use NPM_CMD from environment or find it (including root's installation)
+          if [ -z "$NPM_CMD" ]; then
+            if command -v npm &> /dev/null; then
+              NPM_CMD="npm"
             else
-              $NPM_CMD ci --production
-            fi
-            
-            # Verify Prisma is installed
-            if [ ! -f "node_modules/.bin/prisma" ]; then
-              echo "⚠️  Prisma binary not found after npm ci"
-              echo "   Checking if prisma package is installed..."
-              if [ -d "node_modules/prisma" ]; then
-                echo "   ✅ prisma package found in node_modules"
-                echo "   Listing node_modules/.bin:"
-                ls -la node_modules/.bin/ 2>/dev/null | head -10 || echo "   node_modules/.bin not found"
-              else
-                echo "   ❌ prisma package not found in node_modules"
-                echo "   This might be because prisma is in devDependencies"
-                echo "   Installing prisma as production dependency..."
-                if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-                  sudo $NPM_CMD install prisma@^5.20.0 --save --no-save || true
-                else
-                  $NPM_CMD install prisma@^5.20.0 --save --no-save || true
+              NPM_CMD=$(find /usr/local /usr /opt /root -name npm -type f -executable 2>/dev/null | head -1)
+              if [ -z "$NPM_CMD" ]; then
+                # Try using root's PATH
+                ROOT_NPM=$(sudo -n sh -c 'command -v npm' 2>/dev/null || echo "")
+                if [ -n "$ROOT_NPM" ] && [ -f "$ROOT_NPM" ]; then
+                  NPM_CMD="$ROOT_NPM"
                 fi
               fi
             fi
-            
-            # Create .env file from secret or use shared .env
-            if [ -f "$WORKSPACE_PATH/backend-env.txt" ]; then
-              cp "$WORKSPACE_PATH/backend-env.txt" .env
-              rm "$WORKSPACE_PATH/backend-env.txt"
-              echo "✅ Created .env file from BACKEND_ENV_FILE secret"
-            elif [ -f "$DEPLOY_PATH/shared/.env" ]; then
-              cp "$DEPLOY_PATH/shared/.env" .env
-              echo "✅ Using shared .env file"
-            else
-              echo "❌ Error: No .env file found. Deployment cannot continue."
-              exit 1
-            fi
-            
-            # Validate required environment variables
-            echo "🔍 Validating environment variables..."
-            set -a
-            source .env
-            set +a
-            if [ -z "$DATABASE_URL" ]; then
-              echo "❌ Error: DATABASE_URL is not set in .env file"
-              exit 1
-            fi
-            if [ -z "$JWT_SECRET" ]; then
-              echo "❌ Error: JWT_SECRET is not set in .env file"
-              exit 1
-            fi
-            echo "✅ Required environment variables are set"
-            
-            # Ensure Docker services are running before database migration
-            echo "🐳 Ensuring Docker services are running..."
-            
-            # Check for Docker (try multiple methods)
-            DOCKER_CMD=""
-            if command -v docker &> /dev/null; then
-              DOCKER_CMD="docker"
-              echo "✅ Docker is installed (found via command -v)"
-            elif [ -f /usr/bin/docker ]; then
-              DOCKER_CMD="/usr/bin/docker"
-              echo "✅ Docker is installed (found at /usr/bin/docker)"
-            elif [ -f /usr/local/bin/docker ]; then
-              DOCKER_CMD="/usr/local/bin/docker"
-              echo "✅ Docker is installed (found at /usr/local/bin/docker)"
-            elif sudo command -v docker &> /dev/null; then
-              DOCKER_CMD="sudo docker"
-              echo "✅ Docker is installed (found via sudo command -v)"
-            else
-              echo "⚠️  Docker is not found in PATH"
-              echo "   Trying to find Docker in common locations..."
-              DOCKER_CMD=$(find /usr /opt -name docker -type f -executable 2>/dev/null | head -1)
-              if [ -n "$DOCKER_CMD" ]; then
-                echo "✅ Docker found at: $DOCKER_CMD"
-              else
-                echo "❌ Docker is not installed or not accessible"
-                echo "💡 Install Docker: https://docs.docker.com/get-docker/"
-              fi
-            fi
-            
-            if [ -n "$DOCKER_CMD" ]; then
-              
-              # Check if docker-compose is available
-              DOCKER_COMPOSE_CMD=""
-              if command -v docker-compose &> /dev/null; then
-                DOCKER_COMPOSE_CMD="docker-compose"
-                echo "✅ Found docker-compose command"
-              elif $DOCKER_CMD compose version &> /dev/null 2>&1; then
-                DOCKER_COMPOSE_CMD="$DOCKER_CMD compose"
-                echo "✅ Found docker compose command"
-              else
-                echo "⚠️  docker-compose not found, trying to install..."
-                if command -v apt-get &> /dev/null; then
-                  sudo apt-get update && sudo apt-get install -y docker-compose-plugin 2>/dev/null || true
-                  if $DOCKER_CMD compose version &> /dev/null 2>&1; then
-                    DOCKER_COMPOSE_CMD="$DOCKER_CMD compose"
-                    echo "✅ docker-compose installed successfully"
-                  fi
-                fi
-              fi
-              
-              if [ -n "$DOCKER_COMPOSE_CMD" ]; then
-                # Find docker-compose.yml
-                DOCKER_COMPOSE_FILE=""
-                DOCKER_COMPOSE_DIR=""
-                
-                echo "🔍 Searching for docker-compose.yml..."
-                # Check workspace root first (backend and frontend are separate repos)
-                echo "  Checking: $WORKSPACE_PATH/docker-compose.yml"
-                if [ -f "$WORKSPACE_PATH/docker-compose.yml" ]; then
-                  DOCKER_COMPOSE_FILE="$WORKSPACE_PATH/docker-compose.yml"
-                  DOCKER_COMPOSE_DIR="$WORKSPACE_PATH"
-                  echo "✅ Found docker-compose.yml at: $DOCKER_COMPOSE_FILE"
-                elif [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
-                  DOCKER_COMPOSE_FILE="$DEPLOY_PATH/docker-compose.yml"
-                  DOCKER_COMPOSE_DIR="$DEPLOY_PATH"
-                  echo "✅ Found docker-compose.yml at: $DOCKER_COMPOSE_FILE"
-                elif [ -f "$DEPLOY_PATH/current/docker-compose.yml" ]; then
-                  DOCKER_COMPOSE_FILE="$DEPLOY_PATH/current/docker-compose.yml"
-                  DOCKER_COMPOSE_DIR="$DEPLOY_PATH/current"
-                  echo "✅ Found docker-compose.yml at: $DOCKER_COMPOSE_FILE"
-                else
-                  echo "⚠️  docker-compose.yml not found in expected locations"
-                  echo "   Searched:"
-                  echo "   - $WORKSPACE_PATH/docker-compose.yml"
-                  echo "   - $DEPLOY_PATH/docker-compose.yml"
-                  echo "   - $DEPLOY_PATH/current/docker-compose.yml"
-                fi
-                
-                if [ -n "$DOCKER_COMPOSE_FILE" ] && [ -n "$DOCKER_COMPOSE_DIR" ]; then
-                  echo "📂 Changing to directory: $DOCKER_COMPOSE_DIR"
-                  cd "$DOCKER_COMPOSE_DIR"
-                  
-                  # Check if containers are running (try with sudo if needed)
-                  POSTGRES_RUNNING="0"
-                  DOCKER_USE_SUDO="0"
-                  
-                  echo "🔍 Checking if PostgreSQL container is running..."
-                  if $DOCKER_CMD ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
-                    POSTGRES_RUNNING="1"
-                    echo "✅ PostgreSQL container is running"
-                  else
-                    echo "⚠️  PostgreSQL container is not running"
-                  fi
-                  
-                  if [ "$POSTGRES_RUNNING" = "0" ]; then
-                    echo "🚀 Starting Docker services (PostgreSQL and Redis)..."
-                    echo "   Using command: $DOCKER_COMPOSE_CMD"
-                    echo "   Directory: $DOCKER_COMPOSE_DIR"
-                    
-                    # Start services using the detected docker command
-                    echo "   Executing: $DOCKER_COMPOSE_CMD up -d postgres redis"
-                    if $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1; then
-                      echo "✅ Docker services started"
-                    else
-                      echo "❌ Failed to start Docker services"
-                      echo "💡 Try running manually: cd $DOCKER_COMPOSE_DIR && $DOCKER_COMPOSE_CMD up -d postgres redis"
-                      exit 1
-                    fi
-                    
-                    # Wait for services to be ready
-                    echo "⏳ Waiting for PostgreSQL to be ready..."
-                    RETRY_COUNT=0
-                    POSTGRES_READY="false"
-                    while [ $RETRY_COUNT -lt 30 ]; do
-                      if $DOCKER_CMD exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
-                        echo "✅ PostgreSQL is ready"
-                        POSTGRES_READY="true"
-                        break
-                      fi
-                      RETRY_COUNT=$((RETRY_COUNT + 1))
-                      [ $((RETRY_COUNT % 5)) -eq 0 ] && echo "  Still waiting... ($RETRY_COUNT/30)"
-                      sleep 2
-                    done
-                    
-                    if [ "$POSTGRES_READY" = "false" ]; then
-                      echo "⚠️  PostgreSQL took too long to start"
-                      echo "💡 Check logs: $DOCKER_CMD logs investment_crm_db"
-                    fi
-                    
-                    # Wait for Redis
-                    echo "⏳ Waiting for Redis to be ready..."
-                    RETRY_COUNT=0
-                    REDIS_READY="false"
-                    while [ $RETRY_COUNT -lt 30 ]; do
-                      if $DOCKER_CMD exec investment_crm_redis redis-cli ping &> /dev/null 2>&1; then
-                        echo "✅ Redis is ready"
-                        REDIS_READY="true"
-                        break
-                      fi
-                      RETRY_COUNT=$((RETRY_COUNT + 1))
-                      [ $((RETRY_COUNT % 5)) -eq 0 ] && echo "  Still waiting... ($RETRY_COUNT/30)"
-                      sleep 2
-                    done
-                    
-                    if [ "$REDIS_READY" = "false" ]; then
-                      echo "⚠️  Redis took too long to start"
-                      echo "💡 Check logs: $DOCKER_CMD logs investment_crm_redis"
-                    fi
-                  else
-                    echo "✅ Docker services are already running"
-                  fi
-                else
-                  echo "⚠️  docker-compose.yml not found, skipping Docker service startup"
-                  echo "💡 Make sure docker-compose.yml exists or start services manually"
-                fi
-              else
-                echo "⚠️  docker-compose command not available"
-              fi
-            else
-              echo "⚠️  Cannot proceed without Docker"
-              echo "💡 Install Docker or ensure it's in PATH"
-            fi
-            
-            # Test database connectivity
-            echo "🗄️  Testing database connectivity..."
-            # If DATABASE_URL points to localhost, try to connect via Docker container
-            if echo "$DATABASE_URL" | grep -q "localhost\|127.0.0.1"; then
-              echo "🔍 DATABASE_URL points to localhost, checking Docker container..."
-              # Use the DOCKER_CMD we detected earlier, or try to find it again
-              CHECK_DOCKER_CMD="${DOCKER_CMD:-docker}"
-              if [ -z "$DOCKER_CMD" ]; then
-                if command -v docker &> /dev/null; then
-                  CHECK_DOCKER_CMD="docker"
-                elif sudo command -v docker &> /dev/null; then
-                  CHECK_DOCKER_CMD="sudo docker"
-                fi
-              fi
-              
-              POSTGRES_RUNNING="0"
-              if $CHECK_DOCKER_CMD ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
-                POSTGRES_RUNNING="1"
-                echo "✅ PostgreSQL container is running"
-                # Try to test connection via docker exec
-                if $CHECK_DOCKER_CMD exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
-                  echo "✅ Database is ready (via Docker)"
-                else
-                  echo "⚠️  Database container is running but not ready yet"
-                fi
-              else
-                echo "⚠️  PostgreSQL container is not running, but DATABASE_URL points to localhost"
-                echo "💡 Make sure Docker services are started or update DATABASE_URL to point to the correct host"
-              fi
-            fi
-            
-            if command -v psql &> /dev/null; then
-              DB_CONN=$(echo "$DATABASE_URL" | sed -E 's|postgresql://([^:]+):([^@]+)@([^:]+):([^/]+)/(.+)|host=\3 port=\4 user=\1 password=\2 dbname=\5|')
-              if psql "$DB_CONN" -c 'SELECT 1' &> /dev/null; then
-                echo "✅ Database connection successful (via psql)"
-              else
-                echo "⚠️  Could not verify database connection with psql, but continuing..."
-              fi
-            else
-              echo "⚠️  psql not available, skipping database connectivity test"
-            fi
-            
-            # Generate Prisma client
-            echo "📦 Generating Prisma client..."
-            # Ensure we're in the release directory where node_modules exists
-            cd "$RELEASE_DIR"
-            echo "📂 Current directory: $(pwd)"
-            echo "📂 Release directory: $RELEASE_DIR"
-            
-            # Use the local Prisma binary directly
-            PRISMA_BIN=""
-            if [ -f "node_modules/.bin/prisma" ]; then
-              PRISMA_BIN="node_modules/.bin/prisma"
-              echo "✅ Found local Prisma binary"
-            elif [ -f "$RELEASE_DIR/node_modules/.bin/prisma" ]; then
-              PRISMA_BIN="$RELEASE_DIR/node_modules/.bin/prisma"
-              echo "✅ Found local Prisma binary (absolute path)"
-            else
-              echo "⚠️  Prisma binary not found in node_modules/.bin/prisma"
-              echo "   Current directory: $(pwd)"
-              echo "   Release directory: $RELEASE_DIR"
-              echo "   Checking if node_modules exists..."
-              if [ -d "node_modules" ]; then
-                echo "   ✅ node_modules directory exists"
-                echo "   Listing node_modules/.bin:"
-                ls -la node_modules/.bin/ 2>/dev/null | head -10 || echo "   node_modules/.bin not found"
-                echo "   Checking if prisma package exists..."
-                if [ -d "node_modules/prisma" ]; then
-                  echo "   ✅ prisma package found, but binary missing"
-                  echo "   This might be a symlink issue. Trying to run prisma directly..."
-                  if [ -f "node_modules/prisma/build/index.js" ]; then
-                    PRISMA_BIN="node node_modules/prisma/build/index.js"
-                    echo "   ✅ Using Prisma via node"
-                  fi
-                fi
-              else
-                echo "   ❌ node_modules directory not found"
-              fi
-              
-              # If still no binary, use npm run script (which should work)
-              if [ -z "$PRISMA_BIN" ]; then
-                echo "   Using npm run db:generate as fallback..."
-                if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-                  sudo $NPM_CMD run db:generate || {
-                    echo "❌ Error: Failed to generate Prisma client"
-                    exit 1
-                  }
-                else
-                  $NPM_CMD run db:generate || {
-                    echo "❌ Error: Failed to generate Prisma client"
-                    exit 1
-                  }
-                fi
-                PRISMA_BIN="skip" # Skip the direct binary call since we used npm run
-              fi
-            fi
-            
-            if [ "$PRISMA_BIN" != "skip" ] && [ -n "$PRISMA_BIN" ]; then
-              if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-                sudo "$PRISMA_BIN" generate || {
-                  echo "❌ Error: Failed to generate Prisma client"
-                  exit 1
-                }
-              else
-                "$PRISMA_BIN" generate || {
-                  echo "❌ Error: Failed to generate Prisma client"
-                  exit 1
-                }
-              fi
-            fi
-            
-            # Run database migrations
-            echo "🔄 Running database migrations..."
-            if [ "$PRISMA_BIN" != "skip" ] && [ -n "$PRISMA_BIN" ]; then
-              if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-                sudo "$PRISMA_BIN" migrate deploy || {
-                  echo "❌ Error: Database migration failed"
-                  exit 1
-                }
-              else
-                "$PRISMA_BIN" migrate deploy || {
-                  echo "❌ Error: Database migration failed"
-                  exit 1
-                }
-              fi
-            else
-              # Use npm exec with --yes to prevent package installation
-              if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-                sudo $NPM_CMD exec --yes prisma migrate deploy || {
-                  echo "❌ Error: Database migration failed"
-                  exit 1
-                }
-              else
-                $NPM_CMD exec --yes prisma migrate deploy || {
-                  echo "❌ Error: Database migration failed"
-                  exit 1
-                }
-              fi
-            fi
-            echo "✅ Database migrations completed"
-            
-            # Create symlink to current release
-            cd "$DEPLOY_PATH"
-            rm -f current
-            ln -s "releases/$TIMESTAMP" current
-            
-            # Restart application
-            if command -v pm2 &> /dev/null; then
-              pm2 restart investment-crm-backend || pm2 start current/dist/index.js --name investment-crm-backend
-            elif command -v systemctl &> /dev/null; then
-              sudo systemctl restart investment-crm-backend || echo "Service not configured"
-            else
-              # Fallback: kill existing process and start new one
-              pkill -f 'node.*dist/index.js' || true
-              cd current
-              if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-                sudo nohup $NPM_CMD start > /dev/null 2>&1 &
-              else
-                nohup $NPM_CMD start > /dev/null 2>&1 &
-              fi
-            fi
-            
-            # Cleanup old releases (keep last 5)
-            cd "$DEPLOY_PATH/releases"
-            ls -t | tail -n +6 | xargs -r rm -rf
+          fi
+          
+          if [ -z "$NPM_CMD" ]; then
+            echo "❌ Error: npm not found"
+            echo "💡 Tip: Run this on your server as root to fix:"
+            echo "   sudo ln -s \$(sudo which npm) /usr/local/bin/npm"
+            echo "   sudo ln -s \$(sudo which node) /usr/local/bin/node"
+            exit 1
+          fi
+          
+          echo "Using npm at: $NPM_CMD"
+          echo "NPM_CMD=$NPM_CMD" >> $GITHUB_ENV
+          
+          # Create deployment directory
+          mkdir -p "$DEPLOY_PATH/releases"
+          mkdir -p "$DEPLOY_PATH/shared"
+          
+          # Move build artifact
+          mv backend-deploy.tar.gz "$DEPLOY_PATH/releases/"
+          
+          # Copy docker-compose.yml to deployment directory for easy access
+          # Check workspace root first (backend and frontend are separate repos)
+          if [ -f "$WORKSPACE_PATH/docker-compose.yml" ]; then
+            echo "📋 Copying docker-compose.yml to deployment directory..."
+            mkdir -p "$DEPLOY_PATH"
+            cp "$WORKSPACE_PATH/docker-compose.yml" "$DEPLOY_PATH/docker-compose.yml" || echo "⚠️  Failed to copy docker-compose.yml (non-critical)"
+          fi
+          
+          # Extract and deploy
+          cd "$DEPLOY_PATH/releases"
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          mkdir -p "$TIMESTAMP"
+          tar -xzf backend-deploy.tar.gz -C "$TIMESTAMP"
+          rm backend-deploy.tar.gz
+          
+          echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
+          echo "RELEASE_DIR=$DEPLOY_PATH/releases/$TIMESTAMP" >> $GITHUB_ENV
+
+      - name: Install dependencies (self-hosted)
+        if: env.USE_SELF_HOSTED == 'true'
+        run: |
+          cd "$RELEASE_DIR"
+          echo "📂 Release directory: $RELEASE_DIR"
+          
+          if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+            sudo $NPM_CMD ci --production
           else
-            # GitHub-hosted runner: deploy via SSH
-            echo "🚀 Deploying via SSH..."
-            
-            # Create deployment directory on server
-            ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-              mkdir -p $DEPLOY_PATH/releases
-              mkdir -p $DEPLOY_PATH/shared
-            "
-            
-            # Upload build artifact
-            scp backend-deploy.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$DEPLOY_PATH/releases/
-            
-            # Upload .env file if provided
-            if [ -f backend-env.txt ]; then
-              scp backend-env.txt ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$DEPLOY_PATH/releases/backend-env.txt
+            $NPM_CMD ci --production
+          fi
+          
+          # Verify Prisma is installed
+          if [ ! -f "node_modules/.bin/prisma" ]; then
+            echo "⚠️  Prisma binary not found after npm ci"
+            echo "   Checking if prisma package is installed..."
+            if [ -d "node_modules/prisma" ]; then
+              echo "   ✅ prisma package found in node_modules"
+              echo "   Listing node_modules/.bin:"
+              ls -la node_modules/.bin/ 2>/dev/null | head -10 || echo "   node_modules/.bin not found"
+            else
+              echo "   ❌ prisma package not found in node_modules"
+              echo "   This might be because prisma is in devDependencies"
+              echo "   Installing prisma as production dependency..."
+              if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+                sudo $NPM_CMD install prisma@^5.20.0 --save --no-save || true
+              else
+                $NPM_CMD install prisma@^5.20.0 --save --no-save || true
+              fi
+            fi
+          fi
+
+      - name: Setup environment variables (self-hosted)
+        if: env.USE_SELF_HOSTED == 'true'
+        run: |
+          cd "$RELEASE_DIR"
+          DEPLOY_PATH="${DEPLOY_PATH:-/var/www/investment-crm/backend}"
+          
+          # Create .env file from secret or use shared .env
+          if [ -f "$WORKSPACE_PATH/backend-env.txt" ]; then
+            cp "$WORKSPACE_PATH/backend-env.txt" .env
+            rm "$WORKSPACE_PATH/backend-env.txt"
+            echo "✅ Created .env file from BACKEND_ENV_FILE secret"
+          elif [ -f "$DEPLOY_PATH/shared/.env" ]; then
+            cp "$DEPLOY_PATH/shared/.env" .env
+            echo "✅ Using shared .env file"
+          else
+            echo "❌ Error: No .env file found. Deployment cannot continue."
+            exit 1
+          fi
+          
+          # Validate required environment variables
+          echo "🔍 Validating environment variables..."
+          set -a
+          source .env
+          set +a
+          if [ -z "$DATABASE_URL" ]; then
+            echo "❌ Error: DATABASE_URL is not set in .env file"
+            exit 1
+          fi
+          if [ -z "$JWT_SECRET" ]; then
+            echo "❌ Error: JWT_SECRET is not set in .env file"
+            exit 1
+          fi
+          echo "✅ Required environment variables are set"
+
+      - name: Start Docker services (self-hosted)
+        if: env.USE_SELF_HOSTED == 'true'
+        run: |
+          DEPLOY_PATH="${DEPLOY_PATH:-/var/www/investment-crm/backend}"
+          
+          # Check for Docker (try multiple methods)
+          DOCKER_CMD=""
+          if command -v docker &> /dev/null; then
+            DOCKER_CMD="docker"
+            echo "✅ Docker is installed (found via command -v)"
+          elif [ -f /usr/bin/docker ]; then
+            DOCKER_CMD="/usr/bin/docker"
+            echo "✅ Docker is installed (found at /usr/bin/docker)"
+          elif [ -f /usr/local/bin/docker ]; then
+            DOCKER_CMD="/usr/local/bin/docker"
+            echo "✅ Docker is installed (found at /usr/local/bin/docker)"
+          elif sudo command -v docker &> /dev/null; then
+            DOCKER_CMD="sudo docker"
+            echo "✅ Docker is installed (found via sudo command -v)"
+          else
+            echo "⚠️  Docker is not found in PATH"
+            DOCKER_CMD=$(find /usr /opt -name docker -type f -executable 2>/dev/null | head -1)
+            if [ -n "$DOCKER_CMD" ]; then
+              echo "✅ Docker found at: $DOCKER_CMD"
+            else
+              echo "❌ Docker is not installed or not accessible"
+              exit 1
+            fi
+          fi
+          
+          if [ -n "$DOCKER_CMD" ]; then
+            # Check if docker-compose is available
+            DOCKER_COMPOSE_CMD=""
+            if command -v docker-compose &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker-compose"
+            elif $DOCKER_CMD compose version &> /dev/null 2>&1; then
+              DOCKER_COMPOSE_CMD="$DOCKER_CMD compose"
             fi
             
-            # Extract and deploy on server
-            ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            if [ -n "$DOCKER_COMPOSE_CMD" ]; then
+              # Find docker-compose.yml
+              DOCKER_COMPOSE_DIR=""
+              if [ -f "$WORKSPACE_PATH/docker-compose.yml" ]; then
+                DOCKER_COMPOSE_DIR="$WORKSPACE_PATH"
+              elif [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
+                DOCKER_COMPOSE_DIR="$DEPLOY_PATH"
+              elif [ -f "$DEPLOY_PATH/current/docker-compose.yml" ]; then
+                DOCKER_COMPOSE_DIR="$DEPLOY_PATH/current"
+              fi
+              
+              if [ -n "$DOCKER_COMPOSE_DIR" ]; then
+                cd "$DOCKER_COMPOSE_DIR"
+                if ! $DOCKER_CMD ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
+                  echo "🚀 Starting Docker services..."
+                  $DOCKER_COMPOSE_CMD up -d postgres redis
+                  
+                  # Wait for PostgreSQL
+                  RETRY_COUNT=0
+                  while [ $RETRY_COUNT -lt 30 ]; do
+                    if $DOCKER_CMD exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
+                      echo "✅ PostgreSQL is ready"
+                      break
+                    fi
+                    RETRY_COUNT=$((RETRY_COUNT + 1))
+                    sleep 2
+                  done
+                  
+                  # Wait for Redis
+                  RETRY_COUNT=0
+                  while [ $RETRY_COUNT -lt 30 ]; do
+                    if $DOCKER_CMD exec investment_crm_redis redis-cli ping &> /dev/null 2>&1; then
+                      echo "✅ Redis is ready"
+                      break
+                    fi
+                    RETRY_COUNT=$((RETRY_COUNT + 1))
+                    sleep 2
+                  done
+                else
+                  echo "✅ Docker services are already running"
+                fi
+              fi
+            fi
+          fi
+
+      - name: Run database migrations (self-hosted)
+        if: env.USE_SELF_HOSTED == 'true'
+        run: |
+          cd "$RELEASE_DIR"
+          
+          # Generate Prisma client
+          echo "📦 Generating Prisma client..."
+          PRISMA_BIN=""
+          if [ -f "node_modules/.bin/prisma" ]; then
+            PRISMA_BIN="node_modules/.bin/prisma"
+          elif [ -f "$RELEASE_DIR/node_modules/.bin/prisma" ]; then
+            PRISMA_BIN="$RELEASE_DIR/node_modules/.bin/prisma"
+          elif [ -d "node_modules/prisma" ] && [ -f "node_modules/prisma/build/index.js" ]; then
+            PRISMA_BIN="node node_modules/prisma/build/index.js"
+          fi
+          
+          if [ -n "$PRISMA_BIN" ]; then
+            if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+              sudo "$PRISMA_BIN" generate
+              sudo "$PRISMA_BIN" migrate deploy
+            else
+              "$PRISMA_BIN" generate
+              "$PRISMA_BIN" migrate deploy
+            fi
+          else
+            if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+              sudo $NPM_CMD run db:generate
+              sudo $NPM_CMD exec --yes prisma migrate deploy
+            else
+              $NPM_CMD run db:generate
+              $NPM_CMD exec --yes prisma migrate deploy
+            fi
+          fi
+          echo "✅ Database migrations completed"
+
+      - name: Finalize deployment (self-hosted)
+        if: env.USE_SELF_HOSTED == 'true'
+        run: |
+          DEPLOY_PATH="${DEPLOY_PATH:-/var/www/investment-crm/backend}"
+          
+          # Create symlink to current release
+          cd "$DEPLOY_PATH"
+          rm -f current
+          ln -s "releases/$TIMESTAMP" current
+          
+          # Restart application
+          if command -v pm2 &> /dev/null; then
+            pm2 restart investment-crm-backend || pm2 start current/dist/index.js --name investment-crm-backend
+          elif command -v systemctl &> /dev/null; then
+            sudo systemctl restart investment-crm-backend || echo "Service not configured"
+          else
+            pkill -f 'node.*dist/index.js' || true
+            cd current
+            if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+              sudo nohup $NPM_CMD start > /dev/null 2>&1 &
+            else
+              nohup $NPM_CMD start > /dev/null 2>&1 &
+            fi
+          fi
+          
+          # Cleanup old releases (keep last 5)
+          cd "$DEPLOY_PATH/releases"
+          ls -t | tail -n +6 | xargs -r rm -rf
+
+      - name: Deploy to server (GitHub-hosted)
+        if: env.USE_SELF_HOSTED != 'true'
+        run: |
+          DEPLOY_PATH="${DEPLOY_PATH:-/var/www/investment-crm/backend}"
+          
+          # GitHub-hosted runner: deploy via SSH
+          echo "🚀 Deploying via SSH..."
+          
+          # Create deployment directory on server
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            mkdir -p $DEPLOY_PATH/releases
+            mkdir -p $DEPLOY_PATH/shared
+          "
+          
+          # Upload build artifact
+          scp backend-deploy.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$DEPLOY_PATH/releases/
+          
+          # Upload .env file if provided
+          if [ -f backend-env.txt ]; then
+            scp backend-env.txt ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$DEPLOY_PATH/releases/backend-env.txt
+          fi
+          
+          # Extract and deploy on server
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
               cd $DEPLOY_PATH/releases
               TIMESTAMP=\$(date +%Y%m%d%H%M%S)
               mkdir -p \$TIMESTAMP
@@ -1250,11 +1082,10 @@ jobs:
                 nohup ${NPM_CMD:-npm} start > /dev/null 2>&1 &
               fi
               
-              # Cleanup old releases (keep last 5)
-              cd releases
-              ls -t | tail -n +6 | xargs -r rm -rf
-            "
-          fi
+            # Cleanup old releases (keep last 5)
+            cd releases
+            ls -t | tail -n +6 | xargs -r rm -rf
+          "
 
       - name: Health check
         run: |
