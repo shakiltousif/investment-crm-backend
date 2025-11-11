@@ -761,15 +761,117 @@ jobs:
             fi
             echo "✅ Required environment variables are set"
             
+            # Ensure Docker services are running before database migration
+            echo "🐳 Ensuring Docker services are running..."
+            if command -v docker &> /dev/null; then
+              # Check if docker-compose is available
+              if command -v docker-compose &> /dev/null; then
+                DOCKER_COMPOSE_CMD="docker-compose"
+              elif docker compose version &> /dev/null; then
+                DOCKER_COMPOSE_CMD="docker compose"
+              else
+                DOCKER_COMPOSE_CMD="docker compose"
+              fi
+              
+              # Find docker-compose.yml
+              DOCKER_COMPOSE_FILE=""
+              DOCKER_COMPOSE_DIR=""
+              if [ -f "$WORKSPACE_PATH/backend/docker-compose.yml" ]; then
+                DOCKER_COMPOSE_FILE="$WORKSPACE_PATH/backend/docker-compose.yml"
+                DOCKER_COMPOSE_DIR="$WORKSPACE_PATH/backend"
+              elif [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
+                DOCKER_COMPOSE_FILE="$DEPLOY_PATH/docker-compose.yml"
+                DOCKER_COMPOSE_DIR="$DEPLOY_PATH"
+              fi
+              
+              if [ -n "$DOCKER_COMPOSE_FILE" ] && [ -n "$DOCKER_COMPOSE_DIR" ]; then
+                cd "$DOCKER_COMPOSE_DIR"
+                
+                # Check if containers are running (try with sudo if needed)
+                POSTGRES_RUNNING="0"
+                if docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
+                  POSTGRES_RUNNING="1"
+                elif sudo docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
+                  POSTGRES_RUNNING="1"
+                  DOCKER_USE_SUDO="1"
+                fi
+                
+                if [ "$POSTGRES_RUNNING" = "0" ]; then
+                  echo "🚀 Starting Docker services (PostgreSQL and Redis)..."
+                  # Try with sudo first, then without
+                  if sudo $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1; then
+                    DOCKER_USE_SUDO="1"
+                    echo "✅ Docker services started with sudo"
+                  elif $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1; then
+                    DOCKER_USE_SUDO="0"
+                    echo "✅ Docker services started"
+                  else
+                    echo "⚠️  Failed to start Docker services, but continuing..."
+                  fi
+                  
+                  # Wait for services to be ready
+                  echo "⏳ Waiting for PostgreSQL to be ready..."
+                  RETRY_COUNT=0
+                  while [ $RETRY_COUNT -lt 30 ]; do
+                    if [ "$DOCKER_USE_SUDO" = "1" ]; then
+                      if sudo docker exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
+                        echo "✅ PostgreSQL is ready"
+                        break
+                      fi
+                    else
+                      if docker exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
+                        echo "✅ PostgreSQL is ready"
+                        break
+                      fi
+                    fi
+                    RETRY_COUNT=$((RETRY_COUNT + 1))
+                    [ $((RETRY_COUNT % 5)) -eq 0 ] && echo "  Still waiting... ($RETRY_COUNT/30)"
+                    sleep 2
+                  done
+                  
+                  # Wait for Redis
+                  echo "⏳ Waiting for Redis to be ready..."
+                  RETRY_COUNT=0
+                  while [ $RETRY_COUNT -lt 30 ]; do
+                    if [ "$DOCKER_USE_SUDO" = "1" ]; then
+                      if sudo docker exec investment_crm_redis redis-cli ping &> /dev/null 2>&1; then
+                        echo "✅ Redis is ready"
+                        break
+                      fi
+                    else
+                      if docker exec investment_crm_redis redis-cli ping &> /dev/null 2>&1; then
+                        echo "✅ Redis is ready"
+                        break
+                      fi
+                    fi
+                    RETRY_COUNT=$((RETRY_COUNT + 1))
+                    [ $((RETRY_COUNT % 5)) -eq 0 ] && echo "  Still waiting... ($RETRY_COUNT/30)"
+                    sleep 2
+                  done
+                else
+                  echo "✅ Docker services are already running"
+                fi
+              fi
+            fi
+            
             # Test database connectivity
             echo "🗄️  Testing database connectivity..."
             # If DATABASE_URL points to localhost, try to connect via Docker container
             if echo "$DATABASE_URL" | grep -q "localhost\|127.0.0.1"; then
               echo "🔍 DATABASE_URL points to localhost, checking Docker container..."
-              if docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" | grep -q "investment_crm_db"; then
+              POSTGRES_RUNNING="0"
+              if docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
+                POSTGRES_RUNNING="1"
+                DOCKER_CMD="docker"
+              elif sudo docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
+                POSTGRES_RUNNING="1"
+                DOCKER_CMD="sudo docker"
+              fi
+              
+              if [ "$POSTGRES_RUNNING" = "1" ]; then
                 echo "✅ PostgreSQL container is running"
                 # Try to test connection via docker exec
-                if docker exec investment_crm_db pg_isready -U postgres &> /dev/null; then
+                if $DOCKER_CMD exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
                   echo "✅ Database is ready (via Docker)"
                 else
                   echo "⚠️  Database container is running but not ready yet"
