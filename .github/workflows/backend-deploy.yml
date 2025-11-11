@@ -160,23 +160,144 @@ jobs:
           if [ "${{ vars.USE_SELF_HOSTED_RUNNER }}" = "true" ]; then
             echo "✅ Running on self-hosted runner - no SSH needed"
             
-            # Check Node.js version
+            # Source common profile files to ensure PATH is set correctly
+            [ -f /etc/profile ] && source /etc/profile
+            [ -f ~/.bashrc ] && source ~/.bashrc
+            [ -f ~/.bash_profile ] && source ~/.bash_profile
+            [ -f ~/.profile ] && source ~/.profile
+            
+            # Add common Node.js paths to PATH
+            export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH"
+            export PATH="$HOME/.nvm/versions/node/*/bin:$PATH"
+            export PATH="/opt/nodejs/bin:$PATH"
+            
+            # Check Node.js version (try multiple methods, including checking root's PATH)
             echo "📦 Checking Node.js installation..."
-            if ! command -v node &> /dev/null; then
-              echo "❌ Node.js is not installed on the server"
+            echo "Current user: $(whoami)"
+            echo "Current PATH: $PATH"
+            
+            NODE_CMD=""
+            # First try standard locations
+            if command -v node &> /dev/null; then
+              NODE_CMD="node"
+            elif [ -f /usr/local/bin/node ]; then
+              NODE_CMD="/usr/local/bin/node"
+            elif [ -f /usr/bin/node ]; then
+              NODE_CMD="/usr/bin/node"
+            elif [ -f /opt/nodejs/bin/node ]; then
+              NODE_CMD="/opt/nodejs/bin/node"
+            elif [ -f /root/.nvm/versions/node/*/bin/node ]; then
+              # Check root's nvm installation
+              NODE_CMD=$(find /root/.nvm/versions/node -name node -type f -executable 2>/dev/null | head -1)
+            elif [ -n "$NVM_DIR" ] && [ -f "$NVM_DIR/versions/node/$(cat $NVM_DIR/alias/default 2>/dev/null || echo 'v*')/bin/node" ]; then
+              NODE_CMD="$NVM_DIR/versions/node/$(cat $NVM_DIR/alias/default 2>/dev/null || echo 'v*')/bin/node"
+            else
+              # Try to find node in common locations (including root's home)
+              echo "Searching for node in common locations..."
+              NODE_CMD=$(find /usr/local /usr /opt /root -name node -type f -executable 2>/dev/null | head -1)
+            fi
+            
+            # If still not found, try using sudo to check root's PATH
+            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+              echo "Trying to find node using root's PATH..."
+              ROOT_NODE=$(sudo -n sh -c 'command -v node' 2>/dev/null || echo "")
+              if [ -n "$ROOT_NODE" ] && [ -f "$ROOT_NODE" ]; then
+                NODE_CMD="$ROOT_NODE"
+              fi
+            fi
+            
+            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+              echo "❌ Node.js is not installed on the server or not accessible"
+              echo "Current PATH: $PATH"
+              echo "Trying to find node..."
+              which node 2>/dev/null || echo "node not in PATH"
+              find /usr /opt /root -name node -type f 2>/dev/null | head -5 || echo "node not found in common locations"
+              echo ""
+              echo "💡 Tip: If Node.js is installed as root, you may need to:"
+              echo "   1. Create symlinks: sudo ln -s \$(sudo which node) /usr/local/bin/node"
+              echo "   2. Or install Node.js for the runner user"
               exit 1
             fi
-            NODE_VERSION=$(node --version)
+            
+            # Verify we can execute it
+            if [ ! -x "$NODE_CMD" ]; then
+              echo "⚠️  Node.js found but not executable, trying with sudo..."
+              if sudo -n test -x "$NODE_CMD" 2>/dev/null; then
+                echo "Node.js requires sudo to execute"
+              else
+                echo "❌ Node.js found at $NODE_CMD but cannot be executed"
+                exit 1
+              fi
+            fi
+            
+            NODE_VERSION=$($NODE_CMD --version 2>/dev/null || sudo $NODE_CMD --version 2>/dev/null || echo "unknown")
+            echo "✅ Node.js found at: $NODE_CMD"
             echo "✅ Node.js version: $NODE_VERSION"
             
-            # Check npm
+            # Export NODE_CMD for use in later steps
+            echo "NODE_CMD=$NODE_CMD" >> $GITHUB_ENV
+            
+            # Check npm (try multiple methods, including checking root's PATH)
             echo "📦 Checking npm installation..."
-            if ! command -v npm &> /dev/null; then
-              echo "❌ npm is not installed on the server"
+            NPM_CMD=""
+            # First try standard locations
+            if command -v npm &> /dev/null; then
+              NPM_CMD="npm"
+            elif [ -f /usr/local/bin/npm ]; then
+              NPM_CMD="/usr/local/bin/npm"
+            elif [ -f /usr/bin/npm ]; then
+              NPM_CMD="/usr/bin/npm"
+            elif [ -f /opt/nodejs/bin/npm ]; then
+              NPM_CMD="/opt/nodejs/bin/npm"
+            elif [ -f /root/.nvm/versions/node/*/bin/npm ]; then
+              # Check root's nvm installation
+              NPM_CMD=$(find /root/.nvm/versions/node -name npm -type f -executable 2>/dev/null | head -1)
+            elif [ -n "$NVM_DIR" ] && [ -f "$NVM_DIR/versions/node/$(cat $NVM_DIR/alias/default 2>/dev/null || echo 'v*')/bin/npm" ]; then
+              NPM_CMD="$NVM_DIR/versions/node/$(cat $NVM_DIR/alias/default 2>/dev/null || echo 'v*')/bin/npm"
+            else
+              # Try to find npm in common locations (including root's home)
+              echo "Searching for npm in common locations..."
+              NPM_CMD=$(find /usr/local /usr /opt /root -name npm -type f -executable 2>/dev/null | head -1)
+            fi
+            
+            # If still not found, try using sudo to check root's PATH
+            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+              echo "Trying to find npm using root's PATH..."
+              ROOT_NPM=$(sudo -n sh -c 'command -v npm' 2>/dev/null || echo "")
+              if [ -n "$ROOT_NPM" ] && [ -f "$ROOT_NPM" ]; then
+                NPM_CMD="$ROOT_NPM"
+              fi
+            fi
+            
+            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+              echo "❌ npm is not installed on the server or not accessible"
+              echo "Trying to find npm..."
+              which npm 2>/dev/null || echo "npm not in PATH"
+              find /usr /opt /root -name npm -type f 2>/dev/null | head -5 || echo "npm not found in common locations"
+              echo ""
+              echo "💡 Tip: If npm is installed as root, you may need to:"
+              echo "   1. Create symlinks: sudo ln -s \$(sudo which npm) /usr/local/bin/npm"
+              echo "   2. Or install npm for the runner user"
               exit 1
             fi
-            NPM_VERSION=$(npm --version)
+            
+            # Verify we can execute it
+            if [ ! -x "$NPM_CMD" ]; then
+              echo "⚠️  npm found but not executable, trying with sudo..."
+              if sudo -n test -x "$NPM_CMD" 2>/dev/null; then
+                echo "npm requires sudo to execute"
+              else
+                echo "❌ npm found at $NPM_CMD but cannot be executed"
+                exit 1
+              fi
+            fi
+            
+            NPM_VERSION=$($NPM_CMD --version 2>/dev/null || sudo $NPM_CMD --version 2>/dev/null || echo "unknown")
+            echo "✅ npm found at: $NPM_CMD"
             echo "✅ npm version: $NPM_VERSION"
+            
+            # Export NPM_CMD for use in later steps
+            echo "NPM_CMD=$NPM_CMD" >> $GITHUB_ENV
             
             # Check deployment directory
             echo "📁 Checking deployment directory..."
@@ -382,6 +503,61 @@ jobs:
             echo "${{ secrets.BACKEND_ENV_FILE }}" > backend-env.txt
           fi
 
+      - name: Setup PATH for self-hosted runner
+        if: vars.USE_SELF_HOSTED_RUNNER == 'true'
+        run: |
+          # Source common profile files to ensure PATH is set correctly
+          [ -f /etc/profile ] && source /etc/profile
+          [ -f ~/.bashrc ] && source ~/.bashrc
+          [ -f ~/.bash_profile ] && source ~/.bash_profile
+          [ -f ~/.profile ] && source ~/.profile
+          
+          # Add common Node.js paths to PATH
+          export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH"
+          export PATH="$HOME/.nvm/versions/node/*/bin:$PATH"
+          export PATH="/opt/nodejs/bin:$PATH"
+          
+          # Find Node.js and npm if not in PATH (including root's installation)
+          if ! command -v node &> /dev/null; then
+            NODE_CMD=$(find /usr/local /usr /opt /root -name node -type f -executable 2>/dev/null | head -1)
+            if [ -z "$NODE_CMD" ]; then
+              # Try using root's PATH
+              ROOT_NODE=$(sudo -n sh -c 'command -v node' 2>/dev/null || echo "")
+              if [ -n "$ROOT_NODE" ] && [ -f "$ROOT_NODE" ]; then
+                NODE_CMD="$ROOT_NODE"
+              fi
+            fi
+            if [ -n "$NODE_CMD" ]; then
+              echo "NODE_CMD=$NODE_CMD" >> $GITHUB_ENV
+              echo "PATH=$(dirname $NODE_CMD):$PATH" >> $GITHUB_ENV
+            fi
+          fi
+          
+          if ! command -v npm &> /dev/null; then
+            NPM_CMD=$(find /usr/local /usr /opt /root -name npm -type f -executable 2>/dev/null | head -1)
+            if [ -z "$NPM_CMD" ]; then
+              # Try using root's PATH
+              ROOT_NPM=$(sudo -n sh -c 'command -v npm' 2>/dev/null || echo "")
+              if [ -n "$ROOT_NPM" ] && [ -f "$ROOT_NPM" ]; then
+                NPM_CMD="$ROOT_NPM"
+              fi
+            fi
+            if [ -n "$NPM_CMD" ]; then
+              echo "NPM_CMD=$NPM_CMD" >> $GITHUB_ENV
+              echo "PATH=$(dirname $NPM_CMD):$PATH" >> $GITHUB_ENV
+            fi
+          fi
+          
+          # Verify Node.js and npm are accessible
+          echo "Node.js: $(command -v node || echo 'not found')"
+          echo "npm: $(command -v npm || echo 'not found')"
+          if [ -n "$NODE_CMD" ]; then
+            $NODE_CMD --version || echo "Node.js version check failed"
+          fi
+          if [ -n "$NPM_CMD" ]; then
+            $NPM_CMD --version || echo "npm version check failed"
+          fi
+
       - name: Deploy to server
         run: |
           # Set deployment path
@@ -390,6 +566,37 @@ jobs:
           if [ "${{ vars.USE_SELF_HOSTED_RUNNER }}" = "true" ]; then
             # Self-hosted runner: deploy directly
             echo "🚀 Deploying on self-hosted runner..."
+            
+            # Source profile to ensure PATH is correct
+            [ -f /etc/profile ] && source /etc/profile
+            [ -f ~/.bashrc ] && source ~/.bashrc
+            [ -f ~/.profile ] && source ~/.profile
+            
+            # Use NPM_CMD from environment or find it (including root's installation)
+            if [ -z "$NPM_CMD" ]; then
+              if command -v npm &> /dev/null; then
+                NPM_CMD="npm"
+              else
+                NPM_CMD=$(find /usr/local /usr /opt /root -name npm -type f -executable 2>/dev/null | head -1)
+                if [ -z "$NPM_CMD" ]; then
+                  # Try using root's PATH
+                  ROOT_NPM=$(sudo -n sh -c 'command -v npm' 2>/dev/null || echo "")
+                  if [ -n "$ROOT_NPM" ] && [ -f "$ROOT_NPM" ]; then
+                    NPM_CMD="$ROOT_NPM"
+                  fi
+                fi
+              fi
+            fi
+            
+            if [ -z "$NPM_CMD" ]; then
+              echo "❌ Error: npm not found"
+              echo "💡 Tip: Run this on your server as root to fix:"
+              echo "   sudo ln -s \$(sudo which npm) /usr/local/bin/npm"
+              echo "   sudo ln -s \$(sudo which node) /usr/local/bin/node"
+              exit 1
+            fi
+            
+            echo "Using npm at: $NPM_CMD"
             
             # Create deployment directory
             mkdir -p "$DEPLOY_PATH/releases"
@@ -407,7 +614,7 @@ jobs:
             
             # Install production dependencies
             cd "$TIMESTAMP"
-            npm ci --production
+            $NPM_CMD ci --production
             
             # Create .env file from secret or use shared .env
             if [ -f "${{ github.workspace }}/backend-env.txt" ]; then
@@ -452,14 +659,14 @@ jobs:
             
             # Generate Prisma client
             echo "📦 Generating Prisma client..."
-            npm run db:generate || {
+            $NPM_CMD run db:generate || {
               echo "❌ Error: Failed to generate Prisma client"
               exit 1
             }
             
             # Run database migrations
             echo "🔄 Running database migrations..."
-            npx prisma migrate deploy || {
+            $NPM_CMD exec prisma migrate deploy || {
               echo "❌ Error: Database migration failed"
               exit 1
             }
@@ -479,7 +686,7 @@ jobs:
               # Fallback: kill existing process and start new one
               pkill -f 'node.*dist/index.js' || true
               cd current
-              nohup npm start > /dev/null 2>&1 &
+              nohup $NPM_CMD start > /dev/null 2>&1 &
             fi
             
             # Cleanup old releases (keep last 5)
@@ -596,4 +803,5 @@ jobs:
         run: |
           sleep 10
           curl -f ${{ secrets.BACKEND_URL || 'http://localhost:3001' }}/health || exit 1
+
 
