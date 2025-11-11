@@ -135,7 +135,7 @@ jobs:
           fi
           
           # Restart PM2 process
-          /opt/nodejs/bin/pm2 restart investment-crm-backend || pm2 start dist/index.js --name investment-crm-backend
+          /opt/nodejs/bin/pm2 restart investment-crm-backend
           
           # Verify the process is actually running
           sleep 3
