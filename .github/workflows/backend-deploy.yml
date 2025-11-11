@@ -69,15 +69,48 @@ jobs:
             echo "Redis container is already running."
           fi
 
-      - name: Check and start PM2 process
+      - name: Setup PM2 directory and permissions
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
-          # Set PM2 home to the user's PM2 directory
-          export PM2_HOME=/root/.pm2
+          # Get the current user's home directory
+          PM2_USER_HOME="${HOME:-/home/$(whoami)}"
+          PM2_HOME_DIR="${PM2_USER_HOME}/.pm2"
+          
+          # Create PM2 directory with proper permissions if it doesn't exist
+          if [ ! -d "$PM2_HOME_DIR" ]; then
+            echo "Creating PM2 directory at $PM2_HOME_DIR"
+            mkdir -p "$PM2_HOME_DIR"
+            chmod 755 "$PM2_HOME_DIR"
+          else
+            echo "PM2 directory already exists at $PM2_HOME_DIR"
+          fi
+          
+          # Ensure proper permissions on PM2 directory
+          chmod 755 "$PM2_HOME_DIR" || true
+          
+          # Export PM2_HOME for subsequent steps
+          echo "PM2_HOME=$PM2_HOME_DIR" >> $GITHUB_ENV
+          echo "PM2 directory set to: $PM2_HOME_DIR"
+
+      - name: Check and start PM2 process
+        working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
+        env:
+          PM2_HOME: ${{ env.PM2_HOME }}
+        run: |
+          # Use the PM2_HOME from environment or fallback to user home
+          PM2_HOME_DIR="${PM2_HOME:-${HOME:-/home/$(whoami)}/.pm2}"
+          export PM2_HOME="$PM2_HOME_DIR"
           export PATH="/opt/nodejs/bin:$PATH"
           
           # PM2 command
           PM2_CMD="/opt/nodejs/bin/pm2"
+          
+          # Verify PM2 directory exists and is writable
+          if [ ! -w "$PM2_HOME_DIR" ]; then
+            echo "Error: PM2 directory $PM2_HOME_DIR is not writable"
+            ls -la "$(dirname $PM2_HOME_DIR)"
+            exit 1
+          fi
           
           # Check if PM2 process exists and is running
           if $PM2_CMD list 2>&1 | grep -q "investment-crm-backend"; then
@@ -108,7 +141,11 @@ jobs:
 
       - name: Log PM2
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
+        env:
+          PM2_HOME: ${{ env.PM2_HOME }}
         run: |
-          export PM2_HOME=/root/.pm2
+          PM2_HOME_DIR="${PM2_HOME:-${HOME:-/home/$(whoami)}/.pm2}"
+          export PM2_HOME="$PM2_HOME_DIR"
           export PATH="/opt/nodejs/bin:$PATH"
           /opt/nodejs/bin/pm2 logs --nostream --lines 50
+
