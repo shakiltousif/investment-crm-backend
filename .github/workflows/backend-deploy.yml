@@ -186,42 +186,103 @@ jobs:
               NODE_CMD="/usr/bin/node"
             elif [ -f /opt/nodejs/bin/node ]; then
               NODE_CMD="/opt/nodejs/bin/node"
-            elif [ -f /root/.nvm/versions/node/*/bin/node ]; then
-              # Check root's nvm installation
-              NODE_CMD=$(find /root/.nvm/versions/node -name node -type f -executable 2>/dev/null | head -1)
-            elif [ -n "$NVM_DIR" ] && [ -f "$NVM_DIR/versions/node/$(cat $NVM_DIR/alias/default 2>/dev/null || echo 'v*')/bin/node" ]; then
-              NODE_CMD="$NVM_DIR/versions/node/$(cat $NVM_DIR/alias/default 2>/dev/null || echo 'v*')/bin/node"
-            else
-              # Try to find node in common locations (including root's home)
-              echo "Searching for node in common locations..."
-              NODE_CMD=$(find /usr/local /usr /opt /root -name node -type f -executable 2>/dev/null | head -1)
             fi
             
-            # If still not found, try using sudo to check root's PATH
+            # Check root's nvm installation
+            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+              echo "Checking root's nvm installation..."
+              if [ -d /root/.nvm/versions/node ]; then
+                NODE_CMD=$(find /root/.nvm/versions/node -name node -type f -executable 2>/dev/null | sort -V | tail -1)
+              fi
+            fi
+            
+            # Check current user's nvm
+            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+              if [ -d "$HOME/.nvm/versions/node" ]; then
+                NODE_CMD=$(find "$HOME/.nvm/versions/node" -name node -type f -executable 2>/dev/null | sort -V | tail -1)
+              fi
+            fi
+            
+            # Try to find node in common locations (including root's home and bin directories)
+            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+              echo "Searching for node in common locations..."
+              NODE_CMD=$(find /usr/local/bin /usr/bin /opt /root/.nvm /root/.local /root/bin -name node -type f -executable 2>/dev/null | head -1)
+            fi
+            
+            # If still not found, try using sudo to check root's PATH (without -n to allow password prompt if needed)
             if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
               echo "Trying to find node using root's PATH..."
-              ROOT_NODE=$(sudo -n sh -c 'command -v node' 2>/dev/null || echo "")
+              # Try without -n first (in case passwordless sudo is configured)
+              ROOT_NODE=$(sudo sh -c 'command -v node' 2>/dev/null || echo "")
+              if [ -z "$ROOT_NODE" ]; then
+                # Try with -n (non-interactive, requires passwordless sudo)
+                ROOT_NODE=$(sudo -n sh -c 'command -v node' 2>/dev/null || echo "")
+              fi
               if [ -n "$ROOT_NODE" ] && [ -f "$ROOT_NODE" ]; then
                 NODE_CMD="$ROOT_NODE"
+                echo "Found node via root's PATH: $NODE_CMD"
+              fi
+            fi
+            
+            # Last resort: try to read root's .bashrc or .profile to find NVM_DIR
+            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+              echo "Checking root's shell configuration for Node.js path..."
+              if [ -f /root/.bashrc ]; then
+                ROOT_NVM_DIR=$(grep -o 'NVM_DIR="[^"]*"' /root/.bashrc 2>/dev/null | cut -d'"' -f2 || echo "")
+                if [ -n "$ROOT_NVM_DIR" ] && [ -d "$ROOT_NVM_DIR/versions/node" ]; then
+                  NODE_CMD=$(find "$ROOT_NVM_DIR/versions/node" -name node -type f -executable 2>/dev/null | sort -V | tail -1)
+                fi
+              fi
+            fi
+            
+            # If still not found, try to create symlinks automatically (if sudo is available)
+            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+              echo "Attempting to find and create symlinks automatically..."
+              # Try to get root's node path and create symlink
+              ROOT_NODE_PATH=$(sudo sh -c 'which node' 2>/dev/null || echo "")
+              if [ -n "$ROOT_NODE_PATH" ] && [ -f "$ROOT_NODE_PATH" ]; then
+                echo "Found Node.js at: $ROOT_NODE_PATH"
+                echo "Creating symlink in /usr/local/bin..."
+                sudo ln -sf "$ROOT_NODE_PATH" /usr/local/bin/node 2>/dev/null || echo "Failed to create symlink (may need manual setup)"
+                if [ -f /usr/local/bin/node ]; then
+                  NODE_CMD="/usr/local/bin/node"
+                  echo "✅ Symlink created successfully"
+                fi
               fi
             fi
             
             if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
               echo "❌ Node.js is not installed on the server or not accessible"
               echo "Current PATH: $PATH"
+              echo "Current user: $(whoami)"
+              echo ""
               echo "Trying to find node..."
               which node 2>/dev/null || echo "node not in PATH"
-              find /usr /opt /root -name node -type f 2>/dev/null | head -5 || echo "node not found in common locations"
               echo ""
-              echo "💡 Tip: If Node.js is installed as root, you may need to:"
-              echo "   1. Create symlinks: sudo ln -s \$(sudo which node) /usr/local/bin/node"
-              echo "   2. Or install Node.js for the runner user"
+              echo "Searching in common locations:"
+              find /usr /opt -name node -type f 2>/dev/null | head -10 || echo "node not found in /usr or /opt"
+              echo ""
+              echo "Checking if we can access root's directories:"
+              ls -la /root/.nvm 2>/dev/null | head -5 || echo "Cannot access /root/.nvm"
+              echo ""
+              echo "💡 Solution: Run these commands on your server as root:"
+              echo "   NODE_PATH=\$(which node)"
+              echo "   NPM_PATH=\$(which npm)"
+              echo "   sudo ln -sf \$NODE_PATH /usr/local/bin/node"
+              echo "   sudo ln -sf \$NPM_PATH /usr/local/bin/npm"
+              echo "   sudo chmod +x /usr/local/bin/node /usr/local/bin/npm"
+              echo ""
+              echo "Or configure passwordless sudo for the runner user:"
+              echo "   sudo visudo"
+              echo "   Add: signin-fil-investments-api ALL=(ALL) NOPASSWD: ALL"
               exit 1
             fi
             
             # Verify we can execute it
             if [ ! -x "$NODE_CMD" ]; then
-              echo "⚠️  Node.js found but not executable, trying with sudo..."
+              echo "⚠️  Node.js found but not executable, checking permissions..."
+              ls -la "$NODE_CMD" || echo "Cannot check permissions"
+              # Try with sudo if needed
               if sudo -n test -x "$NODE_CMD" 2>/dev/null; then
                 echo "Node.js requires sudo to execute"
               else
@@ -249,23 +310,72 @@ jobs:
               NPM_CMD="/usr/bin/npm"
             elif [ -f /opt/nodejs/bin/npm ]; then
               NPM_CMD="/opt/nodejs/bin/npm"
-            elif [ -f /root/.nvm/versions/node/*/bin/npm ]; then
-              # Check root's nvm installation
-              NPM_CMD=$(find /root/.nvm/versions/node -name npm -type f -executable 2>/dev/null | head -1)
-            elif [ -n "$NVM_DIR" ] && [ -f "$NVM_DIR/versions/node/$(cat $NVM_DIR/alias/default 2>/dev/null || echo 'v*')/bin/npm" ]; then
-              NPM_CMD="$NVM_DIR/versions/node/$(cat $NVM_DIR/alias/default 2>/dev/null || echo 'v*')/bin/npm"
-            else
-              # Try to find npm in common locations (including root's home)
+            fi
+            
+            # Check root's nvm installation (use same directory as node if found)
+            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+              if [ -n "$NODE_CMD" ] && [ -d "$(dirname "$NODE_CMD")" ]; then
+                # npm should be in the same directory as node
+                NPM_CMD="$(dirname "$NODE_CMD")/npm"
+                if [ ! -f "$NPM_CMD" ]; then
+                  NPM_CMD=""
+                fi
+              elif [ -d /root/.nvm/versions/node ]; then
+                NPM_CMD=$(find /root/.nvm/versions/node -name npm -type f -executable 2>/dev/null | sort -V | tail -1)
+              fi
+            fi
+            
+            # Check current user's nvm
+            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+              if [ -d "$HOME/.nvm/versions/node" ]; then
+                NPM_CMD=$(find "$HOME/.nvm/versions/node" -name npm -type f -executable 2>/dev/null | sort -V | tail -1)
+              fi
+            fi
+            
+            # Try to find npm in common locations
+            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
               echo "Searching for npm in common locations..."
-              NPM_CMD=$(find /usr/local /usr /opt /root -name npm -type f -executable 2>/dev/null | head -1)
+              NPM_CMD=$(find /usr/local/bin /usr/bin /opt /root/.nvm /root/.local /root/bin -name npm -type f -executable 2>/dev/null | head -1)
             fi
             
             # If still not found, try using sudo to check root's PATH
             if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
               echo "Trying to find npm using root's PATH..."
-              ROOT_NPM=$(sudo -n sh -c 'command -v npm' 2>/dev/null || echo "")
+              # Try without -n first
+              ROOT_NPM=$(sudo sh -c 'command -v npm' 2>/dev/null || echo "")
+              if [ -z "$ROOT_NPM" ]; then
+                # Try with -n
+                ROOT_NPM=$(sudo -n sh -c 'command -v npm' 2>/dev/null || echo "")
+              fi
               if [ -n "$ROOT_NPM" ] && [ -f "$ROOT_NPM" ]; then
                 NPM_CMD="$ROOT_NPM"
+                echo "Found npm via root's PATH: $NPM_CMD"
+              fi
+            fi
+            
+            # Last resort: try to read root's .bashrc or .profile to find NVM_DIR
+            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+              if [ -f /root/.bashrc ]; then
+                ROOT_NVM_DIR=$(grep -o 'NVM_DIR="[^"]*"' /root/.bashrc 2>/dev/null | cut -d'"' -f2 || echo "")
+                if [ -n "$ROOT_NVM_DIR" ] && [ -d "$ROOT_NVM_DIR/versions/node" ]; then
+                  NPM_CMD=$(find "$ROOT_NVM_DIR/versions/node" -name npm -type f -executable 2>/dev/null | sort -V | tail -1)
+                fi
+              fi
+            fi
+            
+            # If still not found, try to create symlinks automatically (if sudo is available)
+            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+              echo "Attempting to find and create symlinks automatically..."
+              # Try to get root's npm path and create symlink
+              ROOT_NPM_PATH=$(sudo sh -c 'which npm' 2>/dev/null || echo "")
+              if [ -n "$ROOT_NPM_PATH" ] && [ -f "$ROOT_NPM_PATH" ]; then
+                echo "Found npm at: $ROOT_NPM_PATH"
+                echo "Creating symlink in /usr/local/bin..."
+                sudo ln -sf "$ROOT_NPM_PATH" /usr/local/bin/npm 2>/dev/null || echo "Failed to create symlink (may need manual setup)"
+                if [ -f /usr/local/bin/npm ]; then
+                  NPM_CMD="/usr/local/bin/npm"
+                  echo "✅ Symlink created successfully"
+                fi
               fi
             fi
             
@@ -273,17 +383,28 @@ jobs:
               echo "❌ npm is not installed on the server or not accessible"
               echo "Trying to find npm..."
               which npm 2>/dev/null || echo "npm not in PATH"
-              find /usr /opt /root -name npm -type f 2>/dev/null | head -5 || echo "npm not found in common locations"
               echo ""
-              echo "💡 Tip: If npm is installed as root, you may need to:"
-              echo "   1. Create symlinks: sudo ln -s \$(sudo which npm) /usr/local/bin/npm"
-              echo "   2. Or install npm for the runner user"
+              echo "Searching in common locations:"
+              find /usr /opt -name npm -type f 2>/dev/null | head -10 || echo "npm not found in /usr or /opt"
+              echo ""
+              echo "💡 Solution: Run these commands on your server as root:"
+              echo "   NODE_PATH=\$(which node)"
+              echo "   NPM_PATH=\$(which npm)"
+              echo "   sudo ln -sf \$NODE_PATH /usr/local/bin/node"
+              echo "   sudo ln -sf \$NPM_PATH /usr/local/bin/npm"
+              echo "   sudo chmod +x /usr/local/bin/node /usr/local/bin/npm"
+              echo ""
+              echo "Or configure passwordless sudo for the runner user:"
+              echo "   sudo visudo"
+              echo "   Add: signin-fil-investments-api ALL=(ALL) NOPASSWD: ALL"
               exit 1
             fi
             
             # Verify we can execute it
             if [ ! -x "$NPM_CMD" ]; then
-              echo "⚠️  npm found but not executable, trying with sudo..."
+              echo "⚠️  npm found but not executable, checking permissions..."
+              ls -la "$NPM_CMD" || echo "Cannot check permissions"
+              # Try with sudo if needed
               if sudo -n test -x "$NPM_CMD" 2>/dev/null; then
                 echo "npm requires sudo to execute"
               else
