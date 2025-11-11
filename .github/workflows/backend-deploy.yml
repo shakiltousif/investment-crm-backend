@@ -1219,23 +1219,54 @@ jobs:
               echo "   Checking PM2 daemon status..."
               PM2_HOME="${PM2_HOME:-$HOME/.pm2}"
               
-              # Kill any stale PM2 daemon and fix socket permissions
+              # Fix socket permissions BEFORE checking daemon status
               if [ -d "$PM2_HOME" ]; then
-                echo "   Fixing PM2 socket permissions..."
-                # Try to kill stale PM2 daemon
-                $PM2_CMD kill 2>/dev/null || true
+                echo "   Fixing PM2 directory permissions..."
+                # Fix ownership of PM2 directory
+                if [ "$USE_SUDO_FOR_NODE" = "1" ] && sudo -n true 2>/dev/null; then
+                  sudo chown -R "$USER:$USER" "$PM2_HOME" 2>/dev/null || true
+                  sudo chmod -R 755 "$PM2_HOME" 2>/dev/null || true
+                else
+                  chown -R "$USER:$USER" "$PM2_HOME" 2>/dev/null || true
+                  chmod -R 755 "$PM2_HOME" 2>/dev/null || true
+                fi
+                
                 # Fix socket permissions if they exist
                 if [ -S "$PM2_HOME/rpc.sock" ] || [ -S "$PM2_HOME/pub.sock" ]; then
                   if [ "$USE_SUDO_FOR_NODE" = "1" ] && sudo -n true 2>/dev/null; then
-                    sudo chown -R "$USER:$USER" "$PM2_HOME" 2>/dev/null || true
-                    sudo chmod -R 755 "$PM2_HOME" 2>/dev/null || true
+                    sudo chown "$USER:$USER" "$PM2_HOME/rpc.sock" "$PM2_HOME/pub.sock" 2>/dev/null || true
+                    sudo chmod 666 "$PM2_HOME/rpc.sock" "$PM2_HOME/pub.sock" 2>/dev/null || true
                   else
-                    chown -R "$USER:$USER" "$PM2_HOME" 2>/dev/null || true
-                    chmod -R 755 "$PM2_HOME" 2>/dev/null || true
+                    chown "$USER:$USER" "$PM2_HOME/rpc.sock" "$PM2_HOME/pub.sock" 2>/dev/null || true
+                    chmod 666 "$PM2_HOME/rpc.sock" "$PM2_HOME/pub.sock" 2>/dev/null || true
                   fi
+                fi
+              fi
+              
+              # Only kill PM2 daemon if it's truly hung (not responding to ping)
+              echo "   Checking if PM2 daemon is responsive..."
+              if ! $PM2_CMD ping 2>/dev/null; then
+                echo "   ⚠️  PM2 daemon not responding, checking for stale daemon..."
+                # Check if there are multiple PM2 daemons running
+                PM2_PIDS=$(pgrep -f "pm2.*daemon" 2>/dev/null | wc -l)
+                if [ "$PM2_PIDS" -gt 1 ]; then
+                  echo "   ⚠️  Multiple PM2 daemons detected ($PM2_PIDS), cleaning up..."
+                  # Kill all PM2 daemons
+                  pkill -f "pm2.*daemon" 2>/dev/null || true
+                  sleep 2
                   # Remove stale sockets
                   rm -f "$PM2_HOME/rpc.sock" "$PM2_HOME/pub.sock" 2>/dev/null || true
+                elif [ "$PM2_PIDS" -eq 1 ]; then
+                  echo "   ⚠️  PM2 daemon exists but not responding, killing stale daemon..."
+                  $PM2_CMD kill 2>/dev/null || pkill -f "pm2.*daemon" 2>/dev/null || true
+                  sleep 2
+                  # Remove stale sockets
+                  rm -f "$PM2_HOME/rpc.sock" "$PM2_HOME/pub.sock" 2>/dev/null || true
+                else
+                  echo "   ℹ️  No PM2 daemon running, will start fresh"
                 fi
+              else
+                echo "   ✅ PM2 daemon is responsive"
               fi
               
               # Check PM2 version (this will also verify PM2 works)
@@ -1248,7 +1279,11 @@ jobs:
                 # If it's a permission error, try to fix it
                 if echo "$PM2_VERSION_OUTPUT" | grep -q "Permission denied"; then
                   echo "   Attempting to fix PM2 permissions..."
-                  $PM2_CMD kill 2>/dev/null || true
+                  # Don't kill daemon here - just fix permissions
+                  if [ "$USE_SUDO_FOR_NODE" = "1" ] && sudo -n true 2>/dev/null; then
+                    sudo chown -R "$USER:$USER" "$PM2_HOME" 2>/dev/null || true
+                    sudo chmod -R 755 "$PM2_HOME" 2>/dev/null || true
+                  fi
                   sleep 1
                   # Try version check again
                   PM2_VERSION_OUTPUT=$($PM2_CMD --version 2>&1)
@@ -1289,8 +1324,10 @@ jobs:
                   $PM2_CMD delete investment-crm-backend 2>/dev/null || echo "   No existing process to delete"
                   
                   # Start new process with full path and proper working directory
-                  echo "   Starting: $PM2_CMD start \"$DEPLOY_PATH/current/dist/index.js\" --name investment-crm-backend --cwd \"$DEPLOY_PATH/current\""
-                  START_OUTPUT=$($PM2_CMD start "$DEPLOY_PATH/current/dist/index.js" --name investment-crm-backend --cwd "$DEPLOY_PATH/current" 2>&1)
+                  # Change to the deployment directory first to ensure correct working directory
+                  cd "$DEPLOY_PATH/current"
+                  echo "   Starting: $PM2_CMD start dist/index.js --name investment-crm-backend"
+                  START_OUTPUT=$($PM2_CMD start dist/index.js --name investment-crm-backend 2>&1)
                   START_EXIT=$?
                   
                   echo "   Start output: $START_OUTPUT"
@@ -1321,13 +1358,32 @@ jobs:
                   fi
                 fi
                 
-                # Final verification
+                # Final verification - check if process is ACTUALLY running
                 if [ "$PM2_RUNNING" = "1" ]; then
                   echo "✅ Verifying PM2 process is actually running..."
-                  sleep 1
+                  sleep 5  # Give process time to start
+                  
+                  # Check if process is in PM2 list
                   if $PM2_CMD list 2>&1 | grep -q "investment-crm-backend"; then
-                    echo "✅ PM2 process confirmed running"
-                    $PM2_CMD describe investment-crm-backend 2>&1 | head -20 || true
+                    # Get process PID from PM2
+                    if command -v jq &> /dev/null; then
+                      PROCESS_PID=$($PM2_CMD jlist 2>/dev/null | jq -r '.[] | select(.name=="investment-crm-backend") | .pid' 2>/dev/null | head -1)
+                    else
+                      # Fallback: extract PID from pm2 describe output
+                      PROCESS_PID=$($PM2_CMD describe investment-crm-backend 2>/dev/null | grep -E "pid.*:" | head -1 | awk '{print $4}' || echo "")
+                    fi
+                    
+                    # Verify process is actually running (not just in PM2 list)
+                    if [ -n "$PROCESS_PID" ] && ps -p "$PROCESS_PID" > /dev/null 2>&1; then
+                      echo "✅ Process actually running (PID: $PROCESS_PID)"
+                      $PM2_CMD describe investment-crm-backend 2>&1 | head -20 || true
+                    else
+                      echo "❌ Process is in PM2 list but not actually running (may have crashed)"
+                      echo "📋 Checking PM2 logs for errors..."
+                      $PM2_CMD logs investment-crm-backend --lines 20 --nostream 2>&1 || true
+                      echo "⚠️  Process appears to have crashed, resetting flag"
+                      PM2_RUNNING="0"
+                    fi
                   else
                     echo "⚠️  PM2 process not found in list, resetting flag"
                     PM2_RUNNING="0"
@@ -1435,28 +1491,36 @@ jobs:
                 
                 # Fix relative imports to include .js extension using sed
                 echo "Fixing relative imports with sed..."
-                # Use sed to add .js only if it doesn't already exist
-                # Pattern: match imports where path ends with quote (no .js extension)
-                # Single quotes - specific logger imports first (only if doesn't already have .js)
-                find dist -name "*.js" -type f -exec sed -i "s|from './config/logger'\\([^j]\\)|from './config/logger.js'\\1|g" {} \;
-                find dist -name "*.js" -type f -exec sed -i "s|from './config/logger'$|from './config/logger.js'|g" {} \;
-                find dist -name "*.js" -type f -exec sed -i "s|from '../config/logger'\\([^j]\\)|from '../config/logger.js'\\1|g" {} \;
-                find dist -name "*.js" -type f -exec sed -i "s|from '../config/logger'$|from '../config/logger.js'|g" {} \;
-                # Double quotes - specific logger imports (only if doesn't already have .js)
-                find dist -name "*.js" -type f -exec sed -i 's|from "./config/logger"\\([^j]\\)|from "./config/logger.js"\\1|g' {} \;
-                find dist -name "*.js" -type f -exec sed -i 's|from "./config/logger"$|from "./config/logger.js"|g' {} \;
-                find dist -name "*.js" -type f -exec sed -i 's|from "../config/logger"\\([^j]\\)|from "../config/logger.js"\\1|g' {} \;
-                find dist -name "*.js" -type f -exec sed -i 's|from "../config/logger"$|from "../config/logger.js"|g' {} \;
-                # General relative imports (./path or ../path) - only if doesn't end with .js or .json
-                # Match path that ends with quote (meaning no extension) and add .js before the quote
-                # Single quotes - match ./path' or ../path' but not ./path.js' or ./path.json'
-                find dist -name "*.js" -type f -exec sed -i "s|from '\\.\\(/[^']*\\)'\\([^.]\\)|from '\\.\\1.js'\\2|g" {} \;
+                # First, remove any double .js extensions that might exist
+                find dist -name "*.js" -type f -exec sed -i 's|\.js\.js|\.js|g' {} \;
+                
+                # Fix specific logger imports (most common issue) - simple replacement
+                # Single quotes
+                find dist -name "*.js" -type f -exec sed -i "s|from './config/logger'|from './config/logger.js'|g" {} \;
+                find dist -name "*.js" -type f -exec sed -i "s|from '../config/logger'|from '../config/logger.js'|g" {} \;
+                # Double quotes
+                find dist -name "*.js" -type f -exec sed -i 's|from "./config/logger"|from "./config/logger.js"|g' {} \;
+                find dist -name "*.js" -type f -exec sed -i 's|from "../config/logger"|from "../config/logger.js"|g' {} \;
+                
+                # Fix general relative imports (only if doesn't already end with .js, .json, or .ts)
+                # Single quotes - match ./path' or ../path' but not if already has extension
+                find dist -name "*.js" -type f -exec sed -i "s|from '\\.\\(/[^']*\\)'\\([^jsn]\\)|from '\\.\\1.js'\\2|g" {} \;
                 find dist -name "*.js" -type f -exec sed -i "s|from '\\.\\(/[^']*\\)'$|from '\\.\\1.js'|g" {} \;
                 # Double quotes
-                find dist -name "*.js" -type f -exec sed -i 's|from "\\.\\(/[^"]*\\)"\\([^.]\\)|from "\\.\\1.js"\\2|g' {} \;
+                find dist -name "*.js" -type f -exec sed -i 's|from "\\.\\(/[^"]*\\)"\\([^jsn]\\)|from "\\.\\1.js"\\2|g' {} \;
                 find dist -name "*.js" -type f -exec sed -i 's|from "\\.\\(/[^"]*\\)"$|from "\\.\\1.js"|g' {} \;
-                # Remove any double .js extensions that might have been created
+                
+                # Final cleanup: remove any double .js extensions that might have been created
                 find dist -name "*.js" -type f -exec sed -i 's|\.js\.js|\.js|g' {} \;
+                
+                # Verify the fix worked
+                echo "   Verifying logger import was fixed..."
+                if grep -q "from './config/logger.js'" dist/index.js 2>/dev/null || grep -q 'from "./config/logger.js"' dist/index.js 2>/dev/null; then
+                  echo "   ✅ Logger import fixed successfully"
+                else
+                  echo "   ⚠️  Logger import may not have been fixed, checking..."
+                  grep -E "from ['\"].*config/logger" dist/index.js | head -3 || echo "   (no logger import found)"
+                fi
                 
                 echo "✅ Fixed imports to include .js extensions"
                 echo "📋 Updated logger import:"
