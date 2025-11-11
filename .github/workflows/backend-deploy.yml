@@ -126,10 +126,26 @@ jobs:
       - name: Restart PM2 process
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
-          export HOME=/root
+          # Get current user and set HOME to their home directory (not root)
+          CURRENT_USER=$(whoami)
+          USER_HOME="${HOME:-/home/$CURRENT_USER}"
+          export HOME="$USER_HOME"
+          
+          # Ensure user's .config directory exists and is writable
+          mkdir -p "$USER_HOME/.config/yarn" 2>/dev/null || true
+          chmod -R u+w "$USER_HOME/.config" 2>/dev/null || true
+          
           # Redirect Yarn config to writable location to avoid permission errors
-          export XDG_CONFIG_HOME="${{ secrets.BACKEND_DEPLOY_PATH }}/.config"
-          mkdir -p "$XDG_CONFIG_HOME/yarn"
+          # Use project directory for yarn config to avoid any permission issues
+          YARN_CONFIG_DIR="${{ secrets.BACKEND_DEPLOY_PATH }}/.yarn-config"
+          mkdir -p "$YARN_CONFIG_DIR/yarn"
+          export XDG_CONFIG_HOME="$YARN_CONFIG_DIR"
+          export YARN_CACHE_FOLDER="$YARN_CONFIG_DIR/cache"
+          
+          echo "Current user: $CURRENT_USER"
+          echo "HOME: $HOME"
+          echo "XDG_CONFIG_HOME: $XDG_CONFIG_HOME"
+          echo "User config directory: $USER_HOME/.config"
           
           # Build the application first if dist doesn't exist
           if [ ! -d "dist" ]; then
@@ -137,8 +153,18 @@ jobs:
             yarn build
           fi
           
+          # Set PM2_HOME explicitly (use root's PM2 if that's where it's installed)
+          # But run PM2 commands as current user
+          export PATH="/opt/nodejs/bin:$PATH"
+          
           # Restart PM2 process
-          /opt/nodejs/bin/pm2 restart investment-crm-backend
+          /opt/nodejs/bin/pm2 restart investment-crm-backend || {
+            echo "PM2 restart failed, trying to start instead..."
+            /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend || {
+              echo "PM2 start also failed"
+              exit 1
+            }
+          }
           
           # Verify the process is actually running
           sleep 3
