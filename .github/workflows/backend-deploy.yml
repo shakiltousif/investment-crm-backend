@@ -92,16 +92,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
-        env:
-          RUNNER_ALLOW_RUNASROOT: 1
-          HOME: /root
-          YARN_CACHE_FOLDER: ${{ secrets.BACKEND_DEPLOY_PATH }}/.yarn-cache
-          XDG_CONFIG_HOME: ${{ secrets.BACKEND_DEPLOY_PATH }}/.config
-        run: |
-          # Create necessary directories with proper permissions
-          mkdir -p "$YARN_CACHE_FOLDER"
-          mkdir -p "$XDG_CONFIG_HOME/yarn"
-          RUNNER_ALLOW_RUNASROOT=1 yarn install
+        run: yarn install
 
       - name: write environment variables to .env
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
@@ -135,39 +126,30 @@ jobs:
       - name: Restart PM2 process
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
-          # Set up environment for PM2 and Yarn
           export HOME=/root
-          # Configure Yarn to use writable directories (avoid /root/.config/yarn permission issues)
-          export YARN_CACHE_FOLDER="${{ secrets.BACKEND_DEPLOY_PATH }}/.yarn-cache"
-          export XDG_CONFIG_HOME="${{ secrets.BACKEND_DEPLOY_PATH }}/.config"
-          # Create necessary directories with proper permissions
-          mkdir -p "$YARN_CACHE_FOLDER"
-          mkdir -p "$XDG_CONFIG_HOME/yarn"
-          chmod -R 755 "$YARN_CACHE_FOLDER" 2>/dev/null || true
-          chmod -R 755 "$XDG_CONFIG_HOME" 2>/dev/null || true
           
           # Build the application first if dist doesn't exist
           if [ ! -d "dist" ]; then
             echo "Building application..."
-            RUNNER_ALLOW_RUNASROOT=1 yarn build
+            yarn build
           fi
           
           # Restart PM2 process
-          RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 restart investment-crm-backend || RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend
+          /opt/nodejs/bin/pm2 restart investment-crm-backend || pm2 start dist/index.js --name investment-crm-backend
           
           # Verify the process is actually running
           sleep 3
-          if RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 list 2>&1 | grep -q "investment-crm-backend.*online"; then
+          if /opt/nodejs/bin/pm2 list 2>&1 | grep -q "investment-crm-backend.*online"; then
             echo "✅ PM2 process is running successfully"
-            RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 describe investment-crm-backend
+            /opt/nodejs/bin/pm2 describe investment-crm-backend
           else
             echo "⚠️  PM2 process may not be running correctly"
-            RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 list
-            RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 logs investment-crm-backend --lines 20 --nostream
+            /opt/nodejs/bin/pm2 list
+            /opt/nodejs/bin/pm2 logs investment-crm-backend --lines 20 --nostream
           fi
 
       - name: Check PM2 logs
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           export PATH="/opt/nodejs/bin:$PATH"
-          RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 logs investment-crm-backend --nostream --lines 50
+          /opt/nodejs/bin/pm2 logs investment-crm-backend --nostream --lines 50
