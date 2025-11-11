@@ -134,19 +134,21 @@ jobs:
 
   pre-deploy-check:
     name: Pre-Deployment Validation
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.USE_SELF_HOSTED_RUNNER == 'true' && 'self-hosted' || 'ubuntu-latest' }}
     needs: build
     if: |
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
       (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     
     steps:
-      - name: Setup SSH
+      - name: Setup SSH (for GitHub-hosted runners only)
+        if: vars.USE_SELF_HOSTED_RUNNER != 'true'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Add server to known hosts
+      - name: Add server to known hosts (for GitHub-hosted runners only)
+        if: vars.USE_SELF_HOSTED_RUNNER != 'true'
         run: |
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
@@ -154,117 +156,198 @@ jobs:
         run: |
           echo "🔍 Validating server prerequisites..."
           
-          # Test SSH connection
-          echo "📡 Testing SSH connection..."
-          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo 'SSH connection successful'" || {
-            echo "❌ SSH connection failed"
-            exit 1
-          }
-          
-          # Check Node.js version
-          echo "📦 Checking Node.js installation..."
-          NODE_VERSION=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "node --version 2>/dev/null || echo 'not_installed'")
-          if [ "$NODE_VERSION" = "not_installed" ]; then
-            echo "❌ Node.js is not installed on the server"
-            exit 1
-          fi
-          echo "✅ Node.js version: $NODE_VERSION"
-          
-          # Check npm
-          echo "📦 Checking npm installation..."
-          NPM_VERSION=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "npm --version 2>/dev/null || echo 'not_installed'")
-          if [ "$NPM_VERSION" = "not_installed" ]; then
-            echo "❌ npm is not installed on the server"
-            exit 1
-          fi
-          echo "✅ npm version: $NPM_VERSION"
-          
-          # Check deployment directory exists and is writable
-          echo "📁 Checking deployment directory..."
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-            if [ ! -d '${{ secrets.BACKEND_DEPLOY_PATH }}' ]; then
-              echo 'Creating deployment directory...'
-              mkdir -p '${{ secrets.BACKEND_DEPLOY_PATH }}/releases'
-              mkdir -p '${{ secrets.BACKEND_DEPLOY_PATH }}/shared'
-            fi
+          # For self-hosted runners, we're already on the server
+          if [ "${{ vars.USE_SELF_HOSTED_RUNNER }}" = "true" ]; then
+            echo "✅ Running on self-hosted runner - no SSH needed"
             
-            if [ ! -w '${{ secrets.BACKEND_DEPLOY_PATH }}' ]; then
-              echo '❌ Deployment directory is not writable'
+            # Check Node.js version
+            echo "📦 Checking Node.js installation..."
+            if ! command -v node &> /dev/null; then
+              echo "❌ Node.js is not installed on the server"
               exit 1
             fi
-            echo '✅ Deployment directory is ready'
-          " || exit 1
-          
-          # Check if .env file exists (either from secret or shared)
-          echo "🔐 Checking environment configuration..."
-          if [ -n "${{ secrets.BACKEND_ENV_FILE }}" ]; then
-            echo "✅ BACKEND_ENV_FILE secret is set"
-          else
-            echo "⚠️  BACKEND_ENV_FILE secret not set, checking for shared .env file..."
-            ENV_EXISTS=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-              if [ -f '${{ secrets.BACKEND_DEPLOY_PATH }}/shared/.env' ]; then
-                echo 'exists'
-              else
-                echo 'missing'
-              fi
-            ")
-            if [ "$ENV_EXISTS" = "missing" ]; then
+            NODE_VERSION=$(node --version)
+            echo "✅ Node.js version: $NODE_VERSION"
+            
+            # Check npm
+            echo "📦 Checking npm installation..."
+            if ! command -v npm &> /dev/null; then
+              echo "❌ npm is not installed on the server"
+              exit 1
+            fi
+            NPM_VERSION=$(npm --version)
+            echo "✅ npm version: $NPM_VERSION"
+            
+            # Check deployment directory
+            echo "📁 Checking deployment directory..."
+            DEPLOY_PATH="${{ secrets.BACKEND_DEPLOY_PATH || '/var/www/investment-crm/backend' }}"
+            if [ ! -d "$DEPLOY_PATH" ]; then
+              echo "Creating deployment directory..."
+              mkdir -p "$DEPLOY_PATH/releases"
+              mkdir -p "$DEPLOY_PATH/shared"
+            fi
+            
+            if [ ! -w "$DEPLOY_PATH" ]; then
+              echo "❌ Deployment directory is not writable"
+              exit 1
+            fi
+            echo "✅ Deployment directory is ready"
+            
+            # Check .env file
+            echo "🔐 Checking environment configuration..."
+            if [ -n "${{ secrets.BACKEND_ENV_FILE }}" ]; then
+              echo "✅ BACKEND_ENV_FILE secret is set"
+            elif [ -f "$DEPLOY_PATH/shared/.env" ]; then
+              echo "✅ Shared .env file found"
+            else
               echo "❌ No .env file found. Please set BACKEND_ENV_FILE secret or create shared/.env file"
               exit 1
             fi
-            echo "✅ Shared .env file found"
-          fi
-          
-          # Check database connectivity (if DATABASE_URL can be extracted)
-          echo "🗄️  Checking database prerequisites..."
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-            # Check if PostgreSQL client is available
+            
+            # Check PostgreSQL client
+            echo "🗄️  Checking database prerequisites..."
             if command -v psql &> /dev/null; then
-              echo '✅ PostgreSQL client is installed'
+              echo "✅ PostgreSQL client is installed"
             else
-              echo '⚠️  PostgreSQL client (psql) not found. Database migrations may require manual setup.'
+              echo "⚠️  PostgreSQL client (psql) not found. Database migrations may require manual setup."
             fi
-          " || true
-          
-          # Check process manager availability
-          echo "⚙️  Checking process manager..."
-          PM_MANAGER=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            
+            # Check process manager
+            echo "⚙️  Checking process manager..."
             if command -v pm2 &> /dev/null; then
-              echo 'pm2'
+              echo "✅ Process manager found: pm2"
             elif command -v systemctl &> /dev/null; then
-              echo 'systemd'
+              echo "✅ Process manager found: systemd"
             else
-              echo 'none'
+              echo "⚠️  No process manager found. Application will run in background mode."
             fi
-          ")
-          if [ "$PM_MANAGER" = "none" ]; then
-            echo "⚠️  No process manager found. Application will run in background mode."
-          else
-            echo "✅ Process manager found: $PM_MANAGER"
-          fi
-          
-          # Check if port is available
-          echo "🔌 Checking port availability..."
-          PORT_CHECK=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            
+            # Check port availability
+            echo "🔌 Checking port availability..."
             if command -v netstat &> /dev/null; then
-              netstat -tuln | grep ':3001' || echo 'available'
+              PORT_CHECK=$(netstat -tuln | grep ':3001' || echo 'available')
             elif command -v ss &> /dev/null; then
-              ss -tuln | grep ':3001' || echo 'available'
+              PORT_CHECK=$(ss -tuln | grep ':3001' || echo 'available')
             else
-              echo 'unknown'
+              PORT_CHECK='unknown'
             fi
-          ")
-          if [ "$PORT_CHECK" != "available" ] && [ "$PORT_CHECK" != "unknown" ]; then
-            echo "⚠️  Port 3001 may be in use. Ensure the application can bind to this port."
+            if [ "$PORT_CHECK" != "available" ] && [ "$PORT_CHECK" != "unknown" ]; then
+              echo "⚠️  Port 3001 may be in use. Ensure the application can bind to this port."
+            else
+              echo "✅ Port 3001 appears to be available"
+            fi
           else
-            echo "✅ Port 3001 appears to be available"
+            # For GitHub-hosted runners, use SSH
+            echo "📡 Testing SSH connection..."
+            ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo 'SSH connection successful'" || {
+              echo "❌ SSH connection failed"
+              exit 1
+            }
+            
+            # Check Node.js version
+            echo "📦 Checking Node.js installation..."
+            NODE_VERSION=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "node --version 2>/dev/null || echo 'not_installed'")
+            if [ "$NODE_VERSION" = "not_installed" ]; then
+              echo "❌ Node.js is not installed on the server"
+              exit 1
+            fi
+            echo "✅ Node.js version: $NODE_VERSION"
+            
+            # Check npm
+            echo "📦 Checking npm installation..."
+            NPM_VERSION=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "npm --version 2>/dev/null || echo 'not_installed'")
+            if [ "$NPM_VERSION" = "not_installed" ]; then
+              echo "❌ npm is not installed on the server"
+              exit 1
+            fi
+            echo "✅ npm version: $NPM_VERSION"
+            
+            # Check deployment directory
+            echo "📁 Checking deployment directory..."
+            ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+              if [ ! -d '${{ secrets.BACKEND_DEPLOY_PATH }}' ]; then
+                echo 'Creating deployment directory...'
+                mkdir -p '${{ secrets.BACKEND_DEPLOY_PATH }}/releases'
+                mkdir -p '${{ secrets.BACKEND_DEPLOY_PATH }}/shared'
+              fi
+              
+              if [ ! -w '${{ secrets.BACKEND_DEPLOY_PATH }}' ]; then
+                echo '❌ Deployment directory is not writable'
+                exit 1
+              fi
+              echo '✅ Deployment directory is ready'
+            " || exit 1
+            
+            # Check .env file
+            echo "🔐 Checking environment configuration..."
+            if [ -n "${{ secrets.BACKEND_ENV_FILE }}" ]; then
+              echo "✅ BACKEND_ENV_FILE secret is set"
+            else
+              echo "⚠️  BACKEND_ENV_FILE secret not set, checking for shared .env file..."
+              ENV_EXISTS=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+                if [ -f '${{ secrets.BACKEND_DEPLOY_PATH }}/shared/.env' ]; then
+                  echo 'exists'
+                else
+                  echo 'missing'
+                fi
+              ")
+              if [ "$ENV_EXISTS" = "missing" ]; then
+                echo "❌ No .env file found. Please set BACKEND_ENV_FILE secret or create shared/.env file"
+                exit 1
+              fi
+              echo "✅ Shared .env file found"
+            fi
+            
+            # Check database prerequisites
+            echo "🗄️  Checking database prerequisites..."
+            ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+              if command -v psql &> /dev/null; then
+                echo '✅ PostgreSQL client is installed'
+              else
+                echo '⚠️  PostgreSQL client (psql) not found. Database migrations may require manual setup.'
+              fi
+            " || true
+            
+            # Check process manager
+            echo "⚙️  Checking process manager..."
+            PM_MANAGER=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+              if command -v pm2 &> /dev/null; then
+                echo 'pm2'
+              elif command -v systemctl &> /dev/null; then
+                echo 'systemd'
+              else
+                echo 'none'
+              fi
+            ")
+            if [ "$PM_MANAGER" = "none" ]; then
+              echo "⚠️  No process manager found. Application will run in background mode."
+            else
+              echo "✅ Process manager found: $PM_MANAGER"
+            fi
+            
+            # Check port availability
+            echo "🔌 Checking port availability..."
+            PORT_CHECK=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+              if command -v netstat &> /dev/null; then
+                netstat -tuln | grep ':3001' || echo 'available'
+              elif command -v ss &> /dev/null; then
+                ss -tuln | grep ':3001' || echo 'available'
+              else
+                echo 'unknown'
+              fi
+            ")
+            if [ "$PORT_CHECK" != "available" ] && [ "$PORT_CHECK" != "unknown" ]; then
+              echo "⚠️  Port 3001 may be in use. Ensure the application can bind to this port."
+            else
+              echo "✅ Port 3001 appears to be available"
+            fi
           fi
           
           echo "✅ All prerequisites validated successfully!"
 
   deploy:
     name: Deploy Backend to Server
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.USE_SELF_HOSTED_RUNNER == 'true' && 'self-hosted' || 'ubuntu-latest' }}
     needs: [build, pre-deploy-check]
     if: |
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
@@ -282,12 +365,14 @@ jobs:
           name: backend-build
           path: .
 
-      - name: Setup SSH
+      - name: Setup SSH (for GitHub-hosted runners only)
+        if: vars.USE_SELF_HOSTED_RUNNER != 'true'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Add server to known hosts
+      - name: Add server to known hosts (for GitHub-hosted runners only)
+        if: vars.USE_SELF_HOSTED_RUNNER != 'true'
         run: |
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
@@ -299,97 +384,97 @@ jobs:
 
       - name: Deploy to server
         run: |
-          # Create deployment directory on server
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-            mkdir -p ${{ secrets.BACKEND_DEPLOY_PATH }}/releases
-            mkdir -p ${{ secrets.BACKEND_DEPLOY_PATH }}/shared
-          "
+          # Set deployment path
+          DEPLOY_PATH="${{ secrets.BACKEND_DEPLOY_PATH || '/var/www/investment-crm/backend' }}"
           
-          # Upload build artifact
-          scp backend-deploy.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.BACKEND_DEPLOY_PATH }}/releases/
-          
-          # Upload .env file if provided
-          if [ -f backend-env.txt ]; then
-            scp backend-env.txt ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.BACKEND_DEPLOY_PATH }}/releases/backend-env.txt
-          fi
-          
-          # Extract and deploy on server
-          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-            cd ${{ secrets.BACKEND_DEPLOY_PATH }}/releases
-            TIMESTAMP=\$(date +%Y%m%d%H%M%S)
-            mkdir -p \$TIMESTAMP
-            tar -xzf backend-deploy.tar.gz -C \$TIMESTAMP
+          if [ "${{ vars.USE_SELF_HOSTED_RUNNER }}" = "true" ]; then
+            # Self-hosted runner: deploy directly
+            echo "🚀 Deploying on self-hosted runner..."
+            
+            # Create deployment directory
+            mkdir -p "$DEPLOY_PATH/releases"
+            mkdir -p "$DEPLOY_PATH/shared"
+            
+            # Move build artifact
+            mv backend-deploy.tar.gz "$DEPLOY_PATH/releases/"
+            
+            # Extract and deploy
+            cd "$DEPLOY_PATH/releases"
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+            mkdir -p "$TIMESTAMP"
+            tar -xzf backend-deploy.tar.gz -C "$TIMESTAMP"
             rm backend-deploy.tar.gz
             
             # Install production dependencies
-            cd \$TIMESTAMP
+            cd "$TIMESTAMP"
             npm ci --production
             
             # Create .env file from secret or use shared .env
-            if [ -f ../backend-env.txt ]; then
-              cp ../backend-env.txt .env
-              rm ../backend-env.txt
-              echo '✅ Created .env file from BACKEND_ENV_FILE secret'
-            elif [ -f ${{ secrets.BACKEND_DEPLOY_PATH }}/shared/.env ]; then
-              cp ${{ secrets.BACKEND_DEPLOY_PATH }}/shared/.env .env
-              echo '✅ Using shared .env file'
+            if [ -f "${{ github.workspace }}/backend-env.txt" ]; then
+              cp "${{ github.workspace }}/backend-env.txt" .env
+              rm "${{ github.workspace }}/backend-env.txt"
+              echo "✅ Created .env file from BACKEND_ENV_FILE secret"
+            elif [ -f "$DEPLOY_PATH/shared/.env" ]; then
+              cp "$DEPLOY_PATH/shared/.env" .env
+              echo "✅ Using shared .env file"
             else
-              echo '❌ Error: No .env file found. Deployment cannot continue.'
+              echo "❌ Error: No .env file found. Deployment cannot continue."
               exit 1
             fi
             
             # Validate required environment variables
-            echo '🔍 Validating environment variables...'
+            echo "🔍 Validating environment variables..."
+            set -a
             source .env
-            if [ -z "\$DATABASE_URL" ]; then
-              echo '❌ Error: DATABASE_URL is not set in .env file'
+            set +a
+            if [ -z "$DATABASE_URL" ]; then
+              echo "❌ Error: DATABASE_URL is not set in .env file"
               exit 1
             fi
-            if [ -z "\$JWT_SECRET" ]; then
-              echo '❌ Error: JWT_SECRET is not set in .env file'
+            if [ -z "$JWT_SECRET" ]; then
+              echo "❌ Error: JWT_SECRET is not set in .env file"
               exit 1
             fi
-            echo '✅ Required environment variables are set'
+            echo "✅ Required environment variables are set"
             
-            # Test database connectivity before migrations
-            echo '🗄️  Testing database connectivity...'
+            # Test database connectivity
+            echo "🗄️  Testing database connectivity..."
             if command -v psql &> /dev/null; then
-              # Extract connection details from DATABASE_URL
-              DB_CONN=$(echo \$DATABASE_URL | sed -E 's|postgresql://([^:]+):([^@]+)@([^:]+):([^/]+)/(.+)|host=\3 port=\4 user=\1 password=\2 dbname=\5|')
-              if psql "\$DB_CONN" -c 'SELECT 1' &> /dev/null; then
-                echo '✅ Database connection successful'
+              DB_CONN=$(echo "$DATABASE_URL" | sed -E 's|postgresql://([^:]+):([^@]+)@([^:]+):([^/]+)/(.+)|host=\3 port=\4 user=\1 password=\2 dbname=\5|')
+              if psql "$DB_CONN" -c 'SELECT 1' &> /dev/null; then
+                echo "✅ Database connection successful"
               else
-                echo '⚠️  Could not verify database connection with psql, but continuing...'
+                echo "⚠️  Could not verify database connection with psql, but continuing..."
               fi
             else
-              echo '⚠️  psql not available, skipping database connectivity test'
+              echo "⚠️  psql not available, skipping database connectivity test"
             fi
             
             # Generate Prisma client
-            echo '📦 Generating Prisma client...'
+            echo "📦 Generating Prisma client..."
             npm run db:generate || {
-              echo '❌ Error: Failed to generate Prisma client'
+              echo "❌ Error: Failed to generate Prisma client"
               exit 1
             }
             
             # Run database migrations
-            echo '🔄 Running database migrations...'
+            echo "🔄 Running database migrations..."
             npx prisma migrate deploy || {
-              echo '❌ Error: Database migration failed'
+              echo "❌ Error: Database migration failed"
               exit 1
             }
-            echo '✅ Database migrations completed'
+            echo "✅ Database migrations completed"
             
             # Create symlink to current release
-            cd ${{ secrets.BACKEND_DEPLOY_PATH }}
+            cd "$DEPLOY_PATH"
             rm -f current
-            ln -s releases/\$TIMESTAMP current
+            ln -s "releases/$TIMESTAMP" current
             
-            # Restart application (adjust based on your process manager)
+            # Restart application
             if command -v pm2 &> /dev/null; then
               pm2 restart investment-crm-backend || pm2 start current/dist/index.js --name investment-crm-backend
             elif command -v systemctl &> /dev/null; then
-              sudo systemctl restart investment-crm-backend || echo 'Service not configured'
+              sudo systemctl restart investment-crm-backend || echo "Service not configured"
             else
               # Fallback: kill existing process and start new one
               pkill -f 'node.*dist/index.js' || true
@@ -398,12 +483,117 @@ jobs:
             fi
             
             # Cleanup old releases (keep last 5)
-            cd releases
+            cd "$DEPLOY_PATH/releases"
             ls -t | tail -n +6 | xargs -r rm -rf
-          "
+          else
+            # GitHub-hosted runner: deploy via SSH
+            echo "🚀 Deploying via SSH..."
+            
+            # Create deployment directory on server
+            ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+              mkdir -p $DEPLOY_PATH/releases
+              mkdir -p $DEPLOY_PATH/shared
+            "
+            
+            # Upload build artifact
+            scp backend-deploy.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$DEPLOY_PATH/releases/
+            
+            # Upload .env file if provided
+            if [ -f backend-env.txt ]; then
+              scp backend-env.txt ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:$DEPLOY_PATH/releases/backend-env.txt
+            fi
+            
+            # Extract and deploy on server
+            ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+              cd $DEPLOY_PATH/releases
+              TIMESTAMP=\$(date +%Y%m%d%H%M%S)
+              mkdir -p \$TIMESTAMP
+              tar -xzf backend-deploy.tar.gz -C \$TIMESTAMP
+              rm backend-deploy.tar.gz
+              
+              # Install production dependencies
+              cd \$TIMESTAMP
+              npm ci --production
+              
+              # Create .env file from secret or use shared .env
+              if [ -f ../backend-env.txt ]; then
+                cp ../backend-env.txt .env
+                rm ../backend-env.txt
+                echo '✅ Created .env file from BACKEND_ENV_FILE secret'
+              elif [ -f $DEPLOY_PATH/shared/.env ]; then
+                cp $DEPLOY_PATH/shared/.env .env
+                echo '✅ Using shared .env file'
+              else
+                echo '❌ Error: No .env file found. Deployment cannot continue.'
+                exit 1
+              fi
+              
+              # Validate required environment variables
+              echo '🔍 Validating environment variables...'
+              source .env
+              if [ -z \"\$DATABASE_URL\" ]; then
+                echo '❌ Error: DATABASE_URL is not set in .env file'
+                exit 1
+              fi
+              if [ -z \"\$JWT_SECRET\" ]; then
+                echo '❌ Error: JWT_SECRET is not set in .env file'
+                exit 1
+              fi
+              echo '✅ Required environment variables are set'
+              
+              # Test database connectivity
+              echo '🗄️  Testing database connectivity...'
+              if command -v psql &> /dev/null; then
+                DB_CONN=\$(echo \$DATABASE_URL | sed -E 's|postgresql://([^:]+):([^@]+)@([^:]+):([^/]+)/(.+)|host=\3 port=\4 user=\1 password=\2 dbname=\5|')
+                if psql \"\$DB_CONN\" -c 'SELECT 1' &> /dev/null; then
+                  echo '✅ Database connection successful'
+                else
+                  echo '⚠️  Could not verify database connection with psql, but continuing...'
+                fi
+              else
+                echo '⚠️  psql not available, skipping database connectivity test'
+              fi
+              
+              # Generate Prisma client
+              echo '📦 Generating Prisma client...'
+              npm run db:generate || {
+                echo '❌ Error: Failed to generate Prisma client'
+                exit 1
+              }
+              
+              # Run database migrations
+              echo '🔄 Running database migrations...'
+              npx prisma migrate deploy || {
+                echo '❌ Error: Database migration failed'
+                exit 1
+              }
+              echo '✅ Database migrations completed'
+              
+              # Create symlink to current release
+              cd $DEPLOY_PATH
+              rm -f current
+              ln -s releases/\$TIMESTAMP current
+              
+              # Restart application
+              if command -v pm2 &> /dev/null; then
+                pm2 restart investment-crm-backend || pm2 start current/dist/index.js --name investment-crm-backend
+              elif command -v systemctl &> /dev/null; then
+                sudo systemctl restart investment-crm-backend || echo 'Service not configured'
+              else
+                # Fallback: kill existing process and start new one
+                pkill -f 'node.*dist/index.js' || true
+                cd current
+                nohup npm start > /dev/null 2>&1 &
+              fi
+              
+              # Cleanup old releases (keep last 5)
+              cd releases
+              ls -t | tail -n +6 | xargs -r rm -rf
+            "
+          fi
 
       - name: Health check
         run: |
           sleep 10
-          curl -f ${{ secrets.BACKEND_URL }}/health || exit 1
+          curl -f ${{ secrets.BACKEND_URL || 'http://localhost:3001' }}/health || exit 1
 
