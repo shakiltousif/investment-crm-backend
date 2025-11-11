@@ -947,13 +947,14 @@ jobs:
           fi
           
           # If no process manager worked, start manually
-          if ! pgrep -f 'node.*dist/index.js' > /dev/null 2>&1 && ! pm2 list | grep -q "investment-crm-backend"; then
+          if ! pgrep -f 'node.*dist/index.js' > /dev/null 2>&1 && ! pm2 list | grep -q "investment-crm-backend" 2>/dev/null; then
             echo "🚀 Starting application manually..."
             pkill -f 'node.*dist/index.js' || true
             cd current
             if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
               # Try passwordless sudo first
-              if sudo -n nohup $NPM_CMD start > /dev/null 2>&1 &; then
+              if sudo -n true 2>/dev/null; then
+                sudo nohup $NPM_CMD start > /dev/null 2>&1 &
                 echo "✅ Application started with sudo"
               else
                 echo "⚠️  Passwordless sudo not available, trying without sudo..."
@@ -999,56 +1000,56 @@ jobs:
           # Extract and deploy on server
           ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
               cd $DEPLOY_PATH/releases
-              TIMESTAMP=\$(date +%Y%m%d%H%M%S)
-              mkdir -p \$TIMESTAMP
-              tar -xzf backend-deploy.tar.gz -C \$TIMESTAMP
-              rm backend-deploy.tar.gz
-              
-              # Install production dependencies
-              cd \$TIMESTAMP
+            TIMESTAMP=\$(date +%Y%m%d%H%M%S)
+            mkdir -p \$TIMESTAMP
+            tar -xzf backend-deploy.tar.gz -C \$TIMESTAMP
+            rm backend-deploy.tar.gz
+            
+            # Install production dependencies
+            cd \$TIMESTAMP
               ${NPM_CMD:-npm} ci --production
-              
-              # Create .env file from secret or use shared .env
-              if [ -f ../backend-env.txt ]; then
-                cp ../backend-env.txt .env
-                rm ../backend-env.txt
-                echo '✅ Created .env file from BACKEND_ENV_FILE secret'
+            
+            # Create .env file from secret or use shared .env
+            if [ -f ../backend-env.txt ]; then
+              cp ../backend-env.txt .env
+              rm ../backend-env.txt
+              echo '✅ Created .env file from BACKEND_ENV_FILE secret'
               elif [ -f $DEPLOY_PATH/shared/.env ]; then
                 cp $DEPLOY_PATH/shared/.env .env
-                echo '✅ Using shared .env file'
-              else
-                echo '❌ Error: No .env file found. Deployment cannot continue.'
-                exit 1
-              fi
-              
-              # Validate required environment variables
-              echo '🔍 Validating environment variables...'
-              source .env
+              echo '✅ Using shared .env file'
+            else
+              echo '❌ Error: No .env file found. Deployment cannot continue.'
+              exit 1
+            fi
+            
+            # Validate required environment variables
+            echo '🔍 Validating environment variables...'
+            source .env
               if [ -z \"\$DATABASE_URL\" ]; then
-                echo '❌ Error: DATABASE_URL is not set in .env file'
-                exit 1
-              fi
+              echo '❌ Error: DATABASE_URL is not set in .env file'
+              exit 1
+            fi
               if [ -z \"\$JWT_SECRET\" ]; then
-                echo '❌ Error: JWT_SECRET is not set in .env file'
-                exit 1
-              fi
-              echo '✅ Required environment variables are set'
-              
+              echo '❌ Error: JWT_SECRET is not set in .env file'
+              exit 1
+            fi
+            echo '✅ Required environment variables are set'
+            
               # Test database connectivity
-              echo '🗄️  Testing database connectivity...'
-              if command -v psql &> /dev/null; then
+            echo '🗄️  Testing database connectivity...'
+            if command -v psql &> /dev/null; then
                 DB_CONN=\$(echo \$DATABASE_URL | sed -E 's|postgresql://([^:]+):([^@]+)@([^:]+):([^/]+)/(.+)|host=\3 port=\4 user=\1 password=\2 dbname=\5|')
                 if psql \"\$DB_CONN\" -c 'SELECT 1' &> /dev/null; then
-                  echo '✅ Database connection successful'
-                else
-                  echo '⚠️  Could not verify database connection with psql, but continuing...'
-                fi
+                echo '✅ Database connection successful'
               else
-                echo '⚠️  psql not available, skipping database connectivity test'
+                echo '⚠️  Could not verify database connection with psql, but continuing...'
               fi
-              
-              # Generate Prisma client
-              echo '📦 Generating Prisma client...'
+            else
+              echo '⚠️  psql not available, skipping database connectivity test'
+            fi
+            
+            # Generate Prisma client
+            echo '📦 Generating Prisma client...'
               # Use the local Prisma binary directly
               if [ -f 'node_modules/.bin/prisma' ]; then
                 node_modules/.bin/prisma generate || {
@@ -1067,13 +1068,13 @@ jobs:
                 }
               else
                 ${NPM_CMD:-npm} run db:generate || {
-                  echo '❌ Error: Failed to generate Prisma client'
-                  exit 1
-                }
+              echo '❌ Error: Failed to generate Prisma client'
+              exit 1
+            }
               fi
-              
-              # Run database migrations
-              echo '🔄 Running database migrations...'
+            
+            # Run database migrations
+            echo '🔄 Running database migrations...'
               if [ -f 'node_modules/.bin/prisma' ]; then
                 node_modules/.bin/prisma migrate deploy || {
                   echo '❌ Error: Database migration failed'
@@ -1085,35 +1086,35 @@ jobs:
                   exit 1
                 }
               elif command -v npx &> /dev/null; then
-                npx prisma migrate deploy || {
-                  echo '❌ Error: Database migration failed'
-                  exit 1
-                }
+            npx prisma migrate deploy || {
+              echo '❌ Error: Database migration failed'
+              exit 1
+            }
               else
                 ${NPM_CMD:-npm} run db:generate || {
                   echo '❌ Error: Database migration failed'
                   exit 1
                 }
               fi
-              echo '✅ Database migrations completed'
-              
-              # Create symlink to current release
+            echo '✅ Database migrations completed'
+            
+            # Create symlink to current release
               cd $DEPLOY_PATH
-              rm -f current
-              ln -s releases/\$TIMESTAMP current
-              
+            rm -f current
+            ln -s releases/\$TIMESTAMP current
+            
               # Restart application
-              if command -v pm2 &> /dev/null; then
-                pm2 restart investment-crm-backend || pm2 start current/dist/index.js --name investment-crm-backend
-              elif command -v systemctl &> /dev/null; then
-                sudo systemctl restart investment-crm-backend || echo 'Service not configured'
-              else
-                # Fallback: kill existing process and start new one
-                pkill -f 'node.*dist/index.js' || true
-                cd current
+            if command -v pm2 &> /dev/null; then
+              pm2 restart investment-crm-backend || pm2 start current/dist/index.js --name investment-crm-backend
+            elif command -v systemctl &> /dev/null; then
+              sudo systemctl restart investment-crm-backend || echo 'Service not configured'
+            else
+              # Fallback: kill existing process and start new one
+              pkill -f 'node.*dist/index.js' || true
+              cd current
                 nohup ${NPM_CMD:-npm} start > /dev/null 2>&1 &
-              fi
-              
+            fi
+            
             # Cleanup old releases (keep last 5)
             cd releases
             ls -t | tail -n +6 | xargs -r rm -rf
