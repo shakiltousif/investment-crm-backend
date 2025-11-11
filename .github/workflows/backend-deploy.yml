@@ -109,6 +109,6 @@ jobs:
       - name: Log PM2
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
-          export PM2_HOME=/home/signin-fil-investments-api/.pm2
+          export PM2_HOME=/root/.pm2
           export PATH="/opt/nodejs/bin:$PATH"
           /opt/nodejs/bin/pm2 logs --nostream --lines 50
