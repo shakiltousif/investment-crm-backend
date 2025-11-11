@@ -72,18 +72,50 @@ jobs:
       - name: Check and start PM2 process
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
-          export HOME=/root
+          # Set PM2 home to the user's PM2 directory
+          export PM2_HOME=/home/signin-fil-investments-api/.pm2
+          export PATH="/opt/nodejs/bin:$PATH"
+          
+          # PM2 command
+          PM2_CMD="/opt/nodejs/bin/pm2"
+          
+          # Fix PM2 directory permissions if needed
+          if [ -d "$PM2_HOME" ]; then
+            echo "Fixing PM2 directory permissions..."
+            sudo chown -R signin-fil-investments-api:signin-fil-investments-api "$PM2_HOME" 2>/dev/null || true
+            sudo chmod -R 755 "$PM2_HOME" 2>/dev/null || true
+          fi
           
           # Check if PM2 process exists and is running
-          if RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 list | grep -q 'investment-crm-backend.*online'; then
-            echo "PM2 process 'investment-crm-backend' is already running. Restarting..."
-            RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 restart investment-crm-backend
+          if $PM2_CMD list 2>&1 | grep -q "investment-crm-backend"; then
+            echo "PM2 process 'investment-crm-backend' is running. Restarting..."
+            $PM2_CMD restart investment-crm-backend
           else
-            echo "PM2 process 'investment-crm-backend' is not running. Starting with yarn start..."
-            RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 start yarn --name "investment-crm-backend" -- start
-            RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 save
+            echo "PM2 process 'investment-crm-backend' is not running. Starting..."
+            # Build the application first if dist doesn't exist
+            if [ ! -d "dist" ]; then
+              echo "Building application..."
+              yarn build
+            fi
+            # Start with PM2
+            $PM2_CMD start dist/index.js --name investment-crm-backend
+            $PM2_CMD save
+          fi
+          
+          # Verify the process is actually running
+          sleep 3
+          if $PM2_CMD list 2>&1 | grep -q "investment-crm-backend.*online"; then
+            echo "✅ PM2 process is running successfully"
+            $PM2_CMD describe investment-crm-backend
+          else
+            echo "⚠️  PM2 process may not be running correctly"
+            $PM2_CMD list
+            $PM2_CMD logs investment-crm-backend --lines 20 --nostream
           fi
 
       - name: Log PM2
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
-        run: RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 log --nostream
+        run: |
+          export PM2_HOME=/home/signin-fil-investments-api/.pm2
+          export PATH="/opt/nodejs/bin:$PATH"
+          /opt/nodejs/bin/pm2 logs --nostream --lines 50
