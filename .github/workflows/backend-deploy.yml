@@ -970,13 +970,14 @@ jobs:
             
             # Generate Prisma client
             echo "📦 Generating Prisma client..."
+            # Use npx to ensure prisma CLI is found
             if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-              sudo $NPM_CMD run db:generate || {
+              sudo $NPM_CMD exec prisma generate || {
                 echo "❌ Error: Failed to generate Prisma client"
                 exit 1
               }
             else
-              $NPM_CMD run db:generate || {
+              $NPM_CMD exec prisma generate || {
                 echo "❌ Error: Failed to generate Prisma client"
                 exit 1
               }
@@ -1092,14 +1093,14 @@ jobs:
               
               # Generate Prisma client
               echo '📦 Generating Prisma client...'
-              ${NPM_CMD:-npm} run db:generate || {
+              ${NPM_CMD:-npm} exec prisma generate || {
                 echo '❌ Error: Failed to generate Prisma client'
                 exit 1
               }
               
               # Run database migrations
               echo '🔄 Running database migrations...'
-              npx prisma migrate deploy || {
+              ${NPM_CMD:-npm} exec prisma migrate deploy || {
                 echo '❌ Error: Database migration failed'
                 exit 1
               }
