@@ -6,13 +6,13 @@ on:
       - main
       - master
     paths:
-      - 'backend/.github/workflows/backend-deploy.yml'
+      - '.github/workflows/backend-deploy.yml'
   pull_request:
     branches:
       - main
       - master
     paths:
-      - 'backend/.github/workflows/backend-deploy.yml'
+      - '.github/workflows/backend-deploy.yml'
   workflow_dispatch:
 
 env:
@@ -1142,53 +1142,136 @@ jobs:
           # Initialize PM2_RUNNING
           PM2_RUNNING="0"
           
-          # Use PM2_PATH if set, otherwise tr y command -v
+          # Use PM2_PATH if set, otherwise try command -v
           PM2_CMD=""
           echo "🔍 Checking PM2 availability..."
           echo "   PM2_AVAILABLE: ${PM2_AVAILABLE:-0}"
           echo "   PM2_PATH: ${PM2_PATH:-not set}"
           
+          # First, try to use PM2_PATH from environment (set in Install PM2 step)
           if [ -n "${PM2_PATH:-}" ] && [ -f "${PM2_PATH}" ]; then
             PM2_CMD="${PM2_PATH}"
             echo "✅ Using PM2 from PM2_PATH: $PM2_CMD"
+          # Try command -v
           elif command -v pm2 &> /dev/null; then
             PM2_CMD="pm2"
             echo "✅ Found PM2 in PATH: $PM2_CMD"
             $PM2_CMD --version || echo "⚠️  PM2 version check failed"
           else
-            echo "⚠️  PM2 command not found in PATH"
-            # Try to find PM2 in common locations
-            for path in "/usr/local/bin/pm2" "/usr/bin/pm2" "$HOME/.npm-global/bin/pm2" "/opt/nodejs/bin/pm2"; do
+            echo "⚠️  PM2 command not found in PATH, searching common locations..."
+            # Try to find PM2 in common locations (including npm global bin)
+            NPM_GLOBAL_BIN=""
+            if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+              NPM_GLOBAL_BIN=$(sudo -n $NPM_CMD config get prefix 2>/dev/null)/bin || \
+              NPM_GLOBAL_BIN=$(sudo $NPM_CMD config get prefix 2>/dev/null)/bin || \
+              NPM_GLOBAL_BIN="/usr/local/bin"
+            else
+              NPM_GLOBAL_BIN=$($NPM_CMD config get prefix 2>/dev/null)/bin || \
+              NPM_GLOBAL_BIN="$HOME/.npm-global/bin" || \
+              NPM_GLOBAL_BIN="/usr/local/bin"
+            fi
+            
+            for path in "$NPM_GLOBAL_BIN/pm2" "/opt/nodejs/bin/pm2" "/usr/local/bin/pm2" "/usr/bin/pm2" "$HOME/.npm-global/bin/pm2"; do
               if [ -f "$path" ] && [ -x "$path" ]; then
                 PM2_CMD="$path"
                 echo "✅ Found PM2 at: $PM2_CMD"
+                # Save for future use
+                echo "PM2_PATH=$PM2_CMD" >> $GITHUB_ENV
                 break
               fi
             done
+          fi
+          
+          # If still not found, try to find it using find command
+          if [ -z "$PM2_CMD" ]; then
+            echo "   Searching for PM2 binary..."
+            FOUND_PM2=$(find /usr /opt /home -name pm2 -type f -executable 2>/dev/null | head -1)
+            if [ -n "$FOUND_PM2" ]; then
+              PM2_CMD="$FOUND_PM2"
+              echo "✅ Found PM2 using find: $PM2_CMD"
+              echo "PM2_PATH=$PM2_CMD" >> $GITHUB_ENV
+            fi
           fi
           
           if [ "${PM2_AVAILABLE:-0}" = "1" ] && [ -n "$PM2_CMD" ]; then
             echo "🔄 Attempting to use PM2 process manager..."
             echo "   PM2 command: $PM2_CMD"
             
-            # Verify PM2 is working
-            if ! $PM2_CMD --version &> /dev/null; then
-              echo "❌ PM2 command is not working, will use manual start"
-              PM2_CMD=""
+            # Verify PM2 binary is executable
+            if [ ! -x "$PM2_CMD" ]; then
+              echo "⚠️  PM2 binary is not executable, trying to fix permissions..."
+              chmod +x "$PM2_CMD" 2>/dev/null || sudo chmod +x "$PM2_CMD" 2>/dev/null || true
+            fi
+            
+            # Check PM2 version (this will also verify PM2 works)
+            PM2_VERSION_OUTPUT=$($PM2_CMD --version 2>&1)
+            PM2_VERSION_EXIT=$?
+            
+            if [ $PM2_VERSION_EXIT -ne 0 ]; then
+              echo "❌ PM2 version check failed: $PM2_VERSION_OUTPUT"
+              echo "💡 Trying to initialize PM2 daemon..."
+              # Try to start PM2 daemon
+              $PM2_CMD kill 2>/dev/null || true  # Kill any stale daemon
+              $PM2_CMD ping 2>/dev/null || $PM2_CMD resurrect 2>/dev/null || true
+              
+              # Try version check again
+              if ! $PM2_CMD --version &> /dev/null; then
+                echo "❌ PM2 is not working properly, will use manual start"
+                PM2_CMD=""
+              else
+                echo "✅ PM2 daemon initialized"
+              fi
             else
+              echo "✅ PM2 is working (version: $PM2_VERSION_OUTPUT)"
+            fi
+            
+            if [ -n "$PM2_CMD" ]; then
+              # Ensure PM2 daemon is running
+              echo "   Ensuring PM2 daemon is running..."
+              # Check if PM2 daemon is alive
+              if ! $PM2_CMD ping &> /dev/null; then
+                echo "   PM2 daemon is not running, initializing it..."
+                # Kill any stale PM2 processes
+                $PM2_CMD kill 2>/dev/null || true
+                # Start PM2 daemon (this happens automatically on first PM2 command, but we can force it)
+                $PM2_CMD list &> /dev/null || true
+                sleep 2
+                
+                # Verify daemon is now running
+                if $PM2_CMD ping &> /dev/null; then
+                  echo "   ✅ PM2 daemon is now running"
+                else
+                  echo "   ⚠️  PM2 daemon may not be running, but continuing..."
+                fi
+              else
+                echo "   ✅ PM2 daemon is running"
+              fi
+              
               # Try to restart existing PM2 process
               echo "   Trying to restart existing PM2 process..."
-              if $PM2_CMD restart investment-crm-backend 2>&1; then
+              RESTART_OUTPUT=$($PM2_CMD restart investment-crm-backend 2>&1)
+              RESTART_EXIT=$?
+              
+              if [ $RESTART_EXIT -eq 0 ]; then
                 echo "✅ Application restarted with PM2"
                 PM2_RUNNING="1"
               # If restart fails, start a new process
               else
-                echo "   Restart failed, trying to start new PM2 process..."
-                if $PM2_CMD start "$DEPLOY_PATH/current/dist/index.js" --name investment-crm-backend --cwd "$DEPLOY_PATH/current" 2>&1; then
+                echo "   Restart failed: $RESTART_OUTPUT"
+                echo "   Trying to start new PM2 process..."
+                
+                # Delete existing process if it exists in error state
+                $PM2_CMD delete investment-crm-backend 2>/dev/null || true
+                
+                # Start new process
+                START_OUTPUT=$($PM2_CMD start "$DEPLOY_PATH/current/dist/index.js" --name investment-crm-backend --cwd "$DEPLOY_PATH/current" 2>&1)
+                START_EXIT=$?
+                
+                if [ $START_EXIT -eq 0 ]; then
                   echo "✅ Application started with PM2"
                   PM2_RUNNING="1"
                 else
-                  echo "⚠️  PM2 start failed"
+                  echo "⚠️  PM2 start command failed: $START_OUTPUT"
                   # Check if PM2 process is actually running despite the error
                   sleep 2
                   if $PM2_CMD list 2>/dev/null | grep -q "investment-crm-backend"; then
@@ -1196,7 +1279,9 @@ jobs:
                     echo "✅ PM2 process is running (despite error message)"
                   else
                     echo "❌ PM2 process not found, will use manual start"
-                    echo "📋 PM2 list output:"
+                    echo "📋 PM2 status:"
+                    $PM2_CMD status 2>&1 || true
+                    echo "📋 PM2 list:"
                     $PM2_CMD list 2>&1 || true
                   fi
                 fi
