@@ -157,686 +157,412 @@ jobs:
         run: |
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Validate server prerequisites
+      - name: Setup environment for self-hosted runner
+        if: env.USE_SELF_HOSTED == 'true'
         run: |
-          echo "🔍 Validating server prerequisites..."
+          echo "✅ Running on self-hosted runner - no SSH needed"
+          [ -f /etc/profile ] && source /etc/profile
+          [ -f ~/.bashrc ] && source ~/.bashrc
+          [ -f ~/.bash_profile ] && source ~/.bash_profile
+          [ -f ~/.profile ] && source ~/.profile
+          export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH"
+          export PATH="$HOME/.nvm/versions/node/*/bin:$PATH"
+          export PATH="/opt/nodejs/bin:$PATH"
+
+      - name: Validate Node.js (self-hosted)
+        if: env.USE_SELF_HOSTED == 'true'
+        run: |
+          echo "📦 Checking Node.js installation..."
+          echo "Current user: $(whoami)"
+          echo "Current PATH: $PATH"
           
-          # For self-hosted runners, we're already on the server
-          if [ "$USE_SELF_HOSTED" = "true" ]; then
-            echo "✅ Running on self-hosted runner - no SSH needed"
-            
-            # Source common profile files to ensure PATH is set correctly
-            [ -f /etc/profile ] && source /etc/profile
-            [ -f ~/.bashrc ] && source ~/.bashrc
-            [ -f ~/.bash_profile ] && source ~/.bash_profile
-            [ -f ~/.profile ] && source ~/.profile
-            
-            # Add common Node.js paths to PATH
-            export PATH="/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH"
-            export PATH="$HOME/.nvm/versions/node/*/bin:$PATH"
-            export PATH="/opt/nodejs/bin:$PATH"
-            
-            # Check Node.js version (try multiple methods, including checking root's PATH)
-            echo "📦 Checking Node.js installation..."
-            echo "Current user: $(whoami)"
-            echo "Current PATH: $PATH"
-            
-            NODE_CMD=""
-            # First check if /opt/nodejs/bin directory exists and what's in it
-            if [ -d /opt/nodejs/bin ]; then
-              echo "Checking /opt/nodejs/bin directory..."
-              ls -la /opt/nodejs/bin/ 2>/dev/null | head -10 || echo "Cannot list /opt/nodejs/bin"
-              if [ -f /opt/nodejs/bin/node ]; then
-                if [ -x /opt/nodejs/bin/node ]; then
-                  NODE_CMD="/opt/nodejs/bin/node"
-                  echo "✅ Found executable node in /opt/nodejs/bin"
-                else
-                  echo "⚠️  Found node in /opt/nodejs/bin but not executable"
-                  # Try to make it executable
-                  if sudo chmod +x /opt/nodejs/bin/node 2>/dev/null; then
-                    NODE_CMD="/opt/nodejs/bin/node"
-                    echo "✅ Made node executable"
-                  fi
-                fi
+          NODE_CMD=""
+          if [ -d /opt/nodejs/bin ]; then
+            echo "Checking /opt/nodejs/bin directory..."
+            ls -la /opt/nodejs/bin/ 2>/dev/null | head -10 || echo "Cannot list /opt/nodejs/bin"
+            if [ -f /opt/nodejs/bin/node ]; then
+              if [ -x /opt/nodejs/bin/node ]; then
+                NODE_CMD="/opt/nodejs/bin/node"
+                echo "✅ Found executable node in /opt/nodejs/bin"
               else
-                echo "⚠️  /opt/nodejs/bin exists but node file not found"
-              fi
-            fi
-            
-            # Try standard locations if not found yet
-            if [ -z "$NODE_CMD" ]; then
-              if command -v node &> /dev/null; then
-                NODE_CMD="node"
-                echo "✅ Found node via command -v"
-              elif [ -f /usr/local/bin/node ]; then
-                NODE_CMD="/usr/local/bin/node"
-                echo "✅ Found node in /usr/local/bin"
-              elif [ -f /usr/bin/node ]; then
-                NODE_CMD="/usr/bin/node"
-                echo "✅ Found node in /usr/bin"
-              fi
-            fi
-            
-            # Check root's nvm installation
-            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
-              echo "Checking root's nvm installation..."
-              if [ -d /root/.nvm/versions/node ]; then
-                NODE_CMD=$(find /root/.nvm/versions/node -name node -type f -executable 2>/dev/null | sort -V | tail -1)
-              fi
-            fi
-            
-            # Check current user's nvm
-            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
-              if [ -d "$HOME/.nvm/versions/node" ]; then
-                NODE_CMD=$(find "$HOME/.nvm/versions/node" -name node -type f -executable 2>/dev/null | sort -V | tail -1)
-              fi
-            fi
-            
-            # Try to find node in common locations (including root's home and bin directories)
-            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
-              echo "Searching for node in common locations..."
-              NODE_CMD=$(find /usr/local/bin /usr/bin /opt /root/.nvm /root/.local /root/bin -name node -type f -executable 2>/dev/null | head -1)
-            fi
-            
-            # If still not found, try using sudo to check root's PATH (without -n to allow password prompt if needed)
-            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
-              echo "Trying to find node using root's PATH..."
-              # Try without -n first (in case passwordless sudo is configured)
-              ROOT_NODE=$(sudo sh -c 'command -v node' 2>/dev/null || echo "")
-              if [ -z "$ROOT_NODE" ]; then
-                # Try with -n (non-interactive, requires passwordless sudo)
-                ROOT_NODE=$(sudo -n sh -c 'command -v node' 2>/dev/null || echo "")
-              fi
-              if [ -n "$ROOT_NODE" ] && [ -f "$ROOT_NODE" ]; then
-                NODE_CMD="$ROOT_NODE"
-                echo "Found node via root's PATH: $NODE_CMD"
-              fi
-            fi
-            
-            # Last resort: try to read root's .bashrc or .profile to find NVM_DIR
-            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
-              echo "Checking root's shell configuration for Node.js path..."
-              if [ -f /root/.bashrc ]; then
-                ROOT_NVM_DIR=$(grep -o 'NVM_DIR="[^"]*"' /root/.bashrc 2>/dev/null | cut -d'"' -f2 || echo "")
-                if [ -n "$ROOT_NVM_DIR" ] && [ -d "$ROOT_NVM_DIR/versions/node" ]; then
-                  NODE_CMD=$(find "$ROOT_NVM_DIR/versions/node" -name node -type f -executable 2>/dev/null | sort -V | tail -1)
+                echo "⚠️  Found node in /opt/nodejs/bin but not executable"
+                if sudo chmod +x /opt/nodejs/bin/node 2>/dev/null; then
+                  NODE_CMD="/opt/nodejs/bin/node"
+                  echo "✅ Made node executable"
                 fi
               fi
             fi
-            
-            # If still not found, try to find Node.js as root and use sudo for all commands
-            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
-              echo "Attempting to find Node.js as root user..."
-              # Try to get root's node path
-              ROOT_NODE_PATH=$(sudo sh -c 'which node 2>&1' 2>/dev/null | grep -v "not found" | head -1 || echo "")
-              if [ -n "$ROOT_NODE_PATH" ] && [ "$ROOT_NODE_PATH" != "" ]; then
-                # Verify the path exists
-                if sudo test -f "$ROOT_NODE_PATH" 2>/dev/null; then
-                  echo "✅ Found Node.js at: $ROOT_NODE_PATH (requires sudo)"
-                  NODE_CMD="$ROOT_NODE_PATH"
-                  # Set flag to use sudo for all Node.js/npm commands
-                  echo "USE_SUDO_FOR_NODE=1" >> $GITHUB_ENV
-                  echo "✅ Will use sudo for all Node.js/npm commands"
+          fi
+          
+          if [ -z "$NODE_CMD" ]; then
+            if command -v node &> /dev/null; then
+              NODE_CMD="node"
+              echo "✅ Found node via command -v"
+            elif [ -f /usr/local/bin/node ]; then
+              NODE_CMD="/usr/local/bin/node"
+              echo "✅ Found node in /usr/local/bin"
+            elif [ -f /usr/bin/node ]; then
+              NODE_CMD="/usr/bin/node"
+              echo "✅ Found node in /usr/bin"
+            fi
+          fi
+          
+          if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+            if [ -d /root/.nvm/versions/node ]; then
+              NODE_CMD=$(find /root/.nvm/versions/node -name node -type f -executable 2>/dev/null | sort -V | tail -1)
+            fi
+          fi
+          
+          if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+            if [ -d "$HOME/.nvm/versions/node" ]; then
+              NODE_CMD=$(find "$HOME/.nvm/versions/node" -name node -type f -executable 2>/dev/null | sort -V | tail -1)
+            fi
+          fi
+          
+          if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+            NODE_CMD=$(find /usr/local/bin /usr/bin /opt /root/.nvm /root/.local /root/bin -name node -type f -executable 2>/dev/null | head -1)
+          fi
+          
+          if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+            ROOT_NODE=$(sudo sh -c 'command -v node' 2>/dev/null || echo "")
+            if [ -z "$ROOT_NODE" ]; then
+              ROOT_NODE=$(sudo -n sh -c 'command -v node' 2>/dev/null || echo "")
+            fi
+            if [ -n "$ROOT_NODE" ] && [ -f "$ROOT_NODE" ]; then
+              NODE_CMD="$ROOT_NODE"
+              echo "Found node via root's PATH: $NODE_CMD"
+            fi
+          fi
+          
+          if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+            if [ -f /root/.bashrc ]; then
+              ROOT_NVM_DIR=$(grep -o 'NVM_DIR="[^"]*"' /root/.bashrc 2>/dev/null | cut -d'"' -f2 || echo "")
+              if [ -n "$ROOT_NVM_DIR" ] && [ -d "$ROOT_NVM_DIR/versions/node" ]; then
+                NODE_CMD=$(find "$ROOT_NVM_DIR/versions/node" -name node -type f -executable 2>/dev/null | sort -V | tail -1)
+              fi
+            fi
+          fi
+          
+          if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+            ROOT_NODE_PATH=$(sudo sh -c 'which node 2>&1' 2>/dev/null | grep -v "not found" | head -1 || echo "")
+            if [ -n "$ROOT_NODE_PATH" ] && [ "$ROOT_NODE_PATH" != "" ]; then
+              if sudo test -f "$ROOT_NODE_PATH" 2>/dev/null; then
+                echo "✅ Found Node.js at: $ROOT_NODE_PATH (requires sudo)"
+                NODE_CMD="$ROOT_NODE_PATH"
+                echo "USE_SUDO_FOR_NODE=1" >> $GITHUB_ENV
+                echo "✅ Will use sudo for all Node.js/npm commands"
+              fi
+            fi
+          fi
+          
+          if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+            ROOT_NODE_PATH=$(sudo sh -c 'which node 2>&1' 2>/dev/null | grep -v "not found" | head -1 || echo "")
+            if [ -n "$ROOT_NODE_PATH" ] && sudo test -f "$ROOT_NODE_PATH" 2>/dev/null; then
+              echo "Found Node.js at: $ROOT_NODE_PATH"
+              if sudo ln -sf "$ROOT_NODE_PATH" /usr/local/bin/node 2>/dev/null; then
+                sudo chmod +x /usr/local/bin/node 2>/dev/null
+                if [ -f /usr/local/bin/node ] && [ -x /usr/local/bin/node ]; then
+                  NODE_CMD="/usr/local/bin/node"
+                  echo "✅ Symlink created successfully"
                 fi
               fi
             fi
-            
-            # If still not found, try to create symlinks automatically (if sudo is available)
-            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
-              echo "Attempting to create symlinks automatically..."
-              # Try to get root's node path and create symlink
-              ROOT_NODE_PATH=$(sudo sh -c 'which node 2>&1' 2>/dev/null | grep -v "not found" | head -1 || echo "")
-              if [ -n "$ROOT_NODE_PATH" ] && sudo test -f "$ROOT_NODE_PATH" 2>/dev/null; then
-                echo "Found Node.js at: $ROOT_NODE_PATH"
-                echo "Creating symlink in /usr/local/bin..."
-                if sudo ln -sf "$ROOT_NODE_PATH" /usr/local/bin/node 2>/dev/null; then
-                  sudo chmod +x /usr/local/bin/node 2>/dev/null
-                  if [ -f /usr/local/bin/node ] && [ -x /usr/local/bin/node ]; then
-                    NODE_CMD="/usr/local/bin/node"
-                    echo "✅ Symlink created successfully"
-                  fi
-                else
-                  echo "⚠️  Failed to create symlink (may need passwordless sudo)"
-                fi
-              fi
-            fi
-            
-            if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
-              echo "❌ Node.js is not installed on the server or not accessible"
-              echo "Current PATH: $PATH"
-              echo "Current user: $(whoami)"
-              echo ""
-              echo "Trying to find node..."
-              which node 2>/dev/null || echo "node not in PATH"
-              echo ""
-              echo "Searching in common locations:"
-              find /usr /opt -name node -type f 2>/dev/null | head -10 || echo "node not found in /usr or /opt"
-              echo ""
-              echo "Checking if we can access root's directories:"
-              ls -la /root/.nvm 2>/dev/null | head -5 || echo "Cannot access /root/.nvm"
-              echo ""
-              echo "💡 Solution: Run these commands on your server as root:"
-              echo "   NODE_PATH=\$(which node)"
-              echo "   NPM_PATH=\$(which npm)"
-              echo "   sudo ln -sf \$NODE_PATH /usr/local/bin/node"
-              echo "   sudo ln -sf \$NPM_PATH /usr/local/bin/npm"
-              echo "   sudo chmod +x /usr/local/bin/node /usr/local/bin/npm"
-              echo ""
-              echo "Or configure passwordless sudo for the runner user:"
-              echo "   sudo visudo"
-              echo "   Add: signin-fil-investments-api ALL=(ALL) NOPASSWD: ALL"
+          fi
+          
+          if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
+            echo "❌ Node.js is not installed on the server or not accessible"
+            exit 1
+          fi
+          
+          if [ ! -x "$NODE_CMD" ]; then
+            if sudo chmod +x "$NODE_CMD" 2>/dev/null; then
+              echo "✅ Made Node.js executable"
+            else
+              echo "❌ Node.js found at $NODE_CMD but cannot be executed"
               exit 1
             fi
-            
-            # Verify we can execute it
-            if [ ! -x "$NODE_CMD" ]; then
-              echo "⚠️  Node.js found but not executable, checking permissions..."
-              ls -la "$NODE_CMD" || echo "Cannot check permissions"
-              # Try to make it executable
-              if sudo chmod +x "$NODE_CMD" 2>/dev/null; then
-                echo "✅ Made Node.js executable"
-              elif sudo -n test -x "$NODE_CMD" 2>/dev/null; then
-                echo "Node.js requires sudo to execute"
-              else
-                echo "❌ Node.js found at $NODE_CMD but cannot be executed"
-                echo "Try: sudo chmod +x $NODE_CMD"
-                exit 1
+          fi
+          
+          if [ "${USE_SUDO_FOR_NODE:-}" = "1" ]; then
+            NODE_VERSION=$(sudo $NODE_CMD --version 2>/dev/null || echo "unknown")
+          else
+            NODE_VERSION=$($NODE_CMD --version 2>/dev/null || sudo $NODE_CMD --version 2>/dev/null || echo "unknown")
+          fi
+          echo "✅ Node.js found at: $NODE_CMD"
+          echo "✅ Node.js version: $NODE_VERSION"
+          echo "NODE_CMD=$NODE_CMD" >> $GITHUB_ENV
+
+      - name: Validate npm (self-hosted)
+        if: env.USE_SELF_HOSTED == 'true'
+        run: |
+          echo "📦 Checking npm installation..."
+          NPM_CMD=""
+          if [ -f /opt/nodejs/bin/npm ] && [ -x /opt/nodejs/bin/npm ]; then
+            NPM_CMD="/opt/nodejs/bin/npm"
+          elif command -v npm &> /dev/null; then
+            NPM_CMD="npm"
+          elif [ -f /usr/local/bin/npm ]; then
+            NPM_CMD="/usr/local/bin/npm"
+          elif [ -f /usr/bin/npm ]; then
+            NPM_CMD="/usr/bin/npm"
+          fi
+          
+          if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+            if [ -n "$NODE_CMD" ] && [ -d "$(dirname "$NODE_CMD")" ]; then
+              NPM_CMD="$(dirname "$NODE_CMD")/npm"
+              [ ! -f "$NPM_CMD" ] && NPM_CMD=""
+            elif [ -d /root/.nvm/versions/node ]; then
+              NPM_CMD=$(find /root/.nvm/versions/node -name npm -type f -executable 2>/dev/null | sort -V | tail -1)
+            fi
+          fi
+          
+          if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+            if [ -d "$HOME/.nvm/versions/node" ]; then
+              NPM_CMD=$(find "$HOME/.nvm/versions/node" -name npm -type f -executable 2>/dev/null | sort -V | tail -1)
+            fi
+          fi
+          
+          if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+            NPM_CMD=$(find /usr/local/bin /usr/bin /opt /root/.nvm /root/.local /root/bin -name npm -type f -executable 2>/dev/null | head -1)
+          fi
+          
+          if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+            ROOT_NPM=$(sudo sh -c 'command -v npm' 2>/dev/null || echo "")
+            [ -z "$ROOT_NPM" ] && ROOT_NPM=$(sudo -n sh -c 'command -v npm' 2>/dev/null || echo "")
+            if [ -n "$ROOT_NPM" ] && [ -f "$ROOT_NPM" ]; then
+              NPM_CMD="$ROOT_NPM"
+            fi
+          fi
+          
+          if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+            if [ -f /root/.bashrc ]; then
+              ROOT_NVM_DIR=$(grep -o 'NVM_DIR="[^"]*"' /root/.bashrc 2>/dev/null | cut -d'"' -f2 || echo "")
+              if [ -n "$ROOT_NVM_DIR" ] && [ -d "$ROOT_NVM_DIR/versions/node" ]; then
+                NPM_CMD=$(find "$ROOT_NVM_DIR/versions/node" -name npm -type f -executable 2>/dev/null | sort -V | tail -1)
               fi
             fi
-            
-            # Check Node.js version (use sudo if needed)
-            if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-              NODE_VERSION=$(sudo $NODE_CMD --version 2>/dev/null || echo "unknown")
-            else
-              NODE_VERSION=$($NODE_CMD --version 2>/dev/null || sudo $NODE_CMD --version 2>/dev/null || echo "unknown")
-            fi
-            echo "✅ Node.js found at: $NODE_CMD"
-            echo "✅ Node.js version: $NODE_VERSION"
-            
-            # Export NODE_CMD and USE_SUDO_FOR_NODE for use in later steps
-            echo "NODE_CMD=$NODE_CMD" >> $GITHUB_ENV
-            
-            # Check npm (try multiple methods, including checking root's PATH)
-            echo "📦 Checking npm installation..."
-            NPM_CMD=""
-            # First try standard locations (check /opt/nodejs/bin first since it's in PATH)
-            if [ -f /opt/nodejs/bin/npm ] && [ -x /opt/nodejs/bin/npm ]; then
-              NPM_CMD="/opt/nodejs/bin/npm"
-              echo "Found npm in /opt/nodejs/bin"
-            elif command -v npm &> /dev/null; then
-              NPM_CMD="npm"
-            elif [ -f /usr/local/bin/npm ]; then
-              NPM_CMD="/usr/local/bin/npm"
-            elif [ -f /usr/bin/npm ]; then
-              NPM_CMD="/usr/bin/npm"
-            fi
-            
-            # Check root's nvm installation (use same directory as node if found)
-            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
-              if [ -n "$NODE_CMD" ] && [ -d "$(dirname "$NODE_CMD")" ]; then
-                # npm should be in the same directory as node
-                NPM_CMD="$(dirname "$NODE_CMD")/npm"
-                if [ ! -f "$NPM_CMD" ]; then
-                  NPM_CMD=""
-                fi
-              elif [ -d /root/.nvm/versions/node ]; then
-                NPM_CMD=$(find /root/.nvm/versions/node -name npm -type f -executable 2>/dev/null | sort -V | tail -1)
-              fi
-            fi
-            
-            # Check current user's nvm
-            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
-              if [ -d "$HOME/.nvm/versions/node" ]; then
-                NPM_CMD=$(find "$HOME/.nvm/versions/node" -name npm -type f -executable 2>/dev/null | sort -V | tail -1)
-              fi
-            fi
-            
-            # Try to find npm in common locations
-            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
-              echo "Searching for npm in common locations..."
-              NPM_CMD=$(find /usr/local/bin /usr/bin /opt /root/.nvm /root/.local /root/bin -name npm -type f -executable 2>/dev/null | head -1)
-            fi
-            
-            # If still not found, try using sudo to check root's PATH
-            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
-              echo "Trying to find npm using root's PATH..."
-              # Try without -n first
-              ROOT_NPM=$(sudo sh -c 'command -v npm' 2>/dev/null || echo "")
-              if [ -z "$ROOT_NPM" ]; then
-                # Try with -n
-                ROOT_NPM=$(sudo -n sh -c 'command -v npm' 2>/dev/null || echo "")
-              fi
-              if [ -n "$ROOT_NPM" ] && [ -f "$ROOT_NPM" ]; then
-                NPM_CMD="$ROOT_NPM"
-                echo "Found npm via root's PATH: $NPM_CMD"
-              fi
-            fi
-            
-            # Last resort: try to read root's .bashrc or .profile to find NVM_DIR
-            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
-              if [ -f /root/.bashrc ]; then
-                ROOT_NVM_DIR=$(grep -o 'NVM_DIR="[^"]*"' /root/.bashrc 2>/dev/null | cut -d'"' -f2 || echo "")
-                if [ -n "$ROOT_NVM_DIR" ] && [ -d "$ROOT_NVM_DIR/versions/node" ]; then
-                  NPM_CMD=$(find "$ROOT_NVM_DIR/versions/node" -name npm -type f -executable 2>/dev/null | sort -V | tail -1)
+          fi
+          
+          if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+            ROOT_NPM_PATH=$(sudo sh -c 'which npm 2>&1' 2>/dev/null | grep -v "not found" | head -1 || echo "")
+            if [ -n "$ROOT_NPM_PATH" ] && [ "$ROOT_NPM_PATH" != "" ]; then
+              if sudo test -f "$ROOT_NPM_PATH" 2>/dev/null; then
+                echo "✅ Found npm at: $ROOT_NPM_PATH (requires sudo)"
+                NPM_CMD="$ROOT_NPM_PATH"
+                if [ "${USE_SUDO_FOR_NODE:-}" != "1" ]; then
+                  echo "USE_SUDO_FOR_NODE=1" >> $GITHUB_ENV
                 fi
               fi
             fi
-            
-            # If still not found, try to create symlinks automatically (if sudo is available)
-            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
-              echo "Attempting to find and create symlinks automatically..."
-              # Try multiple methods to find root's npm
-              ROOT_NPM_PATH=""
-              # Method 1: Try sudo which
-              ROOT_NPM_PATH=$(sudo sh -c 'which npm' 2>/dev/null || echo "")
-              # Method 2: Use same directory as node if found
-              if [ -z "$ROOT_NPM_PATH" ] && [ -n "$NODE_CMD" ] && [ -f "$NODE_CMD" ]; then
-                ROOT_NPM_PATH="$(dirname "$NODE_CMD")/npm"
-                if [ ! -f "$ROOT_NPM_PATH" ]; then
-                  ROOT_NPM_PATH=""
-                fi
-              fi
-              # Method 3: Check if /opt/nodejs/bin/npm exists
-              if [ -z "$ROOT_NPM_PATH" ] && [ -f /opt/nodejs/bin/npm ]; then
-                ROOT_NPM_PATH="/opt/nodejs/bin/npm"
-              fi
-              
-              if [ -n "$ROOT_NPM_PATH" ] && [ -f "$ROOT_NPM_PATH" ]; then
-                echo "Found npm at: $ROOT_NPM_PATH"
-                echo "Creating symlink in /usr/local/bin..."
-                sudo ln -sf "$ROOT_NPM_PATH" /usr/local/bin/npm 2>/dev/null || echo "Failed to create symlink (may need manual setup)"
+          fi
+          
+          if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+            ROOT_NPM_PATH=$(sudo sh -c 'which npm 2>&1' 2>/dev/null | grep -v "not found" | head -1 || echo "")
+            if [ -n "$ROOT_NPM_PATH" ] && sudo test -f "$ROOT_NPM_PATH" 2>/dev/null; then
+              if sudo ln -sf "$ROOT_NPM_PATH" /usr/local/bin/npm 2>/dev/null; then
+                sudo chmod +x /usr/local/bin/npm 2>/dev/null
                 if [ -f /usr/local/bin/npm ] && [ -x /usr/local/bin/npm ]; then
                   NPM_CMD="/usr/local/bin/npm"
-                  echo "✅ Symlink created successfully"
-                elif [ -f /opt/nodejs/bin/npm ]; then
-                  # If /opt/nodejs/bin/npm exists, try to use it directly
-                  NPM_CMD="/opt/nodejs/bin/npm"
-                  echo "✅ Using /opt/nodejs/bin/npm directly"
                 fi
               fi
             fi
-            
-            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
-              echo "❌ npm is not installed on the server or not accessible"
-              echo "Trying to find npm..."
-              which npm 2>/dev/null || echo "npm not in PATH"
-              echo ""
-              echo "Searching in common locations:"
-              find /usr /opt -name npm -type f 2>/dev/null | head -10 || echo "npm not found in /usr or /opt"
-              echo ""
-              echo "💡 Solution: Run these commands on your server as root:"
-              echo "   NODE_PATH=\$(which node)"
-              echo "   NPM_PATH=\$(which npm)"
-              echo "   sudo ln -sf \$NODE_PATH /usr/local/bin/node"
-              echo "   sudo ln -sf \$NPM_PATH /usr/local/bin/npm"
-              echo "   sudo chmod +x /usr/local/bin/node /usr/local/bin/npm"
-              echo ""
-              echo "Or configure passwordless sudo for the runner user:"
-              echo "   sudo visudo"
-              echo "   Add: signin-fil-investments-api ALL=(ALL) NOPASSWD: ALL"
-              exit 1
-            fi
-            
-            # Verify we can execute it
-            if [ ! -x "$NPM_CMD" ]; then
-              echo "⚠️  npm found but not executable, checking permissions..."
-              ls -la "$NPM_CMD" || echo "Cannot check permissions"
-              # Try to make it executable
-              if sudo chmod +x "$NPM_CMD" 2>/dev/null; then
-                echo "✅ Made npm executable"
-              elif sudo -n test -x "$NPM_CMD" 2>/dev/null; then
-                echo "npm requires sudo to execute"
-              else
-                echo "❌ npm found at $NPM_CMD but cannot be executed"
-                echo "Try: sudo chmod +x $NPM_CMD"
-                exit 1
-              fi
-            fi
-            
-            # Check npm version (use sudo if needed)
-            if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-              NPM_VERSION=$(sudo $NPM_CMD --version 2>/dev/null || echo "unknown")
+          fi
+          
+          if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
+            echo "❌ npm is not installed on the server or not accessible"
+            exit 1
+          fi
+          
+          if [ ! -x "$NPM_CMD" ]; then
+            if sudo chmod +x "$NPM_CMD" 2>/dev/null; then
+              echo "✅ Made npm executable"
             else
-              NPM_VERSION=$($NPM_CMD --version 2>/dev/null || sudo $NPM_CMD --version 2>/dev/null || echo "unknown")
-            fi
-            echo "✅ npm found at: $NPM_CMD"
-            echo "✅ npm version: $NPM_VERSION"
-            
-            # Export NPM_CMD and USE_SUDO_FOR_NODE for use in later steps
-            echo "NPM_CMD=$NPM_CMD" >> $GITHUB_ENV
-            
-            # Check deployment directory
-            echo "📁 Checking deployment directory..."
-            DEPLOY_PATH="$DEPLOY_PATH"
-            if [ ! -d "$DEPLOY_PATH" ]; then
-              echo "Creating deployment directory..."
-              mkdir -p "$DEPLOY_PATH/releases"
-              mkdir -p "$DEPLOY_PATH/shared"
-            fi
-            
-            if [ ! -w "$DEPLOY_PATH" ]; then
-              echo "❌ Deployment directory is not writable"
+              echo "❌ npm found at $NPM_CMD but cannot be executed"
               exit 1
             fi
-            echo "✅ Deployment directory is ready"
-            
-            # Check .env file
-            echo "🔐 Checking environment configuration..."
-            if [ -n "${{ secrets.BACKEND_ENV_FILE }}" ]; then
-              echo "✅ BACKEND_ENV_FILE secret is set"
-            elif [ -f "$DEPLOY_PATH/shared/.env" ]; then
-              echo "✅ Shared .env file found"
+          fi
+          
+          if [ "${USE_SUDO_FOR_NODE:-}" = "1" ]; then
+            NPM_VERSION=$(sudo $NPM_CMD --version 2>/dev/null || echo "unknown")
+          else
+            NPM_VERSION=$($NPM_CMD --version 2>/dev/null || sudo $NPM_CMD --version 2>/dev/null || echo "unknown")
+          fi
+          echo "✅ npm found at: $NPM_CMD"
+          echo "✅ npm version: $NPM_VERSION"
+          echo "NPM_CMD=$NPM_CMD" >> $GITHUB_ENV
+
+      - name: Validate deployment directory and Docker (self-hosted)
+        if: env.USE_SELF_HOSTED == 'true'
+        run: |
+          echo "📁 Checking deployment directory..."
+          DEPLOY_PATH="$DEPLOY_PATH"
+          if [ ! -d "$DEPLOY_PATH" ]; then
+            mkdir -p "$DEPLOY_PATH/releases"
+            mkdir -p "$DEPLOY_PATH/shared"
+          fi
+          if [ ! -w "$DEPLOY_PATH" ]; then
+            echo "❌ Deployment directory is not writable"
+            exit 1
+          fi
+          echo "✅ Deployment directory is ready"
+          
+          echo "🔐 Checking environment configuration..."
+          if [ -n "${{ secrets.BACKEND_ENV_FILE }}" ]; then
+            echo "✅ BACKEND_ENV_FILE secret is set"
+          elif [ -f "$DEPLOY_PATH/shared/.env" ]; then
+            echo "✅ Shared .env file found"
+          else
+            echo "❌ No .env file found"
+            exit 1
+          fi
+          
+          echo "🐳 Checking Docker and services..."
+          if command -v docker &> /dev/null; then
+            echo "✅ Docker is installed"
+            if command -v docker-compose &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker-compose"
+            elif docker compose version &> /dev/null; then
+              DOCKER_COMPOSE_CMD="docker compose"
             else
-              echo "❌ No .env file found. Please set BACKEND_ENV_FILE secret or create shared/.env file"
-              exit 1
-            fi
-            
-            # Check Docker and start services if needed
-            echo "🐳 Checking Docker and services..."
-            if command -v docker &> /dev/null; then
-              echo "✅ Docker is installed"
-              
-              # Check if docker-compose is available
-              if command -v docker-compose &> /dev/null; then
-                DOCKER_COMPOSE_CMD="docker-compose"
-              elif docker compose version &> /dev/null; then
+              if command -v apt-get &> /dev/null; then
+                sudo apt-get update && sudo apt-get install -y docker-compose-plugin 2>/dev/null || true
                 DOCKER_COMPOSE_CMD="docker compose"
-              else
-                echo "⚠️  docker-compose not found, trying to install..."
-                # Try to install docker-compose if not available
-                if command -v apt-get &> /dev/null; then
-                  sudo apt-get update && sudo apt-get install -y docker-compose-plugin 2>/dev/null || true
-                  DOCKER_COMPOSE_CMD="docker compose"
-                fi
+              fi
+            fi
+            
+            if [ -n "$DOCKER_COMPOSE_CMD" ]; then
+              if [ -f "$WORKSPACE_PATH/backend/docker-compose.yml" ]; then
+                DOCKER_COMPOSE_FILE="$WORKSPACE_PATH/backend/docker-compose.yml"
+                DOCKER_COMPOSE_DIR="$WORKSPACE_PATH/backend"
+              elif [ -f "$DEPLOY_PATH/current/docker-compose.yml" ]; then
+                DOCKER_COMPOSE_FILE="$DEPLOY_PATH/current/docker-compose.yml"
+                DOCKER_COMPOSE_DIR="$DEPLOY_PATH/current"
+              elif [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
+                DOCKER_COMPOSE_FILE="$DEPLOY_PATH/docker-compose.yml"
+                DOCKER_COMPOSE_DIR="$DEPLOY_PATH"
               fi
               
-              if [ -z "$DOCKER_COMPOSE_CMD" ]; then
-                echo "⚠️  docker-compose not available, skipping Docker service check"
-              else
-                echo "✅ Using: $DOCKER_COMPOSE_CMD"
+              if [ -n "$DOCKER_COMPOSE_FILE" ]; then
+                cd "$DOCKER_COMPOSE_DIR"
+                POSTGRES_RUNNING=$(docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -c "investment_crm_db" || echo "0")
+                REDIS_RUNNING=$(docker ps --filter "name=investment_crm_redis" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -c "investment_crm_redis" || echo "0")
                 
-                # Try to find docker-compose.yml in various locations
-                DOCKER_COMPOSE_FILE=""
-                DOCKER_COMPOSE_DIR=""
-                
-                # Check in workspace first (for self-hosted runners)
-                if [ -f "$WORKSPACE_PATH/backend/docker-compose.yml" ]; then
-                  DOCKER_COMPOSE_FILE="$WORKSPACE_PATH/backend/docker-compose.yml"
-                  DOCKER_COMPOSE_DIR="$WORKSPACE_PATH/backend"
-                # Check in current deployment
-                elif [ -f "$DEPLOY_PATH/current/docker-compose.yml" ]; then
-                  DOCKER_COMPOSE_FILE="$DEPLOY_PATH/current/docker-compose.yml"
-                  DOCKER_COMPOSE_DIR="$DEPLOY_PATH/current"
-                # Check in latest release
-                elif [ -d "$DEPLOY_PATH/releases" ] && [ -n "$(ls -t $DEPLOY_PATH/releases 2>/dev/null | head -1)" ]; then
-                  LATEST_RELEASE=$(ls -t $DEPLOY_PATH/releases 2>/dev/null | head -1)
-                  if [ -f "$DEPLOY_PATH/releases/$LATEST_RELEASE/docker-compose.yml" ]; then
-                    DOCKER_COMPOSE_FILE="$DEPLOY_PATH/releases/$LATEST_RELEASE/docker-compose.yml"
-                    DOCKER_COMPOSE_DIR="$DEPLOY_PATH/releases/$LATEST_RELEASE"
-                  fi
-                # Check in deployment root
-                elif [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
-                  DOCKER_COMPOSE_FILE="$DEPLOY_PATH/docker-compose.yml"
-                  DOCKER_COMPOSE_DIR="$DEPLOY_PATH"
-                fi
-                
-                if [ -z "$DOCKER_COMPOSE_FILE" ]; then
-                  echo "⚠️  docker-compose.yml not found, skipping Docker service setup"
-                  echo "   Searched in:"
-                  echo "   - $WORKSPACE_PATH/backend/docker-compose.yml"
-                  echo "   - $DEPLOY_PATH/current/docker-compose.yml"
-                  echo "   - $DEPLOY_PATH/docker-compose.yml"
-                fi
-                
-                if [ -n "$DOCKER_COMPOSE_FILE" ]; then
-                  echo "📄 Found docker-compose.yml at: $DOCKER_COMPOSE_FILE"
-                  cd "$DOCKER_COMPOSE_DIR"
-                  
-                  # Check if containers are running
-                  echo "🔍 Checking if PostgreSQL and Redis containers are running..."
-                  POSTGRES_RUNNING=$(docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -c "investment_crm_db" || echo "0")
-                  REDIS_RUNNING=$(docker ps --filter "name=investment_crm_redis" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -c "investment_crm_redis" || echo "0")
-                  
-                  echo "  PostgreSQL container: $([ "$POSTGRES_RUNNING" = "1" ] && echo "✅ Running" || echo "❌ Not running")"
-                  echo "  Redis container: $([ "$REDIS_RUNNING" = "1" ] && echo "✅ Running" || echo "❌ Not running")"
-                  
-                  # Always ensure services are up (docker-compose up -d is idempotent)
-                  echo "🚀 Ensuring Docker services are running (PostgreSQL and Redis)..."
-                  echo "   This will start services if they're not running, or do nothing if already running."
-                  
-                  # Start only postgres and redis services (not backend/frontend)
-                  # Using docker-compose up -d is safe - it won't restart if already running
-                  if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-                    sudo $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1 || {
-                      echo "⚠️  Failed to start services with sudo, trying without sudo..."
-                      $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1 || {
-                        echo "❌ Failed to start Docker services"
-                        echo "💡 You can manually start them with: cd $DOCKER_COMPOSE_DIR && $DOCKER_COMPOSE_CMD up -d postgres redis"
-                        exit 1
-                      }
-                    }
+                if [ "$POSTGRES_RUNNING" = "0" ] || [ "$REDIS_RUNNING" = "0" ]; then
+                  echo "🚀 Starting Docker services..."
+                  if [ "${USE_SUDO_FOR_NODE:-}" = "1" ]; then
+                    sudo $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1 || $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1 || exit 1
                   else
-                    $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1 || {
-                      echo "❌ Failed to start Docker services"
-                      echo "💡 You can manually start them with: cd $DOCKER_COMPOSE_DIR && $DOCKER_COMPOSE_CMD up -d postgres redis"
-                      exit 1
-                    }
+                    $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1 || exit 1
                   fi
-                  
-                  echo "✅ Docker services command executed successfully"
-                  
-                  # Wait for services to be healthy (whether just started or already running)
-                  echo "⏳ Waiting for services to be healthy..."
                   sleep 3
                   
-                  # Wait for PostgreSQL to be ready
-                  echo "🔄 Waiting for PostgreSQL to be ready..."
-                  MAX_RETRIES=30
                   RETRY_COUNT=0
-                  POSTGRES_READY=false
-                  while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                  while [ $RETRY_COUNT -lt 30 ]; do
                     if docker exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
                       echo "✅ PostgreSQL is ready"
-                      POSTGRES_READY=true
                       break
                     fi
                     RETRY_COUNT=$((RETRY_COUNT + 1))
-                    if [ $((RETRY_COUNT % 5)) -eq 0 ]; then
-                      echo "  Still waiting... ($RETRY_COUNT/$MAX_RETRIES)"
-                    fi
+                    [ $((RETRY_COUNT % 5)) -eq 0 ] && echo "  Still waiting... ($RETRY_COUNT/30)"
                     sleep 2
                   done
                   
-                  if [ "$POSTGRES_READY" = "false" ]; then
-                    echo "⚠️  PostgreSQL took too long to start (waited $((MAX_RETRIES * 2)) seconds)"
-                    echo "💡 Check container logs: docker logs investment_crm_db"
-                    echo "   Or manually start: cd $DOCKER_COMPOSE_DIR && $DOCKER_COMPOSE_CMD up -d postgres"
-                  fi
-                  
-                  # Wait for Redis to be ready
-                  echo "🔄 Waiting for Redis to be ready..."
                   RETRY_COUNT=0
-                  REDIS_READY=false
-                  while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                  while [ $RETRY_COUNT -lt 30 ]; do
                     if docker exec investment_crm_redis redis-cli ping &> /dev/null 2>&1; then
                       echo "✅ Redis is ready"
-                      REDIS_READY=true
                       break
                     fi
                     RETRY_COUNT=$((RETRY_COUNT + 1))
-                    if [ $((RETRY_COUNT % 5)) -eq 0 ]; then
-                      echo "  Still waiting... ($RETRY_COUNT/$MAX_RETRIES)"
-                    fi
+                    [ $((RETRY_COUNT % 5)) -eq 0 ] && echo "  Still waiting... ($RETRY_COUNT/30)"
                     sleep 2
                   done
-                  
-                  if [ "$REDIS_READY" = "false" ]; then
-                    echo "⚠️  Redis took too long to start (waited $((MAX_RETRIES * 2)) seconds)"
-                    echo "💡 Check container logs: docker logs investment_crm_redis"
-                    echo "   Or manually start: cd $DOCKER_COMPOSE_DIR && $DOCKER_COMPOSE_CMD up -d redis"
-                  fi
-                  
-                  # Final status check
-                  POSTGRES_FINAL=$(docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -c "investment_crm_db" || echo "0")
-                  REDIS_FINAL=$(docker ps --filter "name=investment_crm_redis" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -c "investment_crm_redis" || echo "0")
-                  
-                  if [ "$POSTGRES_FINAL" = "1" ] && [ "$REDIS_FINAL" = "1" ]; then
-                    echo "✅ Both Docker services are running and ready"
-                  elif [ "$POSTGRES_FINAL" = "1" ]; then
-                    echo "⚠️  PostgreSQL is running but Redis is not"
-                  elif [ "$REDIS_FINAL" = "1" ]; then
-                    echo "⚠️  Redis is running but PostgreSQL is not"
-                  else
-                    echo "❌ Neither service is running"
-                    echo "💡 Manual start command:"
-                    echo "   cd $DOCKER_COMPOSE_DIR"
-                    echo "   $DOCKER_COMPOSE_CMD up -d postgres redis"
-                    echo "   docker ps  # Verify containers are running"
-                  fi
-                fi
-              fi
-            else
-              echo "⚠️  Docker is not installed. Skipping Docker service setup."
-              echo "💡 Install Docker to use docker-compose services: https://docs.docker.com/get-docker/"
-            fi
-            
-            # Check PostgreSQL client
-            echo "🗄️  Checking database prerequisites..."
-            if command -v psql &> /dev/null; then
-              echo "✅ PostgreSQL client is installed"
-            else
-              echo "⚠️  PostgreSQL client (psql) not found. Database migrations may require manual setup."
-            fi
-            
-            # Check process manager
-            echo "⚙️  Checking process manager..."
-            if command -v pm2 &> /dev/null; then
-              echo "✅ Process manager found: pm2"
-            elif command -v systemctl &> /dev/null; then
-              echo "✅ Process manager found: systemd"
-            else
-              echo "⚠️  No process manager found. Application will run in background mode."
-            fi
-            
-            # Check port availability
-            echo "🔌 Checking port availability..."
-            if command -v netstat &> /dev/null; then
-              PORT_CHECK=$(netstat -tuln | grep ':3001' || echo 'available')
-            elif command -v ss &> /dev/null; then
-              PORT_CHECK=$(ss -tuln | grep ':3001' || echo 'available')
-            else
-              PORT_CHECK='unknown'
-            fi
-            if [ "$PORT_CHECK" != "available" ] && [ "$PORT_CHECK" != "unknown" ]; then
-              echo "⚠️  Port 3001 may be in use. Ensure the application can bind to this port."
-            else
-              echo "✅ Port 3001 appears to be available"
-            fi
-          else
-            # For GitHub-hosted runners, use SSH
-            echo "📡 Testing SSH connection..."
-            ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo 'SSH connection successful'" || {
-              echo "❌ SSH connection failed"
-              exit 1
-            }
-            
-            # Check Node.js version
-            echo "📦 Checking Node.js installation..."
-            NODE_VERSION=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "node --version 2>/dev/null || echo 'not_installed'")
-            if [ "$NODE_VERSION" = "not_installed" ]; then
-              echo "❌ Node.js is not installed on the server"
-              exit 1
-            fi
-            echo "✅ Node.js version: $NODE_VERSION"
-            
-            # Check npm
-            echo "📦 Checking npm installation..."
-            NPM_VERSION=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "npm --version 2>/dev/null || echo 'not_installed'")
-            if [ "$NPM_VERSION" = "not_installed" ]; then
-              echo "❌ npm is not installed on the server"
-              exit 1
-            fi
-            echo "✅ npm version: $NPM_VERSION"
-            
-            # Check deployment directory
-            echo "📁 Checking deployment directory..."
-            ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-              if [ ! -d '${{ secrets.BACKEND_DEPLOY_PATH }}' ]; then
-                echo 'Creating deployment directory...'
-                mkdir -p '${{ secrets.BACKEND_DEPLOY_PATH }}/releases'
-                mkdir -p '${{ secrets.BACKEND_DEPLOY_PATH }}/shared'
-              fi
-              
-              if [ ! -w '${{ secrets.BACKEND_DEPLOY_PATH }}' ]; then
-                echo '❌ Deployment directory is not writable'
-                exit 1
-              fi
-              echo '✅ Deployment directory is ready'
-            " || exit 1
-            
-            # Check .env file
-            echo "🔐 Checking environment configuration..."
-            if [ -n "${{ secrets.BACKEND_ENV_FILE }}" ]; then
-              echo "✅ BACKEND_ENV_FILE secret is set"
-            else
-              echo "⚠️  BACKEND_ENV_FILE secret not set, checking for shared .env file..."
-              ENV_EXISTS=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-                if [ -f '${{ secrets.BACKEND_DEPLOY_PATH }}/shared/.env' ]; then
-                  echo 'exists'
                 else
-                  echo 'missing'
+                  echo "✅ Docker services are already running"
                 fi
-              ")
-              if [ "$ENV_EXISTS" = "missing" ]; then
-                echo "❌ No .env file found. Please set BACKEND_ENV_FILE secret or create shared/.env file"
-                exit 1
               fi
-              echo "✅ Shared .env file found"
             fi
-            
-            # Check database prerequisites
-            echo "🗄️  Checking database prerequisites..."
-            ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-              if command -v psql &> /dev/null; then
-                echo '✅ PostgreSQL client is installed'
+          fi
+          
+          if command -v psql &> /dev/null; then
+            echo "✅ PostgreSQL client is installed"
+          fi
+          
+          if command -v pm2 &> /dev/null; then
+            echo "✅ Process manager found: pm2"
+          elif command -v systemctl &> /dev/null; then
+            echo "✅ Process manager found: systemd"
+          fi
+
+      - name: Validate server prerequisites (GitHub-hosted)
+        if: env.USE_SELF_HOSTED != 'true'
+        run: |
+          echo "📡 Testing SSH connection..."
+          ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "echo 'SSH connection successful'" || {
+            echo "❌ SSH connection failed"
+            exit 1
+          }
+          
+          NODE_VERSION=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "node --version 2>/dev/null || echo 'not_installed'")
+          if [ "$NODE_VERSION" = "not_installed" ]; then
+            echo "❌ Node.js is not installed on the server"
+            exit 1
+          fi
+          echo "✅ Node.js version: $NODE_VERSION"
+          
+          NPM_VERSION=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "npm --version 2>/dev/null || echo 'not_installed'")
+          if [ "$NPM_VERSION" = "not_installed" ]; then
+            echo "❌ npm is not installed on the server"
+            exit 1
+          fi
+          echo "✅ npm version: $NPM_VERSION"
+          
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            if [ ! -d '${{ secrets.BACKEND_DEPLOY_PATH }}' ]; then
+              mkdir -p '${{ secrets.BACKEND_DEPLOY_PATH }}/releases'
+              mkdir -p '${{ secrets.BACKEND_DEPLOY_PATH }}/shared'
+            fi
+            if [ ! -w '${{ secrets.BACKEND_DEPLOY_PATH }}' ]; then
+              echo '❌ Deployment directory is not writable'
+              exit 1
+            fi
+            echo '✅ Deployment directory is ready'
+          " || exit 1
+          
+          if [ -n "${{ secrets.BACKEND_ENV_FILE }}" ]; then
+            echo "✅ BACKEND_ENV_FILE secret is set"
+          else
+            ENV_EXISTS=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+              if [ -f '${{ secrets.BACKEND_DEPLOY_PATH }}/shared/.env' ]; then
+                echo 'exists'
               else
-                echo '⚠️  PostgreSQL client (psql) not found. Database migrations may require manual setup.'
-              fi
-            " || true
-            
-            # Check process manager
-            echo "⚙️  Checking process manager..."
-            PM_MANAGER=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-              if command -v pm2 &> /dev/null; then
-                echo 'pm2'
-              elif command -v systemctl &> /dev/null; then
-                echo 'systemd'
-              else
-                echo 'none'
+                echo 'missing'
               fi
             ")
-            if [ "$PM_MANAGER" = "none" ]; then
-              echo "⚠️  No process manager found. Application will run in background mode."
-            else
-              echo "✅ Process manager found: $PM_MANAGER"
+            if [ "$ENV_EXISTS" = "missing" ]; then
+              echo "❌ No .env file found"
+              exit 1
             fi
-            
-            # Check port availability
-            echo "🔌 Checking port availability..."
-            PORT_CHECK=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-              if command -v netstat &> /dev/null; then
-                netstat -tuln | grep ':3001' || echo 'available'
-              elif command -v ss &> /dev/null; then
-                ss -tuln | grep ':3001' || echo 'available'
-              else
-                echo 'unknown'
-              fi
-            ")
-            if [ "$PORT_CHECK" != "available" ] && [ "$PORT_CHECK" != "unknown" ]; then
-              echo "⚠️  Port 3001 may be in use. Ensure the application can bind to this port."
-            else
-              echo "✅ Port 3001 appears to be available"
+            echo "✅ Shared .env file found"
+          fi
+          
+          ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            if command -v psql &> /dev/null; then
+              echo '✅ PostgreSQL client is installed'
             fi
+          " || true
+          
+          PM_MANAGER=$(ssh ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
+            if command -v pm2 &> /dev/null; then
+              echo 'pm2'
+            elif command -v systemctl &> /dev/null; then
+              echo 'systemd'
+            else
+              echo 'none'
+            fi
+          ")
+          if [ "$PM_MANAGER" != "none" ]; then
+            echo "✅ Process manager found: $PM_MANAGER"
           fi
           
           echo "✅ All prerequisites validated successfully!"
