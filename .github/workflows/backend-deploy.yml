@@ -153,26 +153,72 @@ jobs:
             yarn build
           fi
           
-          # Set PM2_HOME explicitly (use root's PM2 if that's where it's installed)
-          # But run PM2 commands as current user
+          # Set PM2_HOME explicitly
+          PM2_HOME_DIR="$USER_HOME/.pm2"
+          export PM2_HOME="$PM2_HOME_DIR"
           export PATH="/opt/nodejs/bin:$PATH"
           
-          # Fix PM2 socket permissions if they exist
-          PM2_HOME_DIR="$HOME/.pm2"
-          if [ -d "$PM2_HOME_DIR" ]; then
-            echo "Fixing PM2 socket permissions..."
-            sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || true
-            # Fix specific socket files if they exist
-            [ -S "$PM2_HOME_DIR/rpc.sock" ] && sudo chown "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR/rpc.sock" 2>/dev/null || true
-            [ -S "$PM2_HOME_DIR/pub.sock" ] && sudo chown "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
-            chmod -R u+w "$PM2_HOME_DIR" 2>/dev/null || true
+          echo "PM2_HOME: $PM2_HOME"
+          
+          # Fix PM2 socket permissions before attempting to use PM2
+          echo "Fixing PM2 socket permissions..."
+          
+          # Kill any existing PM2 daemon that might be running (including root's)
+          /opt/nodejs/bin/pm2 kill 2>/dev/null || true
+          pkill -9 -f "pm2" 2>/dev/null || true
+          
+          # Kill root's PM2 daemon if it exists
+          if command -v sudo &> /dev/null; then
+            echo "Killing root PM2 daemon if running..."
+            sudo pkill -9 -f "pm2" 2>/dev/null || true
+            sudo PM2_HOME=/root/.pm2 /opt/nodejs/bin/pm2 kill 2>/dev/null || true
+            sudo PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 kill 2>/dev/null || true
           fi
           
+          # If socket files exist, remove them and fix ownership
+          if [ -f "$PM2_HOME_DIR/rpc.sock" ] || [ -f "$PM2_HOME_DIR/pub.sock" ]; then
+            echo "Removing socket files with wrong ownership..."
+            if command -v sudo &> /dev/null; then
+              sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+              sudo rm -f "$PM2_HOME_DIR/pm2.pid" 2>/dev/null || true
+              # Fix ownership of entire .pm2 directory
+              sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || true
+            else
+              rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+            fi
+          fi
+          
+          # Ensure .pm2 directory exists and has correct ownership
+          mkdir -p "$PM2_HOME_DIR" 2>/dev/null || true
+          if command -v sudo &> /dev/null; then
+            sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || true
+            sudo chmod -R 755 "$PM2_HOME_DIR" 2>/dev/null || true
+          fi
+          
+          # Wait a moment for any processes to fully terminate
+          sleep 2
+          
+          # Verify socket files are gone
+          if [ -f "$PM2_HOME_DIR/rpc.sock" ] || [ -f "$PM2_HOME_DIR/pub.sock" ]; then
+            echo "Warning: Socket files still exist, attempting force removal..."
+            if command -v sudo &> /dev/null; then
+              sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+              sudo pkill -9 -f "pm2" 2>/dev/null || true
+              sleep 1
+            fi
+          fi
+          
+          echo "PM2 permissions fixed. Attempting to restart/start..."
+          
           # Restart PM2 process
-          /opt/nodejs/bin/pm2 restart investment-crm-backend || {
+          /opt/nodejs/bin/pm2 restart investment-crm-backend 2>&1 || {
             echo "PM2 restart failed, trying to start instead..."
-            /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend || {
+            /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend 2>&1 || {
               echo "PM2 start also failed"
+              echo "Checking PM2 directory state:"
+              ls -la "$PM2_HOME_DIR" 2>/dev/null || true
+              echo "Checking for PM2 processes:"
+              ps aux | grep -i pm2 | grep -v grep || true
               exit 1
             }
           }
