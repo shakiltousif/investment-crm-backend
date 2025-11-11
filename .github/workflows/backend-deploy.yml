@@ -306,43 +306,61 @@ jobs:
           
           echo "Pre-start verification passed. Starting PM2..."
           
-          # Remove socket files one final time right before starting (in case they were recreated)
-          sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
-          
-          # Try to kill the PM2 daemon for this PM2_HOME one more time
-          PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 kill 2>/dev/null || true
-          sleep 1
-          
-          # Remove socket files again after pm2 kill
-          sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+          # Since PM2 daemons can't be killed (likely managed by systemd), we need to work with them
+          # Fix socket file permissions right before PM2 connects
+          echo "Fixing socket file permissions for existing PM2 daemon..."
+          sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || {
+            echo "Warning: Could not change socket file ownership, will try with sudo PM2 commands"
+          }
           
           # Restart PM2 process
-          # Use explicit PM2_HOME to ensure we're using the right daemon
-          # The daemon should be created as the current user since we've killed all daemons
+          # Since the daemon is running as root, we may need to use sudo for PM2 commands
           echo "Starting PM2 with PM2_HOME=$PM2_HOME_DIR"
+          
+          # Try without sudo first
           PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 restart investment-crm-backend 2>&1 || {
-            echo "PM2 restart failed, trying to start instead..."
-            # Remove socket files one more time before start
-            sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
-            PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend 2>&1 || {
-              echo "PM2 start also failed"
-              echo "Checking PM2 directory state:"
-              ls -la "$PM2_HOME_DIR" 2>/dev/null || true
-              echo "Checking for PM2 processes:"
-              ps aux | grep -i pm2 | grep -v grep || true
-              exit 1
+            echo "PM2 restart failed without sudo, trying with sudo..."
+            # Fix permissions again
+            sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+            
+            # Try restart with sudo (daemon is running as root anyway)
+            sudo PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 restart investment-crm-backend 2>&1 || {
+              echo "PM2 restart failed, trying to start instead..."
+              # Fix permissions before start
+              sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+              
+              # Try start without sudo first
+              PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend 2>&1 || {
+                echo "PM2 start failed without sudo, trying with sudo..."
+                # Fix permissions again
+                sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+                
+                # Try start with sudo
+                sudo PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend 2>&1 || {
+                  echo "PM2 start also failed"
+                  echo "Checking PM2 directory state:"
+                  ls -la "$PM2_HOME_DIR" 2>/dev/null || true
+                  echo "Checking for PM2 processes:"
+                  ps aux | grep -i pm2 | grep -v grep || true
+                  exit 1
+                }
+              }
             }
           }
           
           # Verify the process is actually running
           sleep 3
-          if /opt/nodejs/bin/pm2 list 2>&1 | grep -q "investment-crm-backend.*online"; then
+          # Try without sudo first, then with sudo if needed
+          if PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 list 2>&1 | grep -q "investment-crm-backend.*online"; then
             echo "✅ PM2 process is running successfully"
-            /opt/nodejs/bin/pm2 describe investment-crm-backend
+            PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 describe investment-crm-backend
+          elif sudo PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 list 2>&1 | grep -q "investment-crm-backend.*online"; then
+            echo "✅ PM2 process is running successfully (verified with sudo)"
+            sudo PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 describe investment-crm-backend
           else
             echo "⚠️  PM2 process may not be running correctly"
-            /opt/nodejs/bin/pm2 list
-            /opt/nodejs/bin/pm2 logs investment-crm-backend --lines 20 --nostream
+            PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 list 2>&1 || sudo PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 list 2>&1
+            PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 logs investment-crm-backend --lines 20 --nostream 2>&1 || sudo PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 logs investment-crm-backend --lines 20 --nostream 2>&1
           fi
 
       - name: Check PM2 logs
