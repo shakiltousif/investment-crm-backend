@@ -127,6 +127,9 @@ jobs:
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           export HOME=/root
+          # Redirect Yarn config to writable location to avoid permission errors
+          export XDG_CONFIG_HOME="${{ secrets.BACKEND_DEPLOY_PATH }}/.config"
+          mkdir -p "$XDG_CONFIG_HOME/yarn"
           
           # Build the application first if dist doesn't exist
           if [ ! -d "dist" ]; then
