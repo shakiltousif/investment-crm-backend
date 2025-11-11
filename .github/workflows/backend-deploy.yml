@@ -20,6 +20,32 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        env:
+          RUNNER_ALLOW_RUNASROOT: 1
+        with:
+          clean: false
+          fetch-depth: 0
+
+      - name: Clean repository workspace
+        env:
+          RUNNER_ALLOW_RUNASROOT: 1
+        run: |
+          echo "Cleaning repository workspace..."
+          # Fix permissions on logs directory if it exists
+          # Logs directory is in .gitignore, so we just need to clean it up
+          if [ -d "logs" ]; then
+            echo "Cleaning logs directory..."
+            # Try multiple methods to clean logs directory
+            rm -rf logs/* 2>/dev/null || true
+            find logs -type f -delete 2>/dev/null || true
+            # If still can't delete, try to change permissions first
+            chmod -R u+w logs 2>/dev/null || true
+            rm -rf logs/* 2>/dev/null || true
+            echo "Logs directory cleanup attempted (may have permission issues, but continuing...)"
+          fi
+          # Clean git state (skip if it fails due to permissions)
+          git clean -fdx -e logs/ 2>/dev/null || echo "Warning: git clean failed, continuing..."
+          git reset --hard HEAD 2>/dev/null || echo "Warning: git reset failed, continuing..."
 
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
@@ -72,13 +98,13 @@ jobs:
       - name: Restart PM2 process
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
-          export PATH="/opt/nodejs/bin:$PATH"
-          PM2_CMD="/opt/nodejs/bin/pm2"
+          export PATH=" /opt/nodejs/bin:$PATH"
+          PM2_CMD="RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2"
           
           # Build the application first if dist doesn't exist
           if [ ! -d "dist" ]; then
             echo "Building application..."
-            yarn build
+            RUNNER_ALLOW_RUNASROOT=1 yarn build
           fi
           
           # Restart PM2 process
@@ -99,5 +125,4 @@ jobs:
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           export PATH="/opt/nodejs/bin:$PATH"
-          /opt/nodejs/bin/pm2 logs investment-crm-backend --nostream --lines 50
-
+          RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 logs investment-crm-backend --nostream --lines 50
