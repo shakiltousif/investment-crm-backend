@@ -262,22 +262,9 @@ jobs:
             # If still not found, try to find Node.js as root and use sudo for all commands
             if [ -z "$NODE_CMD" ] || [ ! -f "$NODE_CMD" ]; then
               echo "Attempting to find Node.js as root user..."
-              # First check if sudo works
-              if sudo -n true 2>/dev/null; then
-                echo "✅ Passwordless sudo is configured"
-              else
-                echo "⚠️  Passwordless sudo may not be configured (will try anyway)"
-              fi
-              
-              # Try to get root's node path (capture both stdout and stderr)
-              ROOT_NODE_OUTPUT=$(sudo sh -c 'which node 2>&1' 2>&1 || echo "")
-              echo "Debug: sudo which node output: '$ROOT_NODE_OUTPUT'"
-              
-              # Extract the path (remove any error messages)
-              ROOT_NODE_PATH=$(echo "$ROOT_NODE_OUTPUT" | grep -v "not found" | grep -v "command not found" | grep -v "No such file" | grep "^/" | head -1 || echo "")
-              
+              # Try to get root's node path
+              ROOT_NODE_PATH=$(sudo sh -c 'which node 2>&1' 2>/dev/null | grep -v "not found" | head -1 || echo "")
               if [ -n "$ROOT_NODE_PATH" ] && [ "$ROOT_NODE_PATH" != "" ]; then
-                echo "Found potential Node.js path: $ROOT_NODE_PATH"
                 # Verify the path exists
                 if sudo test -f "$ROOT_NODE_PATH" 2>/dev/null; then
                   echo "✅ Found Node.js at: $ROOT_NODE_PATH (requires sudo)"
@@ -285,22 +272,7 @@ jobs:
                   # Set flag to use sudo for all Node.js/npm commands
                   echo "USE_SUDO_FOR_NODE=1" >> $GITHUB_ENV
                   echo "✅ Will use sudo for all Node.js/npm commands"
-                else
-                  echo "⚠️  Path found but file does not exist or is not accessible: $ROOT_NODE_PATH"
                 fi
-              else
-                echo "⚠️  Could not find node in root's PATH"
-                # Try alternative: check common root locations directly
-                echo "Trying to find node in common root locations..."
-                for ROOT_PATH in /root/.nvm/versions/node/*/bin/node /usr/local/bin/node /usr/bin/node /opt/nodejs/bin/node; do
-                  if sudo test -f "$ROOT_PATH" 2>/dev/null; then
-                    echo "✅ Found Node.js at: $ROOT_PATH (requires sudo)"
-                    NODE_CMD="$ROOT_PATH"
-                    echo "USE_SUDO_FOR_NODE=1" >> $GITHUB_ENV
-                    echo "✅ Will use sudo for all Node.js/npm commands"
-                    break
-                  fi
-                done
               fi
             fi
             
@@ -445,78 +417,36 @@ jobs:
               fi
             fi
             
-            # If still not found, try to find npm as root and use sudo for all commands
-            if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
-              echo "Attempting to find npm as root user..."
-              # Try to get root's npm path (capture both stdout and stderr)
-              ROOT_NPM_OUTPUT=$(sudo sh -c 'which npm 2>&1' 2>&1 || echo "")
-              echo "Debug: sudo which npm output: '$ROOT_NPM_OUTPUT'"
-              
-              # Extract the path (remove any error messages)
-              ROOT_NPM_PATH=$(echo "$ROOT_NPM_OUTPUT" | grep -v "not found" | grep -v "command not found" | grep -v "No such file" | grep "^/" | head -1 || echo "")
-              
-              if [ -n "$ROOT_NPM_PATH" ] && [ "$ROOT_NPM_PATH" != "" ]; then
-                echo "Found potential npm path: $ROOT_NPM_PATH"
-                # Verify the path exists
-                if sudo test -f "$ROOT_NPM_PATH" 2>/dev/null; then
-                  echo "✅ Found npm at: $ROOT_NPM_PATH (requires sudo)"
-                  NPM_CMD="$ROOT_NPM_PATH"
-                  # Set flag to use sudo for all Node.js/npm commands (if not already set)
-                  if [ "$USE_SUDO_FOR_NODE" != "1" ]; then
-                    echo "USE_SUDO_FOR_NODE=1" >> $GITHUB_ENV
-                  fi
-                  echo "✅ Will use sudo for all Node.js/npm commands"
-                else
-                  echo "⚠️  Path found but file does not exist or is not accessible: $ROOT_NPM_PATH"
-                fi
-              else
-                echo "⚠️  Could not find npm in root's PATH"
-                # Try alternative: use same directory as node if found, or check common root locations
-                if [ -n "$NODE_CMD" ] && [ -f "$NODE_CMD" ]; then
-                  NPM_CANDIDATE="$(dirname "$NODE_CMD")/npm"
-                  if sudo test -f "$NPM_CANDIDATE" 2>/dev/null; then
-                    echo "✅ Found npm in same directory as node: $NPM_CANDIDATE (requires sudo)"
-                    NPM_CMD="$NPM_CANDIDATE"
-                    if [ "$USE_SUDO_FOR_NODE" != "1" ]; then
-                      echo "USE_SUDO_FOR_NODE=1" >> $GITHUB_ENV
-                    fi
-                  fi
-                fi
-                
-                # Try common root locations
-                if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
-                  echo "Trying to find npm in common root locations..."
-                  for ROOT_PATH in /root/.nvm/versions/node/*/bin/npm /usr/local/bin/npm /usr/bin/npm /opt/nodejs/bin/npm; do
-                    if sudo test -f "$ROOT_PATH" 2>/dev/null; then
-                      echo "✅ Found npm at: $ROOT_PATH (requires sudo)"
-                      NPM_CMD="$ROOT_PATH"
-                      if [ "$USE_SUDO_FOR_NODE" != "1" ]; then
-                        echo "USE_SUDO_FOR_NODE=1" >> $GITHUB_ENV
-                      fi
-                      echo "✅ Will use sudo for all Node.js/npm commands"
-                      break
-                    fi
-                  done
-                fi
-              fi
-            fi
-            
             # If still not found, try to create symlinks automatically (if sudo is available)
             if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
-              echo "Attempting to create symlinks automatically..."
-              # Try to get root's npm path and create symlink
-              ROOT_NPM_PATH=$(sudo sh -c 'which npm 2>&1' 2>&1 | grep "^/" | head -1 || echo "")
-              if [ -n "$ROOT_NPM_PATH" ] && sudo test -f "$ROOT_NPM_PATH" 2>/dev/null; then
+              echo "Attempting to find and create symlinks automatically..."
+              # Try multiple methods to find root's npm
+              ROOT_NPM_PATH=""
+              # Method 1: Try sudo which
+              ROOT_NPM_PATH=$(sudo sh -c 'which npm' 2>/dev/null || echo "")
+              # Method 2: Use same directory as node if found
+              if [ -z "$ROOT_NPM_PATH" ] && [ -n "$NODE_CMD" ] && [ -f "$NODE_CMD" ]; then
+                ROOT_NPM_PATH="$(dirname "$NODE_CMD")/npm"
+                if [ ! -f "$ROOT_NPM_PATH" ]; then
+                  ROOT_NPM_PATH=""
+                fi
+              fi
+              # Method 3: Check if /opt/nodejs/bin/npm exists
+              if [ -z "$ROOT_NPM_PATH" ] && [ -f /opt/nodejs/bin/npm ]; then
+                ROOT_NPM_PATH="/opt/nodejs/bin/npm"
+              fi
+              
+              if [ -n "$ROOT_NPM_PATH" ] && [ -f "$ROOT_NPM_PATH" ]; then
                 echo "Found npm at: $ROOT_NPM_PATH"
                 echo "Creating symlink in /usr/local/bin..."
-                if sudo ln -sf "$ROOT_NPM_PATH" /usr/local/bin/npm 2>/dev/null; then
-                  sudo chmod +x /usr/local/bin/npm 2>/dev/null
-                  if [ -f /usr/local/bin/npm ] && [ -x /usr/local/bin/npm ]; then
-                    NPM_CMD="/usr/local/bin/npm"
-                    echo "✅ Symlink created successfully"
-                  fi
-                else
-                  echo "⚠️  Failed to create symlink (may need passwordless sudo)"
+                sudo ln -sf "$ROOT_NPM_PATH" /usr/local/bin/npm 2>/dev/null || echo "Failed to create symlink (may need manual setup)"
+                if [ -f /usr/local/bin/npm ] && [ -x /usr/local/bin/npm ]; then
+                  NPM_CMD="/usr/local/bin/npm"
+                  echo "✅ Symlink created successfully"
+                elif [ -f /opt/nodejs/bin/npm ]; then
+                  # If /opt/nodejs/bin/npm exists, try to use it directly
+                  NPM_CMD="/opt/nodejs/bin/npm"
+                  echo "✅ Using /opt/nodejs/bin/npm directly"
                 fi
               fi
             fi
