@@ -1334,6 +1334,7 @@ jobs:
                   fi
                 fi
               fi
+            fi
           else
             if [ "${PM2_AVAILABLE:-0}" != "1" ]; then
               echo "ℹ️  PM2 not available (PM2_AVAILABLE=0), will use manual start"
