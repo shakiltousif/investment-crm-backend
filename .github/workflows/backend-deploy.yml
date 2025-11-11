@@ -6,14 +6,12 @@ on:
       - main
       - master
     paths:
-      - 'backend/**'
       - 'backend/.github/workflows/backend-deploy.yml'
   pull_request:
     branches:
       - main
       - master
     paths:
-      - 'backend/**'
       - 'backend/.github/workflows/backend-deploy.yml'
   workflow_dispatch:
 
@@ -1264,59 +1262,53 @@ jobs:
                 echo "💡 Fixing all relative imports in dist directory..."
                 
                 # Fix relative imports to include .js extension
-                # Use a Node.js script to properly fix all imports
-                cat > /tmp/fix-imports.js << 'EOF'
-const fs = require('fs');
-const path = require('path');
-
-function fixImports(dir) {
-  const files = fs.readdirSync(dir);
-  
-  for (const file of files) {
-    const filePath = path.join(dir, file);
-    const stat = fs.statSync(filePath);
-    
-    if (stat.isDirectory()) {
-      fixImports(filePath);
-    } else if (file.endsWith('.js')) {
-      let content = fs.readFileSync(filePath, 'utf8');
-      let modified = false;
-      
-      // Fix relative imports: from './path' -> from './path.js'
-      // Only if it doesn't already have an extension
-      content = content.replace(
-        /from\s+['"](\.[^'"]+)['"]/g,
-        (match, importPath) => {
-          if (!importPath.endsWith('.js') && !importPath.endsWith('.json') && !importPath.includes('node_modules')) {
-            modified = true;
-            return match.replace(importPath, importPath + '.js');
-          }
-          return match;
-        }
-      );
-      
-      if (modified) {
-        fs.writeFileSync(filePath, content, 'utf8');
-        console.log(`Fixed imports in: ${filePath}`);
-      }
-    }
-  }
-}
-
-fixImports(process.argv[2]);
-EOF
-                
-                # Run the Node.js script to fix imports
+                # Use Node.js one-liner or sed to fix imports
                 if command -v node &> /dev/null; then
-                  node /tmp/fix-imports.js dist
-                  rm -f /tmp/fix-imports.js
+                  echo "Using Node.js to fix imports..."
+                  node -e "
+                    const fs = require('fs');
+                    const path = require('path');
+                    function fixImports(dir) {
+                      const files = fs.readdirSync(dir);
+                      for (const file of files) {
+                        const filePath = path.join(dir, file);
+                        const stat = fs.statSync(filePath);
+                        if (stat.isDirectory()) {
+                          fixImports(filePath);
+                        } else if (file.endsWith('.js')) {
+                          let content = fs.readFileSync(filePath, 'utf8');
+                          const original = content;
+                          content = content.replace(/from\\s+['\"](\\.\\/[^'\"]+)['\"]/g, (match, importPath) => {
+                            if (!importPath.endsWith('.js') && !importPath.endsWith('.json') && !importPath.includes('node_modules')) {
+                              return match.replace(importPath, importPath + '.js');
+                            }
+                            return match;
+                          });
+                          content = content.replace(/from\\s+['\"](\\.\\.\\/[^'\"]+)['\"]/g, (match, importPath) => {
+                            if (!importPath.endsWith('.js') && !importPath.endsWith('.json') && !importPath.includes('node_modules')) {
+                              return match.replace(importPath, importPath + '.js');
+                            }
+                            return match;
+                          });
+                          if (content !== original) {
+                            fs.writeFileSync(filePath, content, 'utf8');
+                            console.log('Fixed: ' + filePath);
+                          }
+                        }
+                      }
+                    }
+                    fixImports('dist');
+                  "
                 else
-                  echo "⚠️  Node.js not available for fixing imports, using sed fallback..."
-                  # Fallback to sed for common cases
+                  echo "⚠️  Node.js not available, using sed to fix imports..."
+                  # Fix common import patterns with sed
                   find dist -name "*.js" -type f -exec sed -i "s|from './config/logger'|from './config/logger.js'|g" {} \;
                   find dist -name "*.js" -type f -exec sed -i "s|from '../config/logger'|from '../config/logger.js'|g" {} \;
                   find dist -name "*.js" -type f -exec sed -i 's|from "./config/logger"|from "./config/logger.js"|g' {} \;
                   find dist -name "*.js" -type f -exec sed -i 's|from "../config/logger"|from "../config/logger.js"|g' {} \;
+                  # Fix other common relative imports
+                  find dist -name "*.js" -type f -exec sed -i "s|from '\\.\\(/[^']*\\)'|from '\\.\\1.js'|g" {} \;
+                  find dist -name "*.js" -type f -exec sed -i 's|from "\\.\\(/[^"]*\\)"|from "\\.\\1.js"|g' {} \;
                 fi
                 
                 echo "✅ Fixed imports to include .js extensions"
