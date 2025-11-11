@@ -913,6 +913,97 @@ jobs:
           fi
           echo "✅ Database migrations completed"
 
+      - name: Install PM2 if needed (self-hosted)
+        if: env.USE_SELF_HOSTED == 'true'
+        run: |
+          echo "🔍 Checking for PM2..."
+          
+          # Source profile to ensure PATH includes npm global bin
+          [ -f /etc/profile ] && source /etc/profile
+          [ -f ~/.bashrc ] && source ~/.bashrc
+          [ -f ~/.profile ] && source ~/.profile
+          
+          # Add npm global bin to PATH if not already there
+          NPM_GLOBAL_BIN=""
+          if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+            NPM_GLOBAL_BIN=$(sudo -n $NPM_CMD config get prefix 2>/dev/null)/bin || \
+            NPM_GLOBAL_BIN=$(sudo $NPM_CMD config get prefix 2>/dev/null)/bin || \
+            NPM_GLOBAL_BIN="/usr/local/bin"
+          else
+            NPM_GLOBAL_BIN=$($NPM_CMD config get prefix 2>/dev/null)/bin || \
+            NPM_GLOBAL_BIN="$HOME/.npm-global/bin" || \
+            NPM_GLOBAL_BIN="/usr/local/bin"
+          fi
+          
+          if [ -n "$NPM_GLOBAL_BIN" ] && [[ ":$PATH:" != *":$NPM_GLOBAL_BIN:"* ]]; then
+            export PATH="$NPM_GLOBAL_BIN:$PATH"
+            echo "📂 Added npm global bin to PATH: $NPM_GLOBAL_BIN"
+          fi
+          
+          # Check if pm2 is installed
+          if command -v pm2 &> /dev/null; then
+            PM2_VERSION=$(pm2 --version 2>/dev/null || echo "unknown")
+            echo "✅ PM2 is already installed (version: $PM2_VERSION)"
+            echo "PM2_AVAILABLE=1" >> $GITHUB_ENV
+          else
+            echo "📦 PM2 not found, installing..."
+            
+            # Try to install pm2 globally
+            if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+              # Check if passwordless sudo is available
+              if sudo -n true 2>/dev/null; then
+                echo "Installing PM2 with sudo..."
+                sudo $NPM_CMD install -g pm2
+              else
+                echo "⚠️  Passwordless sudo not available, trying without sudo..."
+                $NPM_CMD install -g pm2 || {
+                  echo "❌ Failed to install PM2 without sudo"
+                  echo "💡 To install PM2 manually, run:"
+                  echo "   sudo $NPM_CMD install -g pm2"
+                  echo "PM2_AVAILABLE=0" >> $GITHUB_ENV
+                  exit 0  # Don't fail deployment if PM2 install fails
+                }
+              fi
+            else
+              $NPM_CMD install -g pm2 || {
+                echo "❌ Failed to install PM2"
+                echo "💡 To install PM2 manually, run: $NPM_CMD install -g pm2"
+                echo "PM2_AVAILABLE=0" >> $GITHUB_ENV
+                exit 0  # Don't fail deployment if PM2 install fails
+              }
+            fi
+            
+            # Update PATH again after installation
+            if [ -n "$NPM_GLOBAL_BIN" ] && [[ ":$PATH:" != *":$NPM_GLOBAL_BIN:"* ]]; then
+              export PATH="$NPM_GLOBAL_BIN:$PATH"
+            fi
+            
+            # Verify installation
+            if command -v pm2 &> /dev/null; then
+              PM2_VERSION=$(pm2 --version 2>/dev/null || echo "unknown")
+              echo "✅ PM2 installed successfully (version: $PM2_VERSION)"
+              echo "PM2_AVAILABLE=1" >> $GITHUB_ENV
+            else
+              # Try to find pm2 in common locations
+              PM2_PATH=""
+              for path in "$NPM_GLOBAL_BIN/pm2" "/usr/local/bin/pm2" "/usr/bin/pm2" "$HOME/.npm-global/bin/pm2"; do
+                if [ -f "$path" ] && [ -x "$path" ]; then
+                  PM2_PATH="$path"
+                  echo "✅ Found PM2 at: $PM2_PATH"
+                  echo "PM2_AVAILABLE=1" >> $GITHUB_ENV
+                  echo "PM2_PATH=$PM2_PATH" >> $GITHUB_ENV
+                  break
+                fi
+              done
+              
+              if [ -z "$PM2_PATH" ]; then
+                echo "⚠️  PM2 installation completed but command not found in PATH"
+                echo "💡 You may need to restart the shell or add npm global bin to PATH"
+                echo "PM2_AVAILABLE=0" >> $GITHUB_ENV
+              fi
+            fi
+          fi
+
       - name: Finalize deployment (self-hosted)
         if: env.USE_SELF_HOSTED == 'true'
         run: |
@@ -924,9 +1015,22 @@ jobs:
           ln -s "releases/$TIMESTAMP" current
           
           # Restart application
-          if command -v pm2 &> /dev/null; then
+          # Source profile to ensure PATH includes pm2
+          [ -f /etc/profile ] && source /etc/profile
+          [ -f ~/.bashrc ] && source ~/.bashrc
+          [ -f ~/.profile ] && source ~/.profile
+          
+          # Use PM2_PATH if set, otherwise try command -v
+          PM2_CMD=""
+          if [ -n "${PM2_PATH:-}" ] && [ -f "${PM2_PATH}" ]; then
+            PM2_CMD="${PM2_PATH}"
+          elif command -v pm2 &> /dev/null; then
+            PM2_CMD="pm2"
+          fi
+          
+          if [ "${PM2_AVAILABLE:-0}" = "1" ] && [ -n "$PM2_CMD" ]; then
             echo "🔄 Restarting with PM2..."
-            pm2 restart investment-crm-backend || pm2 start current/dist/index.js --name investment-crm-backend
+            $PM2_CMD restart investment-crm-backend || $PM2_CMD start current/dist/index.js --name investment-crm-backend
             echo "✅ Application restarted with PM2"
           elif command -v systemctl &> /dev/null; then
             echo "🔄 Attempting to restart systemd service..."
@@ -947,7 +1051,14 @@ jobs:
           fi
           
           # If no process manager worked, start manually
-          if ! pgrep -f 'node.*dist/index.js' > /dev/null 2>&1 && ! pm2 list | grep -q "investment-crm-backend" 2>/dev/null; then
+          PM2_RUNNING="0"
+          if [ "${PM2_AVAILABLE:-0}" = "1" ] && [ -n "$PM2_CMD" ]; then
+            if $PM2_CMD list 2>/dev/null | grep -q "investment-crm-backend"; then
+              PM2_RUNNING="1"
+            fi
+          fi
+          
+          if ! pgrep -f 'node.*dist/index.js' > /dev/null 2>&1 && [ "$PM2_RUNNING" = "0" ]; then
             echo "🚀 Starting application manually..."
             pkill -f 'node.*dist/index.js' || true
             cd current
