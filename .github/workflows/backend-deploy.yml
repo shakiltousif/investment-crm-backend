@@ -72,21 +72,59 @@ jobs:
       - name: Setup PM2 directory and permissions
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
-          # Get the current user's home directory
-          PM2_USER_HOME="${HOME:-/home/$(whoami)}"
+          # Get the current user and home directory
+          CURRENT_USER=$(whoami)
+          PM2_USER_HOME="${HOME:-/home/$CURRENT_USER}"
           PM2_HOME_DIR="${PM2_USER_HOME}/.pm2"
+          
+          echo "Current user: $CURRENT_USER"
+          echo "PM2 directory: $PM2_HOME_DIR"
+          
+          # Kill any existing PM2 daemon that might be running with wrong permissions
+          export PATH="/opt/nodejs/bin:$PATH"
+          export PM2_HOME="$PM2_HOME_DIR"
+          /opt/nodejs/bin/pm2 kill 2>/dev/null || true
+          
+          # Remove stale socket files if they exist and have wrong permissions
+          if [ -f "$PM2_HOME_DIR/rpc.sock" ] || [ -f "$PM2_HOME_DIR/pub.sock" ]; then
+            echo "Removing stale PM2 socket files..."
+            rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+          fi
           
           # Create PM2 directory with proper permissions if it doesn't exist
           if [ ! -d "$PM2_HOME_DIR" ]; then
             echo "Creating PM2 directory at $PM2_HOME_DIR"
             mkdir -p "$PM2_HOME_DIR"
-            chmod 755 "$PM2_HOME_DIR"
           else
             echo "PM2 directory already exists at $PM2_HOME_DIR"
           fi
           
-          # Ensure proper permissions on PM2 directory
-          chmod 755 "$PM2_HOME_DIR" || true
+          # Fix ownership of PM2 directory and all its contents
+          # This ensures socket files will be created with correct ownership
+          if command -v sudo &> /dev/null; then
+            echo "Attempting to fix ownership with sudo..."
+            sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || {
+              echo "Sudo chown failed, trying without sudo..."
+              chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || true
+            }
+          else
+            echo "Sudo not available, trying chown without sudo..."
+            chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || {
+              echo "Warning: Could not change ownership. This may cause issues if files were created by another user."
+            }
+          fi
+          
+          # Ensure proper permissions on PM2 directory and contents
+          chmod -R 755 "$PM2_HOME_DIR" 2>/dev/null || true
+          
+          # Verify the directory is writable by current user
+          if [ ! -w "$PM2_HOME_DIR" ]; then
+            echo "Error: PM2 directory $PM2_HOME_DIR is not writable by current user $CURRENT_USER"
+            ls -la "$PM2_HOME_DIR" || true
+            exit 1
+          fi
+          
+          echo "PM2 directory permissions verified successfully"
           
           # Export PM2_HOME for subsequent steps
           echo "PM2_HOME=$PM2_HOME_DIR" >> $GITHUB_ENV
