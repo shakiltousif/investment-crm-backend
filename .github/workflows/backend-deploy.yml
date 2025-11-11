@@ -763,22 +763,51 @@ jobs:
             
             # Ensure Docker services are running before database migration
             echo "🐳 Ensuring Docker services are running..."
+            
+            # Check for Docker (try multiple methods)
+            DOCKER_CMD=""
             if command -v docker &> /dev/null; then
-              echo "✅ Docker is installed"
+              DOCKER_CMD="docker"
+              echo "✅ Docker is installed (found via command -v)"
+            elif [ -f /usr/bin/docker ]; then
+              DOCKER_CMD="/usr/bin/docker"
+              echo "✅ Docker is installed (found at /usr/bin/docker)"
+            elif [ -f /usr/local/bin/docker ]; then
+              DOCKER_CMD="/usr/local/bin/docker"
+              echo "✅ Docker is installed (found at /usr/local/bin/docker)"
+            elif sudo command -v docker &> /dev/null; then
+              DOCKER_CMD="sudo docker"
+              echo "✅ Docker is installed (found via sudo command -v)"
+            else
+              echo "⚠️  Docker is not found in PATH"
+              echo "   Trying to find Docker in common locations..."
+              DOCKER_CMD=$(find /usr /opt -name docker -type f -executable 2>/dev/null | head -1)
+              if [ -n "$DOCKER_CMD" ]; then
+                echo "✅ Docker found at: $DOCKER_CMD"
+              else
+                echo "❌ Docker is not installed or not accessible"
+                echo "💡 Install Docker: https://docs.docker.com/get-docker/"
+              fi
+            fi
+            
+            if [ -n "$DOCKER_CMD" ]; then
               
               # Check if docker-compose is available
               DOCKER_COMPOSE_CMD=""
               if command -v docker-compose &> /dev/null; then
                 DOCKER_COMPOSE_CMD="docker-compose"
                 echo "✅ Found docker-compose command"
-              elif docker compose version &> /dev/null 2>&1; then
-                DOCKER_COMPOSE_CMD="docker compose"
+              elif $DOCKER_CMD compose version &> /dev/null 2>&1; then
+                DOCKER_COMPOSE_CMD="$DOCKER_CMD compose"
                 echo "✅ Found docker compose command"
               else
                 echo "⚠️  docker-compose not found, trying to install..."
                 if command -v apt-get &> /dev/null; then
                   sudo apt-get update && sudo apt-get install -y docker-compose-plugin 2>/dev/null || true
-                  DOCKER_COMPOSE_CMD="docker compose"
+                  if $DOCKER_CMD compose version &> /dev/null 2>&1; then
+                    DOCKER_COMPOSE_CMD="$DOCKER_CMD compose"
+                    echo "✅ docker-compose installed successfully"
+                  fi
                 fi
               fi
               
@@ -818,13 +847,9 @@ jobs:
                   DOCKER_USE_SUDO="0"
                   
                   echo "🔍 Checking if PostgreSQL container is running..."
-                  if docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
+                  if $DOCKER_CMD ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
                     POSTGRES_RUNNING="1"
-                    echo "✅ PostgreSQL container is running (without sudo)"
-                  elif sudo docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
-                    POSTGRES_RUNNING="1"
-                    DOCKER_USE_SUDO="1"
-                    echo "✅ PostgreSQL container is running (with sudo)"
+                    echo "✅ PostgreSQL container is running"
                   else
                     echo "⚠️  PostgreSQL container is not running"
                   fi
@@ -834,16 +859,13 @@ jobs:
                     echo "   Using command: $DOCKER_COMPOSE_CMD"
                     echo "   Directory: $DOCKER_COMPOSE_DIR"
                     
-                    # Try with sudo first, then without
-                    if sudo $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1; then
-                      DOCKER_USE_SUDO="1"
-                      echo "✅ Docker services started with sudo"
-                    elif $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1; then
-                      DOCKER_USE_SUDO="0"
+                    # Start services using the detected docker command
+                    echo "   Executing: $DOCKER_COMPOSE_CMD up -d postgres redis"
+                    if $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1; then
                       echo "✅ Docker services started"
                     else
                       echo "❌ Failed to start Docker services"
-                      echo "💡 Try running manually: cd $DOCKER_COMPOSE_DIR && sudo $DOCKER_COMPOSE_CMD up -d postgres redis"
+                      echo "💡 Try running manually: cd $DOCKER_COMPOSE_DIR && $DOCKER_COMPOSE_CMD up -d postgres redis"
                       exit 1
                     fi
                     
@@ -852,18 +874,10 @@ jobs:
                     RETRY_COUNT=0
                     POSTGRES_READY="false"
                     while [ $RETRY_COUNT -lt 30 ]; do
-                      if [ "$DOCKER_USE_SUDO" = "1" ]; then
-                        if sudo docker exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
-                          echo "✅ PostgreSQL is ready"
-                          POSTGRES_READY="true"
-                          break
-                        fi
-                      else
-                        if docker exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
-                          echo "✅ PostgreSQL is ready"
-                          POSTGRES_READY="true"
-                          break
-                        fi
+                      if $DOCKER_CMD exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
+                        echo "✅ PostgreSQL is ready"
+                        POSTGRES_READY="true"
+                        break
                       fi
                       RETRY_COUNT=$((RETRY_COUNT + 1))
                       [ $((RETRY_COUNT % 5)) -eq 0 ] && echo "  Still waiting... ($RETRY_COUNT/30)"
@@ -872,7 +886,7 @@ jobs:
                     
                     if [ "$POSTGRES_READY" = "false" ]; then
                       echo "⚠️  PostgreSQL took too long to start"
-                      echo "💡 Check logs: sudo docker logs investment_crm_db"
+                      echo "💡 Check logs: $DOCKER_CMD logs investment_crm_db"
                     fi
                     
                     # Wait for Redis
@@ -880,18 +894,10 @@ jobs:
                     RETRY_COUNT=0
                     REDIS_READY="false"
                     while [ $RETRY_COUNT -lt 30 ]; do
-                      if [ "$DOCKER_USE_SUDO" = "1" ]; then
-                        if sudo docker exec investment_crm_redis redis-cli ping &> /dev/null 2>&1; then
-                          echo "✅ Redis is ready"
-                          REDIS_READY="true"
-                          break
-                        fi
-                      else
-                        if docker exec investment_crm_redis redis-cli ping &> /dev/null 2>&1; then
-                          echo "✅ Redis is ready"
-                          REDIS_READY="true"
-                          break
-                        fi
+                      if $DOCKER_CMD exec investment_crm_redis redis-cli ping &> /dev/null 2>&1; then
+                        echo "✅ Redis is ready"
+                        REDIS_READY="true"
+                        break
                       fi
                       RETRY_COUNT=$((RETRY_COUNT + 1))
                       [ $((RETRY_COUNT % 5)) -eq 0 ] && echo "  Still waiting... ($RETRY_COUNT/30)"
@@ -900,7 +906,7 @@ jobs:
                     
                     if [ "$REDIS_READY" = "false" ]; then
                       echo "⚠️  Redis took too long to start"
-                      echo "💡 Check logs: sudo docker logs investment_crm_redis"
+                      echo "💡 Check logs: $DOCKER_CMD logs investment_crm_redis"
                     fi
                   else
                     echo "✅ Docker services are already running"
@@ -913,7 +919,8 @@ jobs:
                 echo "⚠️  docker-compose command not available"
               fi
             else
-              echo "⚠️  Docker is not installed"
+              echo "⚠️  Cannot proceed without Docker"
+              echo "💡 Install Docker or ensure it's in PATH"
             fi
             
             # Test database connectivity
@@ -921,19 +928,22 @@ jobs:
             # If DATABASE_URL points to localhost, try to connect via Docker container
             if echo "$DATABASE_URL" | grep -q "localhost\|127.0.0.1"; then
               echo "🔍 DATABASE_URL points to localhost, checking Docker container..."
-              POSTGRES_RUNNING="0"
-              if docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
-                POSTGRES_RUNNING="1"
-                DOCKER_CMD="docker"
-              elif sudo docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
-                POSTGRES_RUNNING="1"
-                DOCKER_CMD="sudo docker"
+              # Use the DOCKER_CMD we detected earlier, or try to find it again
+              CHECK_DOCKER_CMD="${DOCKER_CMD:-docker}"
+              if [ -z "$DOCKER_CMD" ]; then
+                if command -v docker &> /dev/null; then
+                  CHECK_DOCKER_CMD="docker"
+                elif sudo command -v docker &> /dev/null; then
+                  CHECK_DOCKER_CMD="sudo docker"
+                fi
               fi
               
-              if [ "$POSTGRES_RUNNING" = "1" ]; then
+              POSTGRES_RUNNING="0"
+              if $CHECK_DOCKER_CMD ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -q "investment_crm_db"; then
+                POSTGRES_RUNNING="1"
                 echo "✅ PostgreSQL container is running"
                 # Try to test connection via docker exec
-                if $DOCKER_CMD exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
+                if $CHECK_DOCKER_CMD exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
                   echo "✅ Database is ready (via Docker)"
                 else
                   echo "⚠️  Database container is running but not ready yet"
