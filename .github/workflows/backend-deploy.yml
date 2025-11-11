@@ -526,6 +526,175 @@ jobs:
               exit 1
             fi
             
+            # Check Docker and start services if needed
+            echo "🐳 Checking Docker and services..."
+            if command -v docker &> /dev/null; then
+              echo "✅ Docker is installed"
+              
+              # Check if docker-compose is available
+              if command -v docker-compose &> /dev/null; then
+                DOCKER_COMPOSE_CMD="docker-compose"
+              elif docker compose version &> /dev/null; then
+                DOCKER_COMPOSE_CMD="docker compose"
+              else
+                echo "⚠️  docker-compose not found, trying to install..."
+                # Try to install docker-compose if not available
+                if command -v apt-get &> /dev/null; then
+                  sudo apt-get update && sudo apt-get install -y docker-compose-plugin 2>/dev/null || true
+                  DOCKER_COMPOSE_CMD="docker compose"
+                fi
+              fi
+              
+              if [ -z "$DOCKER_COMPOSE_CMD" ]; then
+                echo "⚠️  docker-compose not available, skipping Docker service check"
+              else
+                echo "✅ Using: $DOCKER_COMPOSE_CMD"
+                
+                # Try to find docker-compose.yml in various locations
+                DOCKER_COMPOSE_FILE=""
+                DOCKER_COMPOSE_DIR=""
+                
+                # Check in workspace first (for self-hosted runners)
+                if [ -f "${{ github.workspace }}/backend/docker-compose.yml" ]; then
+                  DOCKER_COMPOSE_FILE="${{ github.workspace }}/backend/docker-compose.yml"
+                  DOCKER_COMPOSE_DIR="${{ github.workspace }}/backend"
+                # Check in current deployment
+                elif [ -f "$DEPLOY_PATH/current/docker-compose.yml" ]; then
+                  DOCKER_COMPOSE_FILE="$DEPLOY_PATH/current/docker-compose.yml"
+                  DOCKER_COMPOSE_DIR="$DEPLOY_PATH/current"
+                # Check in latest release
+                elif [ -d "$DEPLOY_PATH/releases" ] && [ -n "$(ls -t $DEPLOY_PATH/releases 2>/dev/null | head -1)" ]; then
+                  LATEST_RELEASE=$(ls -t $DEPLOY_PATH/releases 2>/dev/null | head -1)
+                  if [ -f "$DEPLOY_PATH/releases/$LATEST_RELEASE/docker-compose.yml" ]; then
+                    DOCKER_COMPOSE_FILE="$DEPLOY_PATH/releases/$LATEST_RELEASE/docker-compose.yml"
+                    DOCKER_COMPOSE_DIR="$DEPLOY_PATH/releases/$LATEST_RELEASE"
+                  fi
+                # Check in deployment root
+                elif [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
+                  DOCKER_COMPOSE_FILE="$DEPLOY_PATH/docker-compose.yml"
+                  DOCKER_COMPOSE_DIR="$DEPLOY_PATH"
+                fi
+                
+                if [ -z "$DOCKER_COMPOSE_FILE" ]; then
+                  echo "⚠️  docker-compose.yml not found, skipping Docker service setup"
+                  echo "   Searched in:"
+                  echo "   - ${{ github.workspace }}/backend/docker-compose.yml"
+                  echo "   - $DEPLOY_PATH/current/docker-compose.yml"
+                  echo "   - $DEPLOY_PATH/docker-compose.yml"
+                fi
+                
+                if [ -n "$DOCKER_COMPOSE_FILE" ]; then
+                  echo "📄 Found docker-compose.yml at: $DOCKER_COMPOSE_FILE"
+                  cd "$DOCKER_COMPOSE_DIR"
+                  
+                  # Check if containers are running
+                  echo "🔍 Checking if PostgreSQL and Redis containers are running..."
+                  POSTGRES_RUNNING=$(docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -c "investment_crm_db" || echo "0")
+                  REDIS_RUNNING=$(docker ps --filter "name=investment_crm_redis" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -c "investment_crm_redis" || echo "0")
+                  
+                  echo "  PostgreSQL container: $([ "$POSTGRES_RUNNING" = "1" ] && echo "✅ Running" || echo "❌ Not running")"
+                  echo "  Redis container: $([ "$REDIS_RUNNING" = "1" ] && echo "✅ Running" || echo "❌ Not running")"
+                  
+                  # Always ensure services are up (docker-compose up -d is idempotent)
+                  echo "🚀 Ensuring Docker services are running (PostgreSQL and Redis)..."
+                  echo "   This will start services if they're not running, or do nothing if already running."
+                  
+                  # Start only postgres and redis services (not backend/frontend)
+                  # Using docker-compose up -d is safe - it won't restart if already running
+                  if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
+                    sudo $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1 || {
+                      echo "⚠️  Failed to start services with sudo, trying without sudo..."
+                      $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1 || {
+                        echo "❌ Failed to start Docker services"
+                        echo "💡 You can manually start them with: cd $DOCKER_COMPOSE_DIR && $DOCKER_COMPOSE_CMD up -d postgres redis"
+                        exit 1
+                      }
+                    }
+                  else
+                    $DOCKER_COMPOSE_CMD up -d postgres redis 2>&1 || {
+                      echo "❌ Failed to start Docker services"
+                      echo "💡 You can manually start them with: cd $DOCKER_COMPOSE_DIR && $DOCKER_COMPOSE_CMD up -d postgres redis"
+                      exit 1
+                    }
+                  fi
+                  
+                  echo "✅ Docker services command executed successfully"
+                  
+                  # Wait for services to be healthy (whether just started or already running)
+                  echo "⏳ Waiting for services to be healthy..."
+                  sleep 3
+                  
+                  # Wait for PostgreSQL to be ready
+                  echo "🔄 Waiting for PostgreSQL to be ready..."
+                  MAX_RETRIES=30
+                  RETRY_COUNT=0
+                  POSTGRES_READY=false
+                  while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                    if docker exec investment_crm_db pg_isready -U postgres &> /dev/null 2>&1; then
+                      echo "✅ PostgreSQL is ready"
+                      POSTGRES_READY=true
+                      break
+                    fi
+                    RETRY_COUNT=$((RETRY_COUNT + 1))
+                    if [ $((RETRY_COUNT % 5)) -eq 0 ]; then
+                      echo "  Still waiting... ($RETRY_COUNT/$MAX_RETRIES)"
+                    fi
+                    sleep 2
+                  done
+                  
+                  if [ "$POSTGRES_READY" = "false" ]; then
+                    echo "⚠️  PostgreSQL took too long to start (waited $((MAX_RETRIES * 2)) seconds)"
+                    echo "💡 Check container logs: docker logs investment_crm_db"
+                    echo "   Or manually start: cd $DOCKER_COMPOSE_DIR && $DOCKER_COMPOSE_CMD up -d postgres"
+                  fi
+                  
+                  # Wait for Redis to be ready
+                  echo "🔄 Waiting for Redis to be ready..."
+                  RETRY_COUNT=0
+                  REDIS_READY=false
+                  while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+                    if docker exec investment_crm_redis redis-cli ping &> /dev/null 2>&1; then
+                      echo "✅ Redis is ready"
+                      REDIS_READY=true
+                      break
+                    fi
+                    RETRY_COUNT=$((RETRY_COUNT + 1))
+                    if [ $((RETRY_COUNT % 5)) -eq 0 ]; then
+                      echo "  Still waiting... ($RETRY_COUNT/$MAX_RETRIES)"
+                    fi
+                    sleep 2
+                  done
+                  
+                  if [ "$REDIS_READY" = "false" ]; then
+                    echo "⚠️  Redis took too long to start (waited $((MAX_RETRIES * 2)) seconds)"
+                    echo "💡 Check container logs: docker logs investment_crm_redis"
+                    echo "   Or manually start: cd $DOCKER_COMPOSE_DIR && $DOCKER_COMPOSE_CMD up -d redis"
+                  fi
+                  
+                  # Final status check
+                  POSTGRES_FINAL=$(docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -c "investment_crm_db" || echo "0")
+                  REDIS_FINAL=$(docker ps --filter "name=investment_crm_redis" --filter "status=running" --format "{{.Names}}" 2>/dev/null | grep -c "investment_crm_redis" || echo "0")
+                  
+                  if [ "$POSTGRES_FINAL" = "1" ] && [ "$REDIS_FINAL" = "1" ]; then
+                    echo "✅ Both Docker services are running and ready"
+                  elif [ "$POSTGRES_FINAL" = "1" ]; then
+                    echo "⚠️  PostgreSQL is running but Redis is not"
+                  elif [ "$REDIS_FINAL" = "1" ]; then
+                    echo "⚠️  Redis is running but PostgreSQL is not"
+                  else
+                    echo "❌ Neither service is running"
+                    echo "💡 Manual start command:"
+                    echo "   cd $DOCKER_COMPOSE_DIR"
+                    echo "   $DOCKER_COMPOSE_CMD up -d postgres redis"
+                    echo "   docker ps  # Verify containers are running"
+                  fi
+                fi
+              fi
+            else
+              echo "⚠️  Docker is not installed. Skipping Docker service setup."
+              echo "💡 Install Docker to use docker-compose services: https://docs.docker.com/get-docker/"
+            fi
+            
             # Check PostgreSQL client
             echo "🗄️  Checking database prerequisites..."
             if command -v psql &> /dev/null; then
@@ -806,6 +975,13 @@ jobs:
             # Move build artifact
             mv backend-deploy.tar.gz "$DEPLOY_PATH/releases/"
             
+            # Copy docker-compose.yml to deployment directory for easy access
+            if [ -f "${{ github.workspace }}/backend/docker-compose.yml" ]; then
+              echo "📋 Copying docker-compose.yml to deployment directory..."
+              mkdir -p "$DEPLOY_PATH"
+              cp "${{ github.workspace }}/backend/docker-compose.yml" "$DEPLOY_PATH/docker-compose.yml" || echo "⚠️  Failed to copy docker-compose.yml (non-critical)"
+            fi
+            
             # Extract and deploy
             cd "$DEPLOY_PATH/releases"
             TIMESTAMP=$(date +%Y%m%d%H%M%S)
@@ -851,10 +1027,27 @@ jobs:
             
             # Test database connectivity
             echo "🗄️  Testing database connectivity..."
+            # If DATABASE_URL points to localhost, try to connect via Docker container
+            if echo "$DATABASE_URL" | grep -q "localhost\|127.0.0.1"; then
+              echo "🔍 DATABASE_URL points to localhost, checking Docker container..."
+              if docker ps --filter "name=investment_crm_db" --filter "status=running" --format "{{.Names}}" | grep -q "investment_crm_db"; then
+                echo "✅ PostgreSQL container is running"
+                # Try to test connection via docker exec
+                if docker exec investment_crm_db pg_isready -U postgres &> /dev/null; then
+                  echo "✅ Database is ready (via Docker)"
+                else
+                  echo "⚠️  Database container is running but not ready yet"
+                fi
+              else
+                echo "⚠️  PostgreSQL container is not running, but DATABASE_URL points to localhost"
+                echo "💡 Make sure Docker services are started or update DATABASE_URL to point to the correct host"
+              fi
+            fi
+            
             if command -v psql &> /dev/null; then
               DB_CONN=$(echo "$DATABASE_URL" | sed -E 's|postgresql://([^:]+):([^@]+)@([^:]+):([^/]+)/(.+)|host=\3 port=\4 user=\1 password=\2 dbname=\5|')
               if psql "$DB_CONN" -c 'SELECT 1' &> /dev/null; then
-                echo "✅ Database connection successful"
+                echo "✅ Database connection successful (via psql)"
               else
                 echo "⚠️  Could not verify database connection with psql, but continuing..."
               fi
