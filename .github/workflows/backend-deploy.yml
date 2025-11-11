@@ -1020,6 +1020,9 @@ jobs:
           [ -f ~/.bashrc ] && source ~/.bashrc
           [ -f ~/.profile ] && source ~/.profile
           
+          # Initialize PM2_RUNNING
+          PM2_RUNNING="0"
+          
           # Use PM2_PATH if set, otherwise try command -v
           PM2_CMD=""
           if [ -n "${PM2_PATH:-}" ] && [ -f "${PM2_PATH}" ]; then
@@ -1030,8 +1033,26 @@ jobs:
           
           if [ "${PM2_AVAILABLE:-0}" = "1" ] && [ -n "$PM2_CMD" ]; then
             echo "🔄 Restarting with PM2..."
-            $PM2_CMD restart investment-crm-backend || $PM2_CMD start current/dist/index.js --name investment-crm-backend
-            echo "✅ Application restarted with PM2"
+            # Try to restart existing PM2 process
+            if $PM2_CMD restart investment-crm-backend 2>/dev/null; then
+              echo "✅ Application restarted with PM2"
+              PM2_RUNNING="1"
+            # If restart fails, start a new process
+            elif $PM2_CMD start "$DEPLOY_PATH/current/dist/index.js" --name investment-crm-backend --cwd "$DEPLOY_PATH/current" 2>/dev/null; then
+              echo "✅ Application started with PM2"
+              PM2_RUNNING="1"
+            else
+              echo "⚠️  PM2 restart/start failed, will try manual start"
+              echo "📋 PM2 error output:"
+              $PM2_CMD restart investment-crm-backend 2>&1 || true
+              $PM2_CMD start "$DEPLOY_PATH/current/dist/index.js" --name investment-crm-backend --cwd "$DEPLOY_PATH/current" 2>&1 || true
+              # Check if PM2 process is actually running
+              sleep 2
+              if $PM2_CMD list 2>/dev/null | grep -q "investment-crm-backend"; then
+                PM2_RUNNING="1"
+                echo "✅ PM2 process is running after all"
+              fi
+            fi
           elif command -v systemctl &> /dev/null; then
             echo "🔄 Attempting to restart systemd service..."
             # Try without sudo first
@@ -1050,36 +1071,97 @@ jobs:
             fi
           fi
           
-          # If no process manager worked, start manually
-          PM2_RUNNING="0"
-          if [ "${PM2_AVAILABLE:-0}" = "1" ] && [ -n "$PM2_CMD" ]; then
-            if $PM2_CMD list 2>/dev/null | grep -q "investment-crm-backend"; then
-              PM2_RUNNING="1"
+          # Verify PM2 process is actually running
+          if [ "${PM2_AVAILABLE:-0}" = "1" ] && [ -n "$PM2_CMD" ] && [ "$PM2_RUNNING" = "1" ]; then
+            # Double-check that PM2 process is actually running
+            if ! $PM2_CMD list 2>/dev/null | grep -q "investment-crm-backend"; then
+              PM2_RUNNING="0"
+              echo "⚠️  PM2 process not found in PM2 list, will try manual start"
             fi
           fi
           
-          if ! pgrep -f 'node.*dist/index.js' > /dev/null 2>&1 && [ "$PM2_RUNNING" = "0" ]; then
+          # Check if application is already running
+          APP_RUNNING="0"
+          if pgrep -f 'node.*dist/index.js' > /dev/null 2>&1; then
+            APP_RUNNING="1"
+            echo "✅ Application is already running"
+          fi
+          
+          # Start application if not running
+          if [ "$APP_RUNNING" = "0" ] && [ "$PM2_RUNNING" = "0" ]; then
             echo "🚀 Starting application manually..."
+            
+            # Kill any existing processes
             pkill -f 'node.*dist/index.js' || true
-            cd current
+            sleep 1
+            
+            # Change to the current release directory
+            cd "$DEPLOY_PATH/current"
+            echo "📂 Current directory: $(pwd)"
+            
+            # Verify the dist/index.js file exists
+            if [ ! -f "dist/index.js" ]; then
+              echo "❌ Error: dist/index.js not found in $DEPLOY_PATH/current"
+              echo "💡 Make sure the build completed successfully"
+              exit 1
+            fi
+            
+            # Check if .env exists
+            if [ ! -f ".env" ]; then
+              echo "⚠️  Warning: .env file not found in current directory"
+            fi
+            
+            # Start the application with proper error handling
+            START_LOG="$DEPLOY_PATH/current/start.log"
             if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
               # Try passwordless sudo first
               if sudo -n true 2>/dev/null; then
-                sudo nohup $NPM_CMD start > /dev/null 2>&1 &
-                echo "✅ Application started with sudo"
+                echo "Starting with sudo..."
+                sudo nohup $NPM_CMD start > "$START_LOG" 2>&1 &
+                START_PID=$!
               else
                 echo "⚠️  Passwordless sudo not available, trying without sudo..."
-                nohup $NPM_CMD start > /dev/null 2>&1 &
+                nohup $NPM_CMD start > "$START_LOG" 2>&1 &
+                START_PID=$!
               fi
             else
-              nohup $NPM_CMD start > /dev/null 2>&1 &
+              nohup $NPM_CMD start > "$START_LOG" 2>&1 &
+              START_PID=$!
             fi
-            sleep 2
+            
+            echo "📝 Application start command executed (PID: $START_PID)"
+            echo "📋 Logs will be written to: $START_LOG"
+            
+            # Wait a bit and check if process started
+            sleep 3
+            
+            # Check if the process is running
             if pgrep -f 'node.*dist/index.js' > /dev/null 2>&1; then
               echo "✅ Application started successfully"
+              # Show last few lines of log
+              if [ -f "$START_LOG" ]; then
+                echo "📋 Last few lines of startup log:"
+                tail -5 "$START_LOG" || echo "   (log file not readable)"
+              fi
             else
-              echo "⚠️  Application may not have started, check logs"
+              echo "❌ Application failed to start"
+              echo "📋 Checking startup log for errors:"
+              if [ -f "$START_LOG" ]; then
+                cat "$START_LOG" || echo "   (log file not readable)"
+              else
+                echo "   (log file not found)"
+              fi
+              echo ""
+              echo "💡 Troubleshooting steps:"
+              echo "   1. Check if Node.js is working: $NODE_CMD --version"
+              echo "   2. Check if npm is working: $NPM_CMD --version"
+              echo "   3. Try starting manually: cd $DEPLOY_PATH/current && $NPM_CMD start"
+              echo "   4. Check application logs in: $DEPLOY_PATH/current"
+              # Don't exit with error - deployment succeeded, just app didn't start
+              echo "⚠️  Deployment completed but application may need manual start"
             fi
+          elif [ "$PM2_RUNNING" = "1" ]; then
+            echo "✅ Application is running via PM2"
           fi
           
           # Cleanup old releases (keep last 5)
