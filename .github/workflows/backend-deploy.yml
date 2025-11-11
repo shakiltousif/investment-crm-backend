@@ -1270,70 +1270,70 @@ jobs:
               # Try to use PM2 - the daemon will start automatically on first command
               if [ -n "$PM2_CMD" ]; then
                 echo "   Attempting to use PM2 (daemon will auto-start if needed)..."
-              
-              # Try to restart existing PM2 process
-              echo "   Trying to restart existing PM2 process..."
-              RESTART_OUTPUT=$($PM2_CMD restart investment-crm-backend 2>&1)
-              RESTART_EXIT=$?
-              
-              if [ $RESTART_EXIT -eq 0 ]; then
-                echo "✅ Application restarted with PM2"
-                PM2_RUNNING="1"
-              # If restart fails, start a new process
-              else
-                echo "   Restart output: $RESTART_OUTPUT"
-                echo "   Restart exit code: $RESTART_EXIT"
-                echo "   Trying to start new PM2 process..."
                 
-                # Delete existing process if it exists in error state
-                $PM2_CMD delete investment-crm-backend 2>/dev/null || echo "   No existing process to delete"
+                # Try to restart existing PM2 process
+                echo "   Trying to restart existing PM2 process..."
+                RESTART_OUTPUT=$($PM2_CMD restart investment-crm-backend 2>&1)
+                RESTART_EXIT=$?
                 
-                # Start new process with full path and proper working directory
-                echo "   Starting: $PM2_CMD start \"$DEPLOY_PATH/current/dist/index.js\" --name investment-crm-backend --cwd \"$DEPLOY_PATH/current\""
-                START_OUTPUT=$($PM2_CMD start "$DEPLOY_PATH/current/dist/index.js" --name investment-crm-backend --cwd "$DEPLOY_PATH/current" 2>&1)
-                START_EXIT=$?
-                
-                echo "   Start output: $START_OUTPUT"
-                echo "   Start exit code: $START_EXIT"
-                
-                if [ $START_EXIT -eq 0 ]; then
-                  echo "✅ Application started with PM2"
+                if [ $RESTART_EXIT -eq 0 ]; then
+                  echo "✅ Application restarted with PM2"
                   PM2_RUNNING="1"
+                # If restart fails, start a new process
                 else
-                  echo "⚠️  PM2 start command returned non-zero exit code"
-                  # Check if PM2 process is actually running despite the error
-                  sleep 3
-                  echo "   Checking if process is running..."
-                  if $PM2_CMD list 2>&1 | grep -q "investment-crm-backend"; then
+                  echo "   Restart output: $RESTART_OUTPUT"
+                  echo "   Restart exit code: $RESTART_EXIT"
+                  echo "   Trying to start new PM2 process..."
+                  
+                  # Delete existing process if it exists in error state
+                  $PM2_CMD delete investment-crm-backend 2>/dev/null || echo "   No existing process to delete"
+                  
+                  # Start new process with full path and proper working directory
+                  echo "   Starting: $PM2_CMD start \"$DEPLOY_PATH/current/dist/index.js\" --name investment-crm-backend --cwd \"$DEPLOY_PATH/current\""
+                  START_OUTPUT=$($PM2_CMD start "$DEPLOY_PATH/current/dist/index.js" --name investment-crm-backend --cwd "$DEPLOY_PATH/current" 2>&1)
+                  START_EXIT=$?
+                  
+                  echo "   Start output: $START_OUTPUT"
+                  echo "   Start exit code: $START_EXIT"
+                  
+                  if [ $START_EXIT -eq 0 ]; then
+                    echo "✅ Application started with PM2"
                     PM2_RUNNING="1"
-                    echo "✅ PM2 process is running (despite error message)"
-                    echo "📋 PM2 process details:"
-                    $PM2_CMD list 2>&1 | grep -A 3 "investment-crm-backend" || true
                   else
-                    echo "❌ PM2 process not found in PM2 list"
-                    echo "📋 Full PM2 status:"
-                    $PM2_CMD status 2>&1 || true
-                    echo "📋 PM2 list:"
-                    $PM2_CMD list 2>&1 || true
-                    echo "📋 PM2 logs (if any):"
-                    $PM2_CMD logs investment-crm-backend --lines 10 --nostream 2>&1 || true
+                    echo "⚠️  PM2 start command returned non-zero exit code"
+                    # Check if PM2 process is actually running despite the error
+                    sleep 3
+                    echo "   Checking if process is running..."
+                    if $PM2_CMD list 2>&1 | grep -q "investment-crm-backend"; then
+                      PM2_RUNNING="1"
+                      echo "✅ PM2 process is running (despite error message)"
+                      echo "📋 PM2 process details:"
+                      $PM2_CMD list 2>&1 | grep -A 3 "investment-crm-backend" || true
+                    else
+                      echo "❌ PM2 process not found in PM2 list"
+                      echo "📋 Full PM2 status:"
+                      $PM2_CMD status 2>&1 || true
+                      echo "📋 PM2 list:"
+                      $PM2_CMD list 2>&1 || true
+                      echo "📋 PM2 logs (if any):"
+                      $PM2_CMD logs investment-crm-backend --lines 10 --nostream 2>&1 || true
+                    fi
+                  fi
+                fi
+                
+                # Final verification
+                if [ "$PM2_RUNNING" = "1" ]; then
+                  echo "✅ Verifying PM2 process is actually running..."
+                  sleep 1
+                  if $PM2_CMD list 2>&1 | grep -q "investment-crm-backend"; then
+                    echo "✅ PM2 process confirmed running"
+                    $PM2_CMD describe investment-crm-backend 2>&1 | head -20 || true
+                  else
+                    echo "⚠️  PM2 process not found in list, resetting flag"
+                    PM2_RUNNING="0"
                   fi
                 fi
               fi
-              
-              # Final verification
-              if [ "$PM2_RUNNING" = "1" ]; then
-                echo "✅ Verifying PM2 process is actually running..."
-                sleep 1
-                if $PM2_CMD list 2>&1 | grep -q "investment-crm-backend"; then
-                  echo "✅ PM2 process confirmed running"
-                  $PM2_CMD describe investment-crm-backend 2>&1 | head -20 || true
-                else
-                  echo "⚠️  PM2 process not found in list, resetting flag"
-                  PM2_RUNNING="0"
-                fi
-              fi
-            fi
           else
             if [ "${PM2_AVAILABLE:-0}" != "1" ]; then
               echo "ℹ️  PM2 not available (PM2_AVAILABLE=0), will use manual start"
