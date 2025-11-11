@@ -113,16 +113,108 @@ jobs:
         run: npm run db:generate
 
       - name: Build application
-        run: npm run build
+        run: |
+          echo "🔨 Building application..."
+          npm run build
+          
+          # Check if build was successful
+          if [ $? -ne 0 ]; then
+            echo "❌ Build failed"
+            exit 1
+          fi
+          
+          echo "✅ Build completed"
+
+      - name: Verify build output
+        run: |
+          echo "🔍 Verifying build output..."
+          if [ ! -d "dist" ]; then
+            echo "❌ Error: dist directory not found"
+            exit 1
+          fi
+          
+          # Check for critical files
+          if [ ! -f "dist/index.js" ]; then
+            echo "❌ Error: dist/index.js not found"
+            exit 1
+          fi
+          
+          # Check if config directory exists
+          if [ ! -d "dist/config" ]; then
+            echo "⚠️  Warning: dist/config directory not found"
+            echo "📋 Contents of dist directory:"
+            ls -la dist/ || true
+          else
+            echo "✅ dist/config directory found"
+            if [ ! -f "dist/config/logger.js" ]; then
+              echo "⚠️  Warning: dist/config/logger.js not found"
+              echo "📋 Contents of dist/config:"
+              ls -la dist/config/ || true
+            else
+              echo "✅ dist/config/logger.js found"
+            fi
+          fi
+          
+          # Show dist structure
+          echo "📋 Build output structure:"
+          find dist -type f -name "*.js" | head -20 || true
+          
+          # Check if config directory has all files
+          if [ -d "dist/config" ]; then
+            echo "📋 Files in dist/config:"
+            ls -la dist/config/ || true
+            CONFIG_FILE_COUNT=$(find dist/config -name "*.js" | wc -l)
+            echo "✅ Found $CONFIG_FILE_COUNT .js files in dist/config"
+          fi
+          
+          # Check compiled index.js for import statements
+          if [ -f "dist/index.js" ]; then
+            echo "📋 Checking imports in dist/index.js:"
+            grep -E "from ['\"].*config/logger" dist/index.js | head -5 || echo "   (no logger import found or different format)"
+          fi
+          
+          echo "✅ Build verification complete"
 
       - name: Create deployment package
         run: |
+          echo "📦 Creating deployment package..."
           mkdir -p deploy
-          cp -r dist deploy/
-          cp -r prisma deploy/
+          
+          # Copy dist directory (preserve structure)
+          if [ -d "dist" ]; then
+            cp -r dist deploy/
+            echo "✅ Copied dist directory"
+          else
+            echo "❌ Error: dist directory not found"
+            exit 1
+          fi
+          
+          # Copy prisma directory
+          if [ -d "prisma" ]; then
+            cp -r prisma deploy/
+            echo "✅ Copied prisma directory"
+          fi
+          
+          # Copy package files
           cp package.json deploy/
           cp package-lock.json deploy/
+          
+          # Verify package contents
+          echo "📋 Deployment package contents:"
+          ls -la deploy/ || true
+          if [ -d "deploy/dist" ]; then
+            echo "📋 dist directory structure:"
+            find deploy/dist -type f -name "*.js" | head -10 || true
+          fi
+          
+          # Create tarball
           tar -czf backend-deploy.tar.gz -C deploy .
+          echo "✅ Created backend-deploy.tar.gz"
+          
+          # Verify tarball
+          echo "📋 Verifying tarball contents:"
+          tar -tzf backend-deploy.tar.gz | head -20 || true
+          
           rm -rf deploy
 
       - name: Upload build artifacts
@@ -722,8 +814,37 @@ jobs:
           cd "$DEPLOY_PATH/releases"
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
           mkdir -p "$TIMESTAMP"
+          
+          echo "📦 Extracting deployment package..."
           tar -xzf backend-deploy.tar.gz -C "$TIMESTAMP"
           rm backend-deploy.tar.gz
+          
+          # Verify extracted files
+          echo "🔍 Verifying extracted files..."
+          if [ ! -f "$TIMESTAMP/dist/index.js" ]; then
+            echo "❌ Error: dist/index.js not found after extraction"
+            echo "📋 Contents of $TIMESTAMP:"
+            ls -la "$TIMESTAMP/" || true
+            exit 1
+          fi
+          
+          if [ ! -d "$TIMESTAMP/dist/config" ]; then
+            echo "❌ Error: dist/config directory not found after extraction"
+            echo "📋 Contents of $TIMESTAMP/dist:"
+            ls -la "$TIMESTAMP/dist/" || true
+            exit 1
+          fi
+          
+          if [ ! -f "$TIMESTAMP/dist/config/logger.js" ]; then
+            echo "❌ Error: dist/config/logger.js not found after extraction"
+            echo "📋 Contents of $TIMESTAMP/dist/config:"
+            ls -la "$TIMESTAMP/dist/config/" || true
+            exit 1
+          fi
+          
+          echo "✅ All required files extracted successfully"
+          echo "📋 Sample of extracted structure:"
+          find "$TIMESTAMP/dist" -type f -name "*.js" | head -10 || true
           
           echo "TIMESTAMP=$TIMESTAMP" >> $GITHUB_ENV
           echo "RELEASE_DIR=$DEPLOY_PATH/releases/$TIMESTAMP" >> $GITHUB_ENV
