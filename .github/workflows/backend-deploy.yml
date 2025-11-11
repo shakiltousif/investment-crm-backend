@@ -157,27 +157,60 @@ jobs:
           # PM2 command
           PM2_CMD="/opt/nodejs/bin/pm2"
           
-          # Ensure PM2 daemon is completely stopped before proceeding
-          echo "Ensuring PM2 daemon is stopped..."
+          # Aggressively kill all PM2 processes and daemons
+          echo "Ensuring PM2 daemon is completely stopped..."
+          # Try to kill PM2 daemon for current user's PM2_HOME
           $PM2_CMD kill 2>/dev/null || true
-          pkill -f "pm2" 2>/dev/null || true
-          sleep 1
+          # Kill all PM2 processes system-wide
+          pkill -9 -f "pm2" 2>/dev/null || true
+          pkill -9 -f "node.*pm2" 2>/dev/null || true
+          # Also try to kill PM2 daemons that might be running for other users
+          if command -v sudo &> /dev/null; then
+            # Kill PM2 processes for all users (in case root or another user has a daemon running)
+            sudo pkill -9 -f "pm2" 2>/dev/null || true
+            sudo pkill -9 -f "node.*pm2" 2>/dev/null || true
+            # Try to kill PM2 daemon using root's PM2 if it exists
+            sudo /opt/nodejs/bin/pm2 kill 2>/dev/null || true
+          fi
+          sleep 2
           
-          # Final cleanup: Remove any socket files that might have been recreated
-          # and fix their ownership before starting PM2
+          # Remove ALL socket files and PM2 runtime files that might have wrong ownership
+          echo "Cleaning up PM2 runtime files..."
+          if command -v sudo &> /dev/null; then
+            # Remove socket files with sudo
+            sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+            # Remove PID files
+            sudo rm -f "$PM2_HOME_DIR/pm2.pid" "$PM2_HOME_DIR"/*.pid 2>/dev/null || true
+            # Remove lock files
+            sudo rm -f "$PM2_HOME_DIR/.pm2.lock" 2>/dev/null || true
+            # Fix ownership of entire directory
+            sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || true
+          else
+            rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+            rm -f "$PM2_HOME_DIR/pm2.pid" "$PM2_HOME_DIR"/*.pid 2>/dev/null || true
+            rm -f "$PM2_HOME_DIR/.pm2.lock" 2>/dev/null || true
+          fi
+          
+          # Verify socket files are gone
           if [ -f "$PM2_HOME_DIR/rpc.sock" ] || [ -f "$PM2_HOME_DIR/pub.sock" ]; then
-            echo "Removing socket files before starting PM2..."
+            echo "Warning: Socket files still exist, attempting force removal..."
             if command -v sudo &> /dev/null; then
               sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
-              sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || true
-            else
-              rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
             fi
           fi
           
           # Ensure directory ownership is correct one more time
           if command -v sudo &> /dev/null; then
             sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || true
+            # Also ensure the directory itself has correct permissions
+            sudo chmod 755 "$PM2_HOME_DIR" 2>/dev/null || true
+          fi
+          
+          # Verify no PM2 processes are running
+          if pgrep -f "pm2" > /dev/null; then
+            echo "Warning: PM2 processes still running, attempting to kill..."
+            pkill -9 -f "pm2" 2>/dev/null || true
+            sleep 1
           fi
           
           # Verify PM2 directory exists and is writable
@@ -187,20 +220,60 @@ jobs:
             exit 1
           fi
           
-          # Check if PM2 process exists and is running
-          if $PM2_CMD list 2>&1 | grep -q "investment-crm-backend"; then
-            echo "PM2 process 'investment-crm-backend' is running. Restarting..."
-            $PM2_CMD restart investment-crm-backend
+          # Build the application first if dist doesn't exist
+          if [ ! -d "dist" ]; then
+            echo "Building application..."
+            yarn build
+          fi
+          
+          # Try to check if PM2 process exists, but don't fail if we can't connect
+          # (This might fail if daemon is not running or has permission issues)
+          PM2_PROCESS_EXISTS=false
+          if $PM2_CMD list 2>/dev/null | grep -q "investment-crm-backend"; then
+            PM2_PROCESS_EXISTS=true
+            echo "PM2 process 'investment-crm-backend' found in list."
           else
-            echo "PM2 process 'investment-crm-backend' is not running. Starting..."
-            # Build the application first if dist doesn't exist
-            if [ ! -d "dist" ]; then
-              echo "Building application..."
-              yarn build
+            echo "PM2 process 'investment-crm-backend' not found (or PM2 daemon not accessible)."
+          fi
+          
+          # If process exists, try to restart it
+          if [ "$PM2_PROCESS_EXISTS" = true ]; then
+            echo "Attempting to restart existing process..."
+            if $PM2_CMD restart investment-crm-backend 2>/dev/null; then
+              echo "Process restarted successfully."
+            else
+              echo "Restart failed, will delete and start fresh..."
+              $PM2_CMD delete investment-crm-backend 2>/dev/null || true
+              PM2_PROCESS_EXISTS=false
             fi
-            # Start with PM2
-            $PM2_CMD start dist/index.js --name investment-crm-backend
-            $PM2_CMD save
+          fi
+          
+          # If process doesn't exist or restart failed, start it fresh
+          if [ "$PM2_PROCESS_EXISTS" = false ]; then
+            echo "Starting PM2 process 'investment-crm-backend'..."
+            # Start with PM2 - this will create a new daemon if one doesn't exist
+            # The daemon will be created as the current user since we've cleaned up everything
+            if ! $PM2_CMD start dist/index.js --name investment-crm-backend 2>&1; then
+              echo "PM2 start failed. This might be due to socket permission issues."
+              echo "Attempting to fix permissions and retry..."
+              
+              # One more aggressive cleanup
+              if command -v sudo &> /dev/null; then
+                sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+                sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || true
+              fi
+              
+              # Wait a moment
+              sleep 1
+              
+              # Try starting again
+              $PM2_CMD start dist/index.js --name investment-crm-backend || {
+                echo "PM2 start failed again. Exiting with error."
+                ls -la "$PM2_HOME_DIR" || true
+                exit 1
+              }
+            fi
+            $PM2_CMD save 2>/dev/null || true
           fi
           
           # Verify the process is actually running
