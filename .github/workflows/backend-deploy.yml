@@ -157,6 +157,17 @@ jobs:
           # But run PM2 commands as current user
           export PATH="/opt/nodejs/bin:$PATH"
           
+          # Fix PM2 socket permissions if they exist
+          PM2_HOME_DIR="$HOME/.pm2"
+          if [ -d "$PM2_HOME_DIR" ]; then
+            echo "Fixing PM2 socket permissions..."
+            sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || true
+            # Fix specific socket files if they exist
+            [ -S "$PM2_HOME_DIR/rpc.sock" ] && sudo chown "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR/rpc.sock" 2>/dev/null || true
+            [ -S "$PM2_HOME_DIR/pub.sock" ] && sudo chown "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+            chmod -R u+w "$PM2_HOME_DIR" 2>/dev/null || true
+          fi
+          
           # Restart PM2 process
           /opt/nodejs/bin/pm2 restart investment-crm-backend || {
             echo "PM2 restart failed, trying to start instead..."
