@@ -126,7 +126,7 @@ jobs:
       - name: Restart PM2 process
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
-          export PATH=" /opt/nodejs/bin:$PATH"
+          export HOME=/root
           
           # Build the application first if dist doesn't exist
           if [ ! -d "dist" ]; then
