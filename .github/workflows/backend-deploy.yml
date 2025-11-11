@@ -126,13 +126,12 @@ jobs:
       - name: Restart PM2 process
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
-        
-          # Fix Yarn config path issue
-          rm -rf /root/.config/yarn 2>/dev/null || true
-          mkdir -p /root/.config
-          touch /root/.config/yarn 2>/dev/null || true
-          
+          # Set HOME to root for PM2 compatibility
           export HOME=/root
+          
+          # Redirect Yarn config to writable location to avoid /root/.config/yarn permission errors
+          export XDG_CONFIG_HOME="${{ secrets.BACKEND_DEPLOY_PATH }}/.config"
+          mkdir -p "$XDG_CONFIG_HOME/yarn"
           
           # Build the application first if dist doesn't exist
           if [ ! -d "dist" ]; then
@@ -141,17 +140,17 @@ jobs:
           fi
           
           # Restart PM2 process
-          RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 restart investment-crm-backend
+          RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 restart investment-crm-backend || RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend
           
           # Verify the process is actually running
           sleep 3
-          if /opt/nodejs/bin/pm2 list 2>&1 | grep -q "investment-crm-backend.*online"; then
+          if RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 list 2>&1 | grep -q "investment-crm-backend.*online"; then
             echo "✅ PM2 process is running successfully"
-            /opt/nodejs/bin/pm2 describe investment-crm-backend
+            RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 describe investment-crm-backend
           else
             echo "⚠️  PM2 process may not be running correctly"
-            /opt/nodejs/bin/pm2 list
-            /opt/nodejs/bin/pm2 logs investment-crm-backend --lines 20 --nostream
+            RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 list
+            RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 logs investment-crm-backend --lines 20 --nostream
           fi
 
       - name: Check PM2 logs
