@@ -431,15 +431,16 @@ jobs:
             fi
             
             if [ -n "$DOCKER_COMPOSE_CMD" ]; then
-              if [ -f "$WORKSPACE_PATH/backend/docker-compose.yml" ]; then
-                DOCKER_COMPOSE_FILE="$WORKSPACE_PATH/backend/docker-compose.yml"
-                DOCKER_COMPOSE_DIR="$WORKSPACE_PATH/backend"
-              elif [ -f "$DEPLOY_PATH/current/docker-compose.yml" ]; then
-                DOCKER_COMPOSE_FILE="$DEPLOY_PATH/current/docker-compose.yml"
-                DOCKER_COMPOSE_DIR="$DEPLOY_PATH/current"
+              # Check workspace root first (backend and frontend are separate repos)
+              if [ -f "$WORKSPACE_PATH/docker-compose.yml" ]; then
+                DOCKER_COMPOSE_FILE="$WORKSPACE_PATH/docker-compose.yml"
+                DOCKER_COMPOSE_DIR="$WORKSPACE_PATH"
               elif [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
                 DOCKER_COMPOSE_FILE="$DEPLOY_PATH/docker-compose.yml"
                 DOCKER_COMPOSE_DIR="$DEPLOY_PATH"
+              elif [ -f "$DEPLOY_PATH/current/docker-compose.yml" ]; then
+                DOCKER_COMPOSE_FILE="$DEPLOY_PATH/current/docker-compose.yml"
+                DOCKER_COMPOSE_DIR="$DEPLOY_PATH/current"
               fi
               
               if [ -n "$DOCKER_COMPOSE_FILE" ]; then
@@ -712,10 +713,11 @@ jobs:
             mv backend-deploy.tar.gz "$DEPLOY_PATH/releases/"
             
             # Copy docker-compose.yml to deployment directory for easy access
-            if [ -f "$WORKSPACE_PATH/backend/docker-compose.yml" ]; then
+            # Check workspace root first (backend and frontend are separate repos)
+            if [ -f "$WORKSPACE_PATH/docker-compose.yml" ]; then
               echo "📋 Copying docker-compose.yml to deployment directory..."
               mkdir -p "$DEPLOY_PATH"
-              cp "$WORKSPACE_PATH/backend/docker-compose.yml" "$DEPLOY_PATH/docker-compose.yml" || echo "⚠️  Failed to copy docker-compose.yml (non-critical)"
+              cp "$WORKSPACE_PATH/docker-compose.yml" "$DEPLOY_PATH/docker-compose.yml" || echo "⚠️  Failed to copy docker-compose.yml (non-critical)"
             fi
             
             # Extract and deploy
@@ -817,10 +819,11 @@ jobs:
                 DOCKER_COMPOSE_DIR=""
                 
                 echo "🔍 Searching for docker-compose.yml..."
-                echo "  Checking: $WORKSPACE_PATH/backend/docker-compose.yml"
-                if [ -f "$WORKSPACE_PATH/backend/docker-compose.yml" ]; then
-                  DOCKER_COMPOSE_FILE="$WORKSPACE_PATH/backend/docker-compose.yml"
-                  DOCKER_COMPOSE_DIR="$WORKSPACE_PATH/backend"
+                # Check workspace root first (backend and frontend are separate repos)
+                echo "  Checking: $WORKSPACE_PATH/docker-compose.yml"
+                if [ -f "$WORKSPACE_PATH/docker-compose.yml" ]; then
+                  DOCKER_COMPOSE_FILE="$WORKSPACE_PATH/docker-compose.yml"
+                  DOCKER_COMPOSE_DIR="$WORKSPACE_PATH"
                   echo "✅ Found docker-compose.yml at: $DOCKER_COMPOSE_FILE"
                 elif [ -f "$DEPLOY_PATH/docker-compose.yml" ]; then
                   DOCKER_COMPOSE_FILE="$DEPLOY_PATH/docker-compose.yml"
@@ -833,7 +836,7 @@ jobs:
                 else
                   echo "⚠️  docker-compose.yml not found in expected locations"
                   echo "   Searched:"
-                  echo "   - $WORKSPACE_PATH/backend/docker-compose.yml"
+                  echo "   - $WORKSPACE_PATH/docker-compose.yml"
                   echo "   - $DEPLOY_PATH/docker-compose.yml"
                   echo "   - $DEPLOY_PATH/current/docker-compose.yml"
                 fi
