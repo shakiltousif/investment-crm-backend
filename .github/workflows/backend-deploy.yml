@@ -127,7 +127,7 @@ jobs:
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           # Use runner user's HOME to avoid /root permission issues
-          export HOME="${HOME:-/home/$(whoami)}"
+          export HOME=/root
           # Redirect Yarn config/cache to writable locations
           export XDG_CONFIG_HOME="${{ secrets.BACKEND_DEPLOY_PATH }}/.config"
           export YARN_CACHE_FOLDER="${{ secrets.BACKEND_DEPLOY_PATH }}/.yarn-cache"
