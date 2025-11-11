@@ -159,25 +159,49 @@ jobs:
           
           # Aggressively kill all PM2 processes and daemons
           echo "Ensuring PM2 daemon is completely stopped..."
+          
+          # First, remove socket files to prevent PM2 from connecting to existing daemon
+          if command -v sudo &> /dev/null; then
+            echo "Removing socket files to disconnect from existing daemon..."
+            sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+          fi
+          
           # Try to kill PM2 daemon for current user's PM2_HOME
           $PM2_CMD kill 2>/dev/null || true
-          # Kill all PM2 processes system-wide
+          
+          # Kill all PM2 processes system-wide (including root)
           pkill -9 -f "pm2" 2>/dev/null || true
           pkill -9 -f "node.*pm2" 2>/dev/null || true
-          # Also try to kill PM2 daemons that might be running for other users
+          
+          # Also try to kill PM2 daemons that might be running for other users (especially root)
           if command -v sudo &> /dev/null; then
+            echo "Killing root PM2 daemon..."
             # Kill PM2 processes for all users (in case root or another user has a daemon running)
             sudo pkill -9 -f "pm2" 2>/dev/null || true
             sudo pkill -9 -f "node.*pm2" 2>/dev/null || true
-            # Try to kill PM2 daemon using root's PM2 if it exists
-            sudo /opt/nodejs/bin/pm2 kill 2>/dev/null || true
+            
+            # Try to kill PM2 daemon using root's PM2_HOME
+            # Root's PM2 might be using /root/.pm2 or the user's .pm2 directory
+            sudo PM2_HOME=/root/.pm2 /opt/nodejs/bin/pm2 kill 2>/dev/null || true
+            sudo PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 kill 2>/dev/null || true
+            
+            # Find and kill any PM2 daemon processes by PID if pm2.pid exists
+            if [ -f "$PM2_HOME_DIR/pm2.pid" ]; then
+              PM2_PID=$(sudo cat "$PM2_HOME_DIR/pm2.pid" 2>/dev/null || echo "")
+              if [ -n "$PM2_PID" ] && [ "$PM2_PID" != "0" ]; then
+                echo "Killing PM2 daemon with PID: $PM2_PID"
+                sudo kill -9 "$PM2_PID" 2>/dev/null || true
+              fi
+            fi
           fi
-          sleep 2
+          
+          # Wait for processes to fully terminate
+          sleep 3
           
           # Remove ALL socket files and PM2 runtime files that might have wrong ownership
           echo "Cleaning up PM2 runtime files..."
           if command -v sudo &> /dev/null; then
-            # Remove socket files with sudo
+            # Remove socket files with sudo (must be done after daemon is killed)
             sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
             # Remove PID files
             sudo rm -f "$PM2_HOME_DIR/pm2.pid" "$PM2_HOME_DIR"/*.pid 2>/dev/null || true
@@ -191,13 +215,20 @@ jobs:
             rm -f "$PM2_HOME_DIR/.pm2.lock" 2>/dev/null || true
           fi
           
-          # Verify socket files are gone
-          if [ -f "$PM2_HOME_DIR/rpc.sock" ] || [ -f "$PM2_HOME_DIR/pub.sock" ]; then
-            echo "Warning: Socket files still exist, attempting force removal..."
-            if command -v sudo &> /dev/null; then
-              sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+          # Verify socket files are gone and stay gone
+          for i in 1 2 3; do
+            if [ -f "$PM2_HOME_DIR/rpc.sock" ] || [ -f "$PM2_HOME_DIR/pub.sock" ]; then
+              echo "Warning: Socket files still exist (attempt $i), removing again..."
+              if command -v sudo &> /dev/null; then
+                sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+                # Kill any process that might be recreating them
+                sudo pkill -9 -f "pm2" 2>/dev/null || true
+              fi
+              sleep 1
+            else
+              break
             fi
-          fi
+          done
           
           # Ensure directory ownership is correct one more time
           if command -v sudo &> /dev/null; then
@@ -206,12 +237,27 @@ jobs:
             sudo chmod 755 "$PM2_HOME_DIR" 2>/dev/null || true
           fi
           
-          # Verify no PM2 processes are running
+          # Final check: Verify no PM2 processes are running
           if pgrep -f "pm2" > /dev/null; then
-            echo "Warning: PM2 processes still running, attempting to kill..."
+            echo "Warning: PM2 processes still running, attempting final kill..."
             pkill -9 -f "pm2" 2>/dev/null || true
-            sleep 1
+            if command -v sudo &> /dev/null; then
+              sudo pkill -9 -f "pm2" 2>/dev/null || true
+            fi
+            sleep 2
           fi
+          
+          # Verify socket files are definitely gone before proceeding
+          if [ -f "$PM2_HOME_DIR/rpc.sock" ] || [ -f "$PM2_HOME_DIR/pub.sock" ]; then
+            echo "ERROR: Socket files still exist after cleanup. This indicates a PM2 daemon is still running."
+            echo "Socket file details:"
+            ls -la "$PM2_HOME_DIR"/*.sock 2>/dev/null || true
+            echo "PM2 processes:"
+            ps aux | grep -i pm2 | grep -v grep || true
+            exit 1
+          fi
+          
+          echo "PM2 cleanup completed successfully. Socket files removed and daemon stopped."
           
           # Verify PM2 directory exists and is writable
           if [ ! -w "$PM2_HOME_DIR" ]; then
@@ -251,28 +297,61 @@ jobs:
           # If process doesn't exist or restart failed, start it fresh
           if [ "$PM2_PROCESS_EXISTS" = false ]; then
             echo "Starting PM2 process 'investment-crm-backend'..."
-            # Start with PM2 - this will create a new daemon if one doesn't exist
-            # The daemon will be created as the current user since we've cleaned up everything
-            if ! $PM2_CMD start dist/index.js --name investment-crm-backend 2>&1; then
-              echo "PM2 start failed. This might be due to socket permission issues."
-              echo "Attempting to fix permissions and retry..."
-              
-              # One more aggressive cleanup
+            
+            # Final check: Ensure socket files don't exist before starting
+            if [ -f "$PM2_HOME_DIR/rpc.sock" ] || [ -f "$PM2_HOME_DIR/pub.sock" ]; then
+              echo "WARNING: Socket files exist before PM2 start. Removing them..."
               if command -v sudo &> /dev/null; then
                 sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
-                sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || true
+                sudo pkill -9 -f "pm2" 2>/dev/null || true
+                sleep 1
+              fi
+            fi
+            
+            # Start with PM2 - this will create a new daemon if one doesn't exist
+            # The daemon will be created as the current user since we've cleaned up everything
+            PM2_START_SUCCESS=false
+            for retry in 1 2 3; do
+              echo "Attempting to start PM2 (attempt $retry)..."
+              
+              # Remove socket files right before starting (in case they were recreated)
+              if [ -f "$PM2_HOME_DIR/rpc.sock" ] || [ -f "$PM2_HOME_DIR/pub.sock" ]; then
+                echo "Removing socket files before start attempt..."
+                if command -v sudo &> /dev/null; then
+                  sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+                fi
               fi
               
-              # Wait a moment
-              sleep 1
-              
-              # Try starting again
-              $PM2_CMD start dist/index.js --name investment-crm-backend || {
-                echo "PM2 start failed again. Exiting with error."
-                ls -la "$PM2_HOME_DIR" || true
-                exit 1
-              }
+              # Try to start PM2
+              if $PM2_CMD start dist/index.js --name investment-crm-backend 2>&1; then
+                PM2_START_SUCCESS=true
+                echo "PM2 started successfully!"
+                break
+              else
+                echo "PM2 start failed on attempt $retry"
+                if [ $retry -lt 3 ]; then
+                  echo "Cleaning up and retrying..."
+                  # Kill any PM2 processes that might have started
+                  pkill -9 -f "pm2" 2>/dev/null || true
+                  if command -v sudo &> /dev/null; then
+                    sudo pkill -9 -f "pm2" 2>/dev/null || true
+                    sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+                    sudo chown -R "$CURRENT_USER:$CURRENT_USER" "$PM2_HOME_DIR" 2>/dev/null || true
+                  fi
+                  sleep 2
+                fi
+              fi
+            done
+            
+            if [ "$PM2_START_SUCCESS" = false ]; then
+              echo "ERROR: PM2 start failed after 3 attempts."
+              echo "PM2 directory contents:"
+              ls -la "$PM2_HOME_DIR" || true
+              echo "PM2 processes:"
+              ps aux | grep -i pm2 | grep -v grep || true
+              exit 1
             fi
+            
             $PM2_CMD save 2>/dev/null || true
           fi
           
