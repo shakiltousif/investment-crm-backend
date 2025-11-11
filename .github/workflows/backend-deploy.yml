@@ -73,18 +73,11 @@ jobs:
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           # Set PM2 home to the user's PM2 directory
-          export PM2_HOME=/home/signin-fil-investments-api/.pm2
+          export PM2_HOME=/root/.pm2
           export PATH="/opt/nodejs/bin:$PATH"
           
           # PM2 command
           PM2_CMD="/opt/nodejs/bin/pm2"
-          
-          # Fix PM2 directory permissions if needed
-          if [ -d "$PM2_HOME" ]; then
-            echo "Fixing PM2 directory permissions..."
-            sudo chown -R signin-fil-investments-api:signin-fil-investments-api "$PM2_HOME" 2>/dev/null || true
-            sudo chmod -R 755 "$PM2_HOME" 2>/dev/null || true
-          fi
           
           # Check if PM2 process exists and is running
           if $PM2_CMD list 2>&1 | grep -q "investment-crm-backend"; then
