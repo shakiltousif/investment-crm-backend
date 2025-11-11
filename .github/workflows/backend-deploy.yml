@@ -37,11 +37,11 @@ jobs:
           fi
 
       - name: Install dependencies
-        working-directory: ./backend
+        working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: yarn install
 
       - name: write environment variables to .env
-        working-directory: ./backend
+        working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           touch .env
           echo "${{ secrets.BACKEND_ENV_FILE }}" >> .env
