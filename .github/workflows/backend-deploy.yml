@@ -180,7 +180,7 @@ jobs:
           
           # Copy dist directory (preserve structure)
           if [ -d "dist" ]; then
-            cp -r dist deploy/
+          cp -r dist deploy/
             echo "✅ Copied dist directory"
           else
             echo "❌ Error: dist directory not found"
@@ -189,7 +189,7 @@ jobs:
           
           # Copy prisma directory
           if [ -d "prisma" ]; then
-            cp -r prisma deploy/
+          cp -r prisma deploy/
             echo "✅ Copied prisma directory"
           fi
           
@@ -1227,8 +1227,7 @@ jobs:
               else
                 echo "✅ PM2 is working (version: $PM2_VERSION_OUTPUT)"
               fi
-            
-            if [ -n "$PM2_CMD" ]; then
+              
               # Try to use PM2 - the daemon will start automatically on first command
               echo "   Attempting to use PM2 (daemon will auto-start if needed)..."
               
@@ -1393,55 +1392,19 @@ jobs:
                 echo "⚠️  Import missing .js extension. ES modules require .js extensions."
                 echo "💡 Fixing all relative imports in dist directory..."
                 
-                # Fix relative imports to include .js extension
-                # Use Node.js one-liner or sed to fix imports
-                if command -v node &> /dev/null; then
-                  echo "Using Node.js to fix imports..."
-                  node -e "
-                    const fs = require('fs');
-                    const path = require('path');
-                    function fixImports(dir) {
-                      const files = fs.readdirSync(dir);
-                      for (const file of files) {
-                        const filePath = path.join(dir, file);
-                        const stat = fs.statSync(filePath);
-                        if (stat.isDirectory()) {
-                          fixImports(filePath);
-                        } else if (file.endsWith('.js')) {
-                          let content = fs.readFileSync(filePath, 'utf8');
-                          const original = content;
-                          content = content.replace(/from\\s+['\"](\\.\\/[^'\"]+)['\"]/g, (match, importPath) => {
-                            if (!importPath.endsWith('.js') && !importPath.endsWith('.json') && !importPath.includes('node_modules')) {
-                              return match.replace(importPath, importPath + '.js');
-                            }
-                            return match;
-                          });
-                          content = content.replace(/from\\s+['\"](\\.\\.\\/[^'\"]+)['\"]/g, (match, importPath) => {
-                            if (!importPath.endsWith('.js') && !importPath.endsWith('.json') && !importPath.includes('node_modules')) {
-                              return match.replace(importPath, importPath + '.js');
-                            }
-                            return match;
-                          });
-                          if (content !== original) {
-                            fs.writeFileSync(filePath, content, 'utf8');
-                            console.log('Fixed: ' + filePath);
-                          }
-                        }
-                      }
-                    }
-                    fixImports('dist');
-                  "
-                else
-                  echo "⚠️  Node.js not available, using sed to fix imports..."
-                  # Fix common import patterns with sed
-                  find dist -name "*.js" -type f -exec sed -i "s|from './config/logger'|from './config/logger.js'|g" {} \;
-                  find dist -name "*.js" -type f -exec sed -i "s|from '../config/logger'|from '../config/logger.js'|g" {} \;
-                  find dist -name "*.js" -type f -exec sed -i 's|from "./config/logger"|from "./config/logger.js"|g' {} \;
-                  find dist -name "*.js" -type f -exec sed -i 's|from "../config/logger"|from "../config/logger.js"|g' {} \;
-                  # Fix other common relative imports
-                  find dist -name "*.js" -type f -exec sed -i "s|from '\\.\\(/[^']*\\)'|from '\\.\\1.js'|g" {} \;
-                  find dist -name "*.js" -type f -exec sed -i 's|from "\\.\\(/[^"]*\\)"|from "\\.\\1.js"|g' {} \;
-                fi
+                # Fix relative imports to include .js extension using sed
+                echo "Fixing relative imports with sed..."
+                # Fix common import patterns with sed
+                find dist -name "*.js" -type f -exec sed -i "s|from './config/logger'|from './config/logger.js'|g" {} \;
+                find dist -name "*.js" -type f -exec sed -i "s|from '../config/logger'|from '../config/logger.js'|g" {} \;
+                find dist -name "*.js" -type f -exec sed -i 's|from "./config/logger"|from "./config/logger.js"|g' {} \;
+                find dist -name "*.js" -type f -exec sed -i 's|from "../config/logger"|from "../config/logger.js"|g' {} \;
+                # Fix other common relative imports (single quotes)
+                find dist -name "*.js" -type f -exec sed -i "s|from '\\.\\(/[^']*\\)'|from '\\.\\1.js'|g" {} \;
+                # Fix other common relative imports (double quotes)
+                find dist -name "*.js" -type f -exec sed -i 's|from "\\.\\(/[^"]*\\)"|from "\\.\\1.js"|g' {} \;
+                # Fix imports without quotes (less common but possible)
+                find dist -name "*.js" -type f -exec sed -i 's|from \\.\\(/[^;]*\\)|from \\.\\1.js|g' {} \;
                 
                 echo "✅ Fixed imports to include .js extensions"
                 echo "📋 Updated logger import:"
@@ -1611,9 +1574,9 @@ jobs:
               # Use the local Prisma binary directly
               if [ -f 'node_modules/.bin/prisma' ]; then
                 node_modules/.bin/prisma generate || {
-                  echo '❌ Error: Failed to generate Prisma client'
-                  exit 1
-                }
+              echo '❌ Error: Failed to generate Prisma client'
+              exit 1
+            }
               elif [ -f './node_modules/.bin/prisma' ]; then
                 ./node_modules/.bin/prisma generate || {
                   echo '❌ Error: Failed to generate Prisma client'
