@@ -177,15 +177,16 @@ jobs:
             echo "Current PATH: $PATH"
             
             NODE_CMD=""
-            # First try standard locations
-            if command -v node &> /dev/null; then
+            # First try standard locations (check /opt/nodejs/bin first since it's in PATH)
+            if [ -f /opt/nodejs/bin/node ] && [ -x /opt/nodejs/bin/node ]; then
+              NODE_CMD="/opt/nodejs/bin/node"
+              echo "Found node in /opt/nodejs/bin"
+            elif command -v node &> /dev/null; then
               NODE_CMD="node"
             elif [ -f /usr/local/bin/node ]; then
               NODE_CMD="/usr/local/bin/node"
             elif [ -f /usr/bin/node ]; then
               NODE_CMD="/usr/bin/node"
-            elif [ -f /opt/nodejs/bin/node ]; then
-              NODE_CMD="/opt/nodejs/bin/node"
             fi
             
             # Check root's nvm installation
@@ -282,11 +283,14 @@ jobs:
             if [ ! -x "$NODE_CMD" ]; then
               echo "⚠️  Node.js found but not executable, checking permissions..."
               ls -la "$NODE_CMD" || echo "Cannot check permissions"
-              # Try with sudo if needed
-              if sudo -n test -x "$NODE_CMD" 2>/dev/null; then
+              # Try to make it executable
+              if sudo chmod +x "$NODE_CMD" 2>/dev/null; then
+                echo "✅ Made Node.js executable"
+              elif sudo -n test -x "$NODE_CMD" 2>/dev/null; then
                 echo "Node.js requires sudo to execute"
               else
                 echo "❌ Node.js found at $NODE_CMD but cannot be executed"
+                echo "Try: sudo chmod +x $NODE_CMD"
                 exit 1
               fi
             fi
@@ -301,15 +305,16 @@ jobs:
             # Check npm (try multiple methods, including checking root's PATH)
             echo "📦 Checking npm installation..."
             NPM_CMD=""
-            # First try standard locations
-            if command -v npm &> /dev/null; then
+            # First try standard locations (check /opt/nodejs/bin first since it's in PATH)
+            if [ -f /opt/nodejs/bin/npm ] && [ -x /opt/nodejs/bin/npm ]; then
+              NPM_CMD="/opt/nodejs/bin/npm"
+              echo "Found npm in /opt/nodejs/bin"
+            elif command -v npm &> /dev/null; then
               NPM_CMD="npm"
             elif [ -f /usr/local/bin/npm ]; then
               NPM_CMD="/usr/local/bin/npm"
             elif [ -f /usr/bin/npm ]; then
               NPM_CMD="/usr/bin/npm"
-            elif [ -f /opt/nodejs/bin/npm ]; then
-              NPM_CMD="/opt/nodejs/bin/npm"
             fi
             
             # Check root's nvm installation (use same directory as node if found)
@@ -366,15 +371,33 @@ jobs:
             # If still not found, try to create symlinks automatically (if sudo is available)
             if [ -z "$NPM_CMD" ] || [ ! -f "$NPM_CMD" ]; then
               echo "Attempting to find and create symlinks automatically..."
-              # Try to get root's npm path and create symlink
+              # Try multiple methods to find root's npm
+              ROOT_NPM_PATH=""
+              # Method 1: Try sudo which
               ROOT_NPM_PATH=$(sudo sh -c 'which npm' 2>/dev/null || echo "")
+              # Method 2: Use same directory as node if found
+              if [ -z "$ROOT_NPM_PATH" ] && [ -n "$NODE_CMD" ] && [ -f "$NODE_CMD" ]; then
+                ROOT_NPM_PATH="$(dirname "$NODE_CMD")/npm"
+                if [ ! -f "$ROOT_NPM_PATH" ]; then
+                  ROOT_NPM_PATH=""
+                fi
+              fi
+              # Method 3: Check if /opt/nodejs/bin/npm exists
+              if [ -z "$ROOT_NPM_PATH" ] && [ -f /opt/nodejs/bin/npm ]; then
+                ROOT_NPM_PATH="/opt/nodejs/bin/npm"
+              fi
+              
               if [ -n "$ROOT_NPM_PATH" ] && [ -f "$ROOT_NPM_PATH" ]; then
                 echo "Found npm at: $ROOT_NPM_PATH"
                 echo "Creating symlink in /usr/local/bin..."
                 sudo ln -sf "$ROOT_NPM_PATH" /usr/local/bin/npm 2>/dev/null || echo "Failed to create symlink (may need manual setup)"
-                if [ -f /usr/local/bin/npm ]; then
+                if [ -f /usr/local/bin/npm ] && [ -x /usr/local/bin/npm ]; then
                   NPM_CMD="/usr/local/bin/npm"
                   echo "✅ Symlink created successfully"
+                elif [ -f /opt/nodejs/bin/npm ]; then
+                  # If /opt/nodejs/bin/npm exists, try to use it directly
+                  NPM_CMD="/opt/nodejs/bin/npm"
+                  echo "✅ Using /opt/nodejs/bin/npm directly"
                 fi
               fi
             fi
@@ -404,11 +427,14 @@ jobs:
             if [ ! -x "$NPM_CMD" ]; then
               echo "⚠️  npm found but not executable, checking permissions..."
               ls -la "$NPM_CMD" || echo "Cannot check permissions"
-              # Try with sudo if needed
-              if sudo -n test -x "$NPM_CMD" 2>/dev/null; then
+              # Try to make it executable
+              if sudo chmod +x "$NPM_CMD" 2>/dev/null; then
+                echo "✅ Made npm executable"
+              elif sudo -n test -x "$NPM_CMD" 2>/dev/null; then
                 echo "npm requires sudo to execute"
               else
                 echo "❌ npm found at $NPM_CMD but cannot be executed"
+                echo "Try: sudo chmod +x $NPM_CMD"
                 exit 1
               fi
             fi
