@@ -1142,37 +1142,76 @@ jobs:
           # Initialize PM2_RUNNING
           PM2_RUNNING="0"
           
-          # Use PM2_PATH if set, otherwise try command -v
+          # Use PM2_PATH if set, otherwise tr y command -v
           PM2_CMD=""
+          echo "🔍 Checking PM2 availability..."
+          echo "   PM2_AVAILABLE: ${PM2_AVAILABLE:-0}"
+          echo "   PM2_PATH: ${PM2_PATH:-not set}"
+          
           if [ -n "${PM2_PATH:-}" ] && [ -f "${PM2_PATH}" ]; then
             PM2_CMD="${PM2_PATH}"
+            echo "✅ Using PM2 from PM2_PATH: $PM2_CMD"
           elif command -v pm2 &> /dev/null; then
             PM2_CMD="pm2"
+            echo "✅ Found PM2 in PATH: $PM2_CMD"
+            $PM2_CMD --version || echo "⚠️  PM2 version check failed"
+          else
+            echo "⚠️  PM2 command not found in PATH"
+            # Try to find PM2 in common locations
+            for path in "/usr/local/bin/pm2" "/usr/bin/pm2" "$HOME/.npm-global/bin/pm2" "/opt/nodejs/bin/pm2"; do
+              if [ -f "$path" ] && [ -x "$path" ]; then
+                PM2_CMD="$path"
+                echo "✅ Found PM2 at: $PM2_CMD"
+                break
+              fi
+            done
           fi
           
           if [ "${PM2_AVAILABLE:-0}" = "1" ] && [ -n "$PM2_CMD" ]; then
-            echo "🔄 Restarting with PM2..."
-            # Try to restart existing PM2 process
-            if $PM2_CMD restart investment-crm-backend 2>/dev/null; then
-              echo "✅ Application restarted with PM2"
-              PM2_RUNNING="1"
-            # If restart fails, start a new process
-            elif $PM2_CMD start "$DEPLOY_PATH/current/dist/index.js" --name investment-crm-backend --cwd "$DEPLOY_PATH/current" 2>/dev/null; then
-              echo "✅ Application started with PM2"
-              PM2_RUNNING="1"
+            echo "🔄 Attempting to use PM2 process manager..."
+            echo "   PM2 command: $PM2_CMD"
+            
+            # Verify PM2 is working
+            if ! $PM2_CMD --version &> /dev/null; then
+              echo "❌ PM2 command is not working, will use manual start"
+              PM2_CMD=""
             else
-              echo "⚠️  PM2 restart/start failed, will try manual start"
-              echo "📋 PM2 error output:"
-              $PM2_CMD restart investment-crm-backend 2>&1 || true
-              $PM2_CMD start "$DEPLOY_PATH/current/dist/index.js" --name investment-crm-backend --cwd "$DEPLOY_PATH/current" 2>&1 || true
-              # Check if PM2 process is actually running
-              sleep 2
-              if $PM2_CMD list 2>/dev/null | grep -q "investment-crm-backend"; then
+              # Try to restart existing PM2 process
+              echo "   Trying to restart existing PM2 process..."
+              if $PM2_CMD restart investment-crm-backend 2>&1; then
+                echo "✅ Application restarted with PM2"
                 PM2_RUNNING="1"
-                echo "✅ PM2 process is running after all"
+              # If restart fails, start a new process
+              else
+                echo "   Restart failed, trying to start new PM2 process..."
+                if $PM2_CMD start "$DEPLOY_PATH/current/dist/index.js" --name investment-crm-backend --cwd "$DEPLOY_PATH/current" 2>&1; then
+                  echo "✅ Application started with PM2"
+                  PM2_RUNNING="1"
+                else
+                  echo "⚠️  PM2 start failed"
+                  # Check if PM2 process is actually running despite the error
+                  sleep 2
+                  if $PM2_CMD list 2>/dev/null | grep -q "investment-crm-backend"; then
+                    PM2_RUNNING="1"
+                    echo "✅ PM2 process is running (despite error message)"
+                  else
+                    echo "❌ PM2 process not found, will use manual start"
+                    echo "📋 PM2 list output:"
+                    $PM2_CMD list 2>&1 || true
+                  fi
+                fi
               fi
             fi
-          elif command -v systemctl &> /dev/null; then
+          else
+            if [ "${PM2_AVAILABLE:-0}" != "1" ]; then
+              echo "ℹ️  PM2 not available (PM2_AVAILABLE=0), will use manual start"
+            elif [ -z "$PM2_CMD" ]; then
+              echo "ℹ️  PM2 command not found, will use manual start"
+            fi
+          fi
+          
+          # Try systemctl if PM2 didn't work
+          if [ "$PM2_RUNNING" = "0" ] && command -v systemctl &> /dev/null; then
             echo "🔄 Attempting to restart systemd service..."
             # Try without sudo first
             if systemctl restart investment-crm-backend 2>/dev/null; then
@@ -1377,11 +1416,29 @@ jobs:
             fi
           elif [ "$PM2_RUNNING" = "1" ]; then
             echo "✅ Application is running via PM2"
+            echo "📋 PM2 status:"
+            $PM2_CMD list 2>&1 | grep -A 5 "investment-crm-backend" || $PM2_CMD list 2>&1 || true
+            echo "💡 To manage the process: $PM2_CMD [start|stop|restart|delete] investment-crm-backend"
+          else
+            echo "ℹ️  Application started manually (not using PM2)"
+            echo "💡 To use PM2 next time, ensure PM2 is installed and accessible"
           fi
           
           # Cleanup old releases (keep last 5)
           cd "$DEPLOY_PATH/releases"
           ls -t | tail -n +6 | xargs -r rm -rf
+
+      - name: Show deployment method
+        run: |
+          if [ "$USE_SELF_HOSTED" = "true" ]; then
+            echo "✅ Using self-hosted runner deployment"
+            echo "   The GitHub-hosted deployment step will be skipped"
+            echo "   All deployment steps are handled by self-hosted runner steps above"
+          else
+            echo "✅ Using GitHub-hosted runner deployment"
+            echo "   The self-hosted deployment steps were skipped"
+            echo "   Deployment will proceed via SSH"
+          fi
 
       - name: Deploy to server (GitHub-hosted)
         if: env.USE_SELF_HOSTED != 'true'
