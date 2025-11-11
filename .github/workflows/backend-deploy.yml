@@ -1227,6 +1227,108 @@ jobs:
               exit 1
             fi
             
+            # Check if required files exist
+            echo "🔍 Checking for required files..."
+            if [ ! -d "dist/config" ]; then
+              echo "❌ Error: dist/config directory not found"
+              echo "📋 Contents of dist directory:"
+              ls -la dist/ || true
+              exit 1
+            fi
+            
+            if [ ! -f "dist/config/logger.js" ]; then
+              echo "❌ Error: dist/config/logger.js not found"
+              echo "📋 Contents of dist/config directory:"
+              ls -la dist/config/ || true
+              echo ""
+              echo "📋 All files in dist:"
+              find dist -type f -name "*.js" | head -20 || true
+              exit 1
+            fi
+            
+            echo "✅ Required files found:"
+            echo "   - dist/index.js"
+            echo "   - dist/config/logger.js"
+            
+            # Check the import statement in the compiled code
+            echo "🔍 Checking import statements in dist/index.js:"
+            LOGGER_IMPORT=$(grep -E "from ['\"].*config/logger" dist/index.js | head -1 || echo "")
+            
+            if [ -n "$LOGGER_IMPORT" ]; then
+              echo "📋 Found logger import: $LOGGER_IMPORT"
+              
+              if echo "$LOGGER_IMPORT" | grep -qE "\.js['\"]"; then
+                echo "✅ Import already has .js extension"
+              else
+                echo "⚠️  Import missing .js extension. ES modules require .js extensions."
+                echo "💡 Fixing all relative imports in dist directory..."
+                
+                # Fix relative imports to include .js extension
+                # Use a Node.js script to properly fix all imports
+                cat > /tmp/fix-imports.js << 'EOF'
+const fs = require('fs');
+const path = require('path');
+
+function fixImports(dir) {
+  const files = fs.readdirSync(dir);
+  
+  for (const file of files) {
+    const filePath = path.join(dir, file);
+    const stat = fs.statSync(filePath);
+    
+    if (stat.isDirectory()) {
+      fixImports(filePath);
+    } else if (file.endsWith('.js')) {
+      let content = fs.readFileSync(filePath, 'utf8');
+      let modified = false;
+      
+      // Fix relative imports: from './path' -> from './path.js'
+      // Only if it doesn't already have an extension
+      content = content.replace(
+        /from\s+['"](\.[^'"]+)['"]/g,
+        (match, importPath) => {
+          if (!importPath.endsWith('.js') && !importPath.endsWith('.json') && !importPath.includes('node_modules')) {
+            modified = true;
+            return match.replace(importPath, importPath + '.js');
+          }
+          return match;
+        }
+      );
+      
+      if (modified) {
+        fs.writeFileSync(filePath, content, 'utf8');
+        console.log(`Fixed imports in: ${filePath}`);
+      }
+    }
+  }
+}
+
+fixImports(process.argv[2]);
+EOF
+                
+                # Run the Node.js script to fix imports
+                if command -v node &> /dev/null; then
+                  node /tmp/fix-imports.js dist
+                  rm -f /tmp/fix-imports.js
+                else
+                  echo "⚠️  Node.js not available for fixing imports, using sed fallback..."
+                  # Fallback to sed for common cases
+                  find dist -name "*.js" -type f -exec sed -i "s|from './config/logger'|from './config/logger.js'|g" {} \;
+                  find dist -name "*.js" -type f -exec sed -i "s|from '../config/logger'|from '../config/logger.js'|g" {} \;
+                  find dist -name "*.js" -type f -exec sed -i 's|from "./config/logger"|from "./config/logger.js"|g' {} \;
+                  find dist -name "*.js" -type f -exec sed -i 's|from "../config/logger"|from "../config/logger.js"|g' {} \;
+                fi
+                
+                echo "✅ Fixed imports to include .js extensions"
+                echo "📋 Updated logger import:"
+                grep -E "from ['\"].*config/logger" dist/index.js | head -1 || true
+              fi
+            else
+              echo "⚠️  Could not find logger import"
+              echo "📋 Sample of imports in dist/index.js:"
+              grep -E "from ['\"]" dist/index.js | head -10 || true
+            fi
+            
             # Check if .env exists
             if [ ! -f ".env" ]; then
               echo "⚠️  Warning: .env file not found in current directory"
