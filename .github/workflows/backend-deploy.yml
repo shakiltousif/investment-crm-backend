@@ -74,8 +74,28 @@ jobs:
         run: |
           export HOME=/root
           
+          # Create PM2 directory structure with proper permissions
+          # Try without sudo first, then with sudo if needed
+          if ! mkdir -p /root/.pm2/logs /root/.pm2/pids /root/.pm2/modules 2>/dev/null; then
+            echo "Need sudo to create PM2 directories..."
+            sudo mkdir -p /root/.pm2/logs /root/.pm2/pids /root/.pm2/modules
+            sudo chmod -R 755 /root/.pm2
+          else
+            chmod -R 755 /root/.pm2
+          fi
+          
+          # Initialize PM2 if needed (create default config files)
+          if [ ! -f /root/.pm2/module_conf.json ]; then
+            if ! echo '{}' > /root/.pm2/module_conf.json 2>/dev/null; then
+              echo '{}' | sudo tee /root/.pm2/module_conf.json > /dev/null
+              sudo chmod 644 /root/.pm2/module_conf.json
+            else
+              chmod 644 /root/.pm2/module_conf.json
+            fi
+          fi
+          
           # Check if PM2 process exists and is running
-          if RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 list | grep -q 'investment-crm-backend.*online'; then
+          if RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 list 2>/dev/null | grep -q 'investment-crm-backend.*online'; then
             echo "PM2 process 'investment-crm-backend' is already running. Restarting..."
             RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 restart investment-crm-backend
           else
