@@ -143,7 +143,8 @@ jobs:
           fi
           
           # Restart PM2 process
-          RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 restart investment-crm-backend || RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend
+          RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 restart investment-crm-backend 
+          
           # Verify the process is actually running
           sleep 3
           if RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2 list 2>&1 | grep -q "investment-crm-backend.*online"; then
