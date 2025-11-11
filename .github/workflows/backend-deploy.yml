@@ -126,6 +126,12 @@ jobs:
       - name: Restart PM2 process
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
+        
+          # Fix Yarn config path issue
+          rm -rf /root/.config/yarn 2>/dev/null || true
+          mkdir -p /root/.config
+          touch /root/.config/yarn 2>/dev/null || true
+          
           export HOME=/root
           
           # Build the application first if dist doesn't exist
