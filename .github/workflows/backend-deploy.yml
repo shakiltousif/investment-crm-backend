@@ -127,7 +127,6 @@ jobs:
         working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           export PATH=" /opt/nodejs/bin:$PATH"
-          PM2_CMD="RUNNER_ALLOW_RUNASROOT=1 /opt/nodejs/bin/pm2"
           
           # Build the application first if dist doesn't exist
           if [ ! -d "dist" ]; then
@@ -136,17 +135,17 @@ jobs:
           fi
           
           # Restart PM2 process
-          $PM2_CMD restart investment-crm-backend || $PM2_CMD start dist/index.js --name investment-crm-backend
+          RUNNER_ALLOW_RUNASROOT=1 pm2 restart investment-crm-backend || RUNNER_ALLOW_RUNASROOT=1 pm2 start dist/index.js --name investment-crm-backend
           
           # Verify the process is actually running
           sleep 3
-          if $PM2_CMD list 2>&1 | grep -q "investment-crm-backend.*online"; then
+          if RUNNER_ALLOW_RUNASROOT=1 pm2 list 2>&1 | grep -q "investment-crm-backend.*online"; then
             echo "✅ PM2 process is running successfully"
-            $PM2_CMD describe investment-crm-backend
+            RUNNER_ALLOW_RUNASROOT=1 pm2 describe investment-crm-backend
           else
             echo "⚠️  PM2 process may not be running correctly"
-            $PM2_CMD list
-            $PM2_CMD logs investment-crm-backend --lines 20 --nostream
+            RUNNER_ALLOW_RUNASROOT=1 pm2 list
+            RUNNER_ALLOW_RUNASROOT=1 pm2 logs investment-crm-backend --lines 20 --nostream
           fi
 
       - name: Check PM2 logs
