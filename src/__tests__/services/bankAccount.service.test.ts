@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { BankAccountService } from '../../services/bankAccount.service';
-import { NotFoundError, ValidationError } from '../../middleware/errorHandler';
+import { BankAccountService } from '../../services/bankAccount.service.js';
+import { NotFoundError, ValidationError } from '../../middleware/errorHandler.js';
 
 // Mock Prisma
 const { mockPrisma } = vi.hoisted(() => {

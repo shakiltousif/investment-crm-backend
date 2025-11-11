@@ -1,8 +1,8 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
-import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
-import { documentService } from '../services/document.service';
+import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth.js';
+import { documentService } from '../services/document.service.js';
 import { z } from 'zod';
 
 const router = Router();

@@ -1,5 +1,5 @@
-import { prisma } from '../lib/prisma';
-import { NotFoundError } from '../middleware/errorHandler';
+import { prisma } from '../lib/prisma.js';
+import { NotFoundError } from '../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export interface PortfolioPerformance {

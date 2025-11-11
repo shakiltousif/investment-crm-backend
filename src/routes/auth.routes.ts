@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { authService } from '../services/auth.service';
-import { authenticate, AuthRequest } from '../middleware/auth';
-import { authRateLimiter } from '../middleware/rateLimiter';
-import { registerSchema, loginSchema, passwordChangeSchema } from '../lib/validators';
-import { ValidationError } from '../middleware/errorHandler';
+import { authService } from '../services/auth.service.js';
+import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { authRateLimiter } from '../middleware/rateLimiter.js';
+import { registerSchema, loginSchema, passwordChangeSchema } from '../lib/validators.js';
+import { ValidationError } from '../middleware/errorHandler.js';
 
 const router = Router();
 
@@ -49,7 +49,7 @@ router.post(
         if (error instanceof Error && error.message.includes("Can't reach database server")) {
           // Return mock login for demo purposes
           if (req.body.email === 'test@example.com' && req.body.password === 'TestPassword123!') {
-            const { generateToken, generateRefreshToken } = await import('../middleware/auth');
+            const { generateToken, generateRefreshToken } = await import('../middleware/auth.js');
             const accessToken = generateToken('mock-user-id', 'test@example.com');
             const refreshToken = generateRefreshToken('mock-user-id');
 

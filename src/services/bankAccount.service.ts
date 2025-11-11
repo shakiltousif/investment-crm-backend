@@ -1,7 +1,7 @@
 import { Decimal } from '@prisma/client/runtime/library';
-import { prisma } from '../lib/prisma';
-import { CreateBankAccountInput, UpdateBankAccountInput } from '../lib/validators';
-import { NotFoundError, ValidationError } from '../middleware/errorHandler';
+import { prisma } from '../lib/prisma.js';
+import { CreateBankAccountInput, UpdateBankAccountInput } from '../lib/validators.js';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 
 export class BankAccountService {
   async createBankAccount(userId: string, data: CreateBankAccountInput): Promise<unknown> {

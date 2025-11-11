@@ -1,5 +1,5 @@
-import { prisma } from '../lib/prisma';
-import { ValidationError } from '../middleware/errorHandler';
+import { prisma } from '../lib/prisma.js';
+import { ValidationError } from '../middleware/errorHandler.js';
 import crypto from 'crypto';
 
 export interface TwoFactorSetupResponse {

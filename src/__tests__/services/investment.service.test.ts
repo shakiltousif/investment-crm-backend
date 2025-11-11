@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { InvestmentService } from '../../services/investment.service';
-import { NotFoundError } from '../../middleware/errorHandler';
+import { InvestmentService } from '../../services/investment.service.js';
+import { NotFoundError } from '../../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
 
 // Mock Prisma

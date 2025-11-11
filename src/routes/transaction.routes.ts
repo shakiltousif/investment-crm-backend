@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth';
-import { transactionService } from '../services/transaction.service';
-import { createTransactionSchema } from '../lib/validators';
+import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { transactionService } from '../services/transaction.service.js';
+import { createTransactionSchema } from '../lib/validators.js';
 
 const router = Router();
 

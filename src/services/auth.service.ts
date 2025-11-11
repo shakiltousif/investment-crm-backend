@@ -1,10 +1,10 @@
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
-import { generateToken, generateRefreshToken } from '../middleware/auth';
-import { ConflictError, AuthenticationError, ValidationError } from '../middleware/errorHandler';
-import { RegisterInput, LoginInput } from '../lib/validators';
-import { emailService } from './email.service';
+import { generateToken, generateRefreshToken } from '../middleware/auth.js';
+import { ConflictError, AuthenticationError, ValidationError } from '../middleware/errorHandler.js';
+import { RegisterInput, LoginInput } from '../lib/validators.js';
+import { emailService } from './email.service.js';
 
 const prisma = new PrismaClient();
 

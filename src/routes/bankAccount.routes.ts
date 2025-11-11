@@ -1,7 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth';
-import { bankAccountService } from '../services/bankAccount.service';
-import { createBankAccountSchema, updateBankAccountSchema } from '../lib/validators';
+import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { bankAccountService } from '../services/bankAccount.service.js';
+import { createBankAccountSchema, updateBankAccountSchema } from '../lib/validators.js';
 
 const router = Router();
 

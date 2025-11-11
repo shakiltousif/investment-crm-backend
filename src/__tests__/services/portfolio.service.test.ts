@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { PortfolioService } from '../../services/portfolio.service';
-import { NotFoundError } from '../../middleware/errorHandler';
+import { PortfolioService } from '../../services/portfolio.service.js';
+import { NotFoundError } from '../../middleware/errorHandler.js';
 
 // Mock Prisma
 const { mockPrisma } = vi.hoisted(() => {

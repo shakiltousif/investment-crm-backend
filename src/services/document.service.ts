@@ -1,5 +1,5 @@
-import { prisma } from '../lib/prisma';
-import { NotFoundError, ValidationError } from '../middleware/errorHandler';
+import { prisma } from '../lib/prisma.js';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import fs from 'fs/promises';
 import path from 'path';
 

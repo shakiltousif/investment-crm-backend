@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
-import { AuthenticationError, AuthorizationError } from './errorHandler';
-import { prisma } from '../lib/prisma';
+import { AuthenticationError, AuthorizationError } from './errorHandler.js';
+import { prisma } from '../lib/prisma.js';
 
 export interface AuthRequest extends Request {
   userId?: string;

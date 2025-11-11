@@ -1,6 +1,6 @@
 import { Router, Response, NextFunction } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth';
-import { marketplaceService } from '../services/marketplace.service';
+import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { marketplaceService } from '../services/marketplace.service.js';
 import { z } from 'zod';
 
 const router = Router();

@@ -6,30 +6,30 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import path from 'path';
 
-import { logger } from './config/logger';
-import { errorHandler } from './middleware/errorHandler';
-import { requestLogger } from './middleware/requestLogger';
-// import { rateLimiter } from './middleware/rateLimiter';
+import { logger } from './config/logger.js';
+import { errorHandler } from './middleware/errorHandler.js';
+import { requestLogger } from './middleware/requestLogger.js';
+// import { rateLimiter } from './middleware/rateLimiter.js';
 
 // Import routes
-import authRoutes from './routes/auth.routes';
-import userRoutes from './routes/user.routes';
-import bankAccountRoutes from './routes/bankAccount.routes';
-import portfolioRoutes from './routes/portfolio.routes';
-import investmentRoutes from './routes/investment.routes';
-import transactionRoutes from './routes/transaction.routes';
-import marketplaceRoutes from './routes/marketplace.routes';
-import quotesRoutes from './routes/quotes.routes';
-import depositRoutes from './routes/deposit.routes';
-import withdrawalRoutes from './routes/withdrawal.routes';
-import analyticsRoutes from './routes/analytics.routes';
-import twoFactorRoutes from './routes/twoFactor.routes';
-import auditLogRoutes from './routes/auditLog.routes';
-import adminRoutes from './routes/admin.routes';
-import documentRoutes from './routes/document.routes';
-import supportRoutes from './routes/support.routes';
-import investmentProductRoutes from './routes/investmentProduct.routes';
-import reportRoutes from './routes/report.routes';
+import authRoutes from './routes/auth.routes.js';
+import userRoutes from './routes/user.routes.js';
+import bankAccountRoutes from './routes/bankAccount.routes.js';
+import portfolioRoutes from './routes/portfolio.routes.js';
+import investmentRoutes from './routes/investment.routes.js';
+import transactionRoutes from './routes/transaction.routes.js';
+import marketplaceRoutes from './routes/marketplace.routes.js';
+import quotesRoutes from './routes/quotes.routes.js';
+import depositRoutes from './routes/deposit.routes.js';
+import withdrawalRoutes from './routes/withdrawal.routes.js';
+import analyticsRoutes from './routes/analytics.routes.js';
+import twoFactorRoutes from './routes/twoFactor.routes.js';
+import auditLogRoutes from './routes/auditLog.routes.js';
+import adminRoutes from './routes/admin.routes.js';
+import documentRoutes from './routes/document.routes.js';
+import supportRoutes from './routes/support.routes.js';
+import investmentProductRoutes from './routes/investmentProduct.routes.js';
+import reportRoutes from './routes/report.routes.js';
 
 // Load environment variables
 dotenv.config();

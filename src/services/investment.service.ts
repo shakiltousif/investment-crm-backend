@@ -1,6 +1,6 @@
-import { prisma } from '../lib/prisma';
-import { CreateInvestmentInput, UpdateInvestmentInput } from '../lib/validators';
-import { NotFoundError } from '../middleware/errorHandler';
+import { prisma } from '../lib/prisma.js';
+import { CreateInvestmentInput, UpdateInvestmentInput } from '../lib/validators.js';
+import { NotFoundError } from '../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export class InvestmentService {

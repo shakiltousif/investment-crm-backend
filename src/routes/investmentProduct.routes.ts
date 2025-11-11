@@ -1,8 +1,8 @@
 import { Router, Response } from 'express';
-import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
-import { investmentProductService } from '../services/investmentProduct.service';
-import { prisma } from '../lib/prisma';
-import { NotFoundError } from '../middleware/errorHandler';
+import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth.js';
+import { investmentProductService } from '../services/investmentProduct.service.js';
+import { prisma } from '../lib/prisma.js';
+import { NotFoundError } from '../middleware/errorHandler.js';
 import { z } from 'zod';
 
 const router = Router();

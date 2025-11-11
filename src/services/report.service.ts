@@ -1,7 +1,7 @@
 import { InvestmentType } from '@prisma/client';
 import { Decimal } from '@prisma/client/runtime/library';
-import { prisma } from '../lib/prisma';
-import { NotFoundError } from '../middleware/errorHandler';
+import { prisma } from '../lib/prisma.js';
+import { NotFoundError } from '../middleware/errorHandler.js';
 
 export interface PortfolioReportData {
   userId: string;

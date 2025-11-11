@@ -1,6 +1,6 @@
-import { prisma } from '../lib/prisma';
-import { CreateTransactionInput } from '../lib/validators';
-import { NotFoundError, ValidationError } from '../middleware/errorHandler';
+import { prisma } from '../lib/prisma.js';
+import { CreateTransactionInput } from '../lib/validators.js';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
 
 export interface TransactionFilters {

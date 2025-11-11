@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { MarketplaceService } from '../../services/marketplace.service';
-import { ValidationError, NotFoundError } from '../../middleware/errorHandler';
+import { MarketplaceService } from '../../services/marketplace.service.js';
+import { ValidationError, NotFoundError } from '../../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
 
 // Mock Prisma

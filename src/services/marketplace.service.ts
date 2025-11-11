@@ -1,8 +1,8 @@
-import { prisma } from '../lib/prisma';
-import { NotFoundError, ValidationError } from '../middleware/errorHandler';
+import { prisma } from '../lib/prisma.js';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
-import { quotesService } from './quotes.service';
-import { CreateMarketplaceItemInput, UpdateMarketplaceItemInput } from '../lib/validators';
+import { quotesService } from './quotes.service.js';
+import { CreateMarketplaceItemInput, UpdateMarketplaceItemInput } from '../lib/validators.js';
 
 export interface MarketplaceFilters {
   type?: string;

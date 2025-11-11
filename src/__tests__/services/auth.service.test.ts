@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { AuthService } from '../../services/auth.service';
-import { ConflictError, AuthenticationError } from '../../middleware/errorHandler';
+import { AuthService } from '../../services/auth.service.js';
+import { ConflictError, AuthenticationError } from '../../middleware/errorHandler.js';
 
 // Mock Prisma
 const { mockPrisma } = vi.hoisted(() => {

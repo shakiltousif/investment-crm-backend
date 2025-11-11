@@ -1,7 +1,7 @@
 import { Router, Response, NextFunction } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth';
-import { portfolioService } from '../services/portfolio.service';
-import { createPortfolioSchema, updatePortfolioSchema } from '../lib/validators';
+import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { portfolioService } from '../services/portfolio.service.js';
+import { createPortfolioSchema, updatePortfolioSchema } from '../lib/validators.js';
 
 const router = Router();
 

@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth';
-import { investmentService } from '../services/investment.service';
-import { createInvestmentSchema, updateInvestmentSchema } from '../lib/validators';
+import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { investmentService } from '../services/investment.service.js';
+import { createInvestmentSchema, updateInvestmentSchema } from '../lib/validators.js';
 import { Decimal } from '@prisma/client/runtime/library';
 
 const router = Router();

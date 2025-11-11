@@ -1,7 +1,7 @@
-import { prisma } from '../lib/prisma';
-import { NotFoundError, ValidationError } from '../middleware/errorHandler';
+import { prisma } from '../lib/prisma.js';
+import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
-import { emailService } from './email.service';
+import { emailService } from './email.service.js';
 
 export interface CreateDepositInput {
   amount: number;

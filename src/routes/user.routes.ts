@@ -1,8 +1,8 @@
 import { Router, Response, NextFunction } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { PrismaClient } from '@prisma/client';
-import { updateProfileSchema } from '../lib/validators';
-import { ValidationError, NotFoundError } from '../middleware/errorHandler';
+import { updateProfileSchema } from '../lib/validators.js';
+import { ValidationError, NotFoundError } from '../middleware/errorHandler.js';
 
 const router = Router();
 const prisma = new PrismaClient();

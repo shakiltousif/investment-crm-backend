@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth';
-import { reportService } from '../services/report.service';
+import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { reportService } from '../services/report.service.js';
 import { z } from 'zod';
 
 const router = Router();

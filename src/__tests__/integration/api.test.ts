@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
-import { app } from '../../index';
+import { app } from '../../index.js';
 import { Decimal } from '@prisma/client/runtime/library';
 import { Request, Response, NextFunction } from 'express';
 

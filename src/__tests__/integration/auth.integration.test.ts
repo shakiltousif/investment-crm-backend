@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import authRoutes from '../../routes/auth.routes';
-import { errorHandler } from '../../middleware/errorHandler';
+import authRoutes from '../../routes/auth.routes.js';
+import { errorHandler } from '../../middleware/errorHandler.js';
 
 // Mock Prisma
 const { mockPrisma } = vi.hoisted(() => {

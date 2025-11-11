@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
-import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth';
-import { adminService } from '../services/admin.service';
+import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth.js';
+import { adminService } from '../services/admin.service.js';
 import { z } from 'zod';
 
 const router = Router();

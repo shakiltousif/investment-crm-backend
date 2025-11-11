@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth';
-import { depositService } from '../services/deposit.service';
+import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { depositService } from '../services/deposit.service.js';
 import { z } from 'zod';
 
 const router = Router();
