@@ -1215,6 +1215,29 @@ jobs:
             fi
             
             if [ -n "$PM2_CMD" ]; then
+              # Fix PM2 permission issues first
+              echo "   Checking PM2 daemon status..."
+              PM2_HOME="${PM2_HOME:-$HOME/.pm2}"
+              
+              # Kill any stale PM2 daemon and fix socket permissions
+              if [ -d "$PM2_HOME" ]; then
+                echo "   Fixing PM2 socket permissions..."
+                # Try to kill stale PM2 daemon
+                $PM2_CMD kill 2>/dev/null || true
+                # Fix socket permissions if they exist
+                if [ -S "$PM2_HOME/rpc.sock" ] || [ -S "$PM2_HOME/pub.sock" ]; then
+                  if [ "$USE_SUDO_FOR_NODE" = "1" ] && sudo -n true 2>/dev/null; then
+                    sudo chown -R "$USER:$USER" "$PM2_HOME" 2>/dev/null || true
+                    sudo chmod -R 755 "$PM2_HOME" 2>/dev/null || true
+                  else
+                    chown -R "$USER:$USER" "$PM2_HOME" 2>/dev/null || true
+                    chmod -R 755 "$PM2_HOME" 2>/dev/null || true
+                  fi
+                  # Remove stale sockets
+                  rm -f "$PM2_HOME/rpc.sock" "$PM2_HOME/pub.sock" 2>/dev/null || true
+                fi
+              fi
+              
               # Check PM2 version (this will also verify PM2 works)
               echo "   Checking PM2 version..."
               PM2_VERSION_OUTPUT=$($PM2_CMD --version 2>&1)
@@ -1222,14 +1245,31 @@ jobs:
               
               if [ $PM2_VERSION_EXIT -ne 0 ]; then
                 echo "⚠️  PM2 version check failed: $PM2_VERSION_OUTPUT"
-                echo "💡 This might be normal if PM2 daemon needs initialization"
-                echo "   Trying to use PM2 anyway (daemon will start on first command)..."
+                # If it's a permission error, try to fix it
+                if echo "$PM2_VERSION_OUTPUT" | grep -q "Permission denied"; then
+                  echo "   Attempting to fix PM2 permissions..."
+                  $PM2_CMD kill 2>/dev/null || true
+                  sleep 1
+                  # Try version check again
+                  PM2_VERSION_OUTPUT=$($PM2_CMD --version 2>&1)
+                  PM2_VERSION_EXIT=$?
+                  if [ $PM2_VERSION_EXIT -eq 0 ]; then
+                    echo "✅ PM2 is working after permission fix (version: $PM2_VERSION_OUTPUT)"
+                  else
+                    echo "⚠️  PM2 still not working, will skip PM2 and use manual start"
+                    PM2_CMD=""
+                  fi
+                else
+                  echo "💡 This might be normal if PM2 daemon needs initialization"
+                  echo "   Trying to use PM2 anyway (daemon will start on first command)..."
+                fi
               else
                 echo "✅ PM2 is working (version: $PM2_VERSION_OUTPUT)"
               fi
               
               # Try to use PM2 - the daemon will start automatically on first command
-              echo "   Attempting to use PM2 (daemon will auto-start if needed)..."
+              if [ -n "$PM2_CMD" ]; then
+                echo "   Attempting to use PM2 (daemon will auto-start if needed)..."
               
               # Try to restart existing PM2 process
               echo "   Trying to restart existing PM2 process..."
@@ -1394,17 +1434,28 @@ jobs:
                 
                 # Fix relative imports to include .js extension using sed
                 echo "Fixing relative imports with sed..."
-                # Fix common import patterns with sed
-                find dist -name "*.js" -type f -exec sed -i "s|from './config/logger'|from './config/logger.js'|g" {} \;
-                find dist -name "*.js" -type f -exec sed -i "s|from '../config/logger'|from '../config/logger.js'|g" {} \;
-                find dist -name "*.js" -type f -exec sed -i 's|from "./config/logger"|from "./config/logger.js"|g' {} \;
-                find dist -name "*.js" -type f -exec sed -i 's|from "../config/logger"|from "../config/logger.js"|g' {} \;
-                # Fix other common relative imports (single quotes)
-                find dist -name "*.js" -type f -exec sed -i "s|from '\\.\\(/[^']*\\)'|from '\\.\\1.js'|g" {} \;
-                # Fix other common relative imports (double quotes)
-                find dist -name "*.js" -type f -exec sed -i 's|from "\\.\\(/[^"]*\\)"|from "\\.\\1.js"|g' {} \;
-                # Fix imports without quotes (less common but possible)
-                find dist -name "*.js" -type f -exec sed -i 's|from \\.\\(/[^;]*\\)|from \\.\\1.js|g' {} \;
+                # Use sed to add .js only if it doesn't already exist
+                # Pattern: match imports where path ends with quote (no .js extension)
+                # Single quotes - specific logger imports first (only if doesn't already have .js)
+                find dist -name "*.js" -type f -exec sed -i "s|from './config/logger'\\([^j]\\)|from './config/logger.js'\\1|g" {} \;
+                find dist -name "*.js" -type f -exec sed -i "s|from './config/logger'$|from './config/logger.js'|g" {} \;
+                find dist -name "*.js" -type f -exec sed -i "s|from '../config/logger'\\([^j]\\)|from '../config/logger.js'\\1|g" {} \;
+                find dist -name "*.js" -type f -exec sed -i "s|from '../config/logger'$|from '../config/logger.js'|g" {} \;
+                # Double quotes - specific logger imports (only if doesn't already have .js)
+                find dist -name "*.js" -type f -exec sed -i 's|from "./config/logger"\\([^j]\\)|from "./config/logger.js"\\1|g' {} \;
+                find dist -name "*.js" -type f -exec sed -i 's|from "./config/logger"$|from "./config/logger.js"|g' {} \;
+                find dist -name "*.js" -type f -exec sed -i 's|from "../config/logger"\\([^j]\\)|from "../config/logger.js"\\1|g' {} \;
+                find dist -name "*.js" -type f -exec sed -i 's|from "../config/logger"$|from "../config/logger.js"|g' {} \;
+                # General relative imports (./path or ../path) - only if doesn't end with .js or .json
+                # Match path that ends with quote (meaning no extension) and add .js before the quote
+                # Single quotes - match ./path' or ../path' but not ./path.js' or ./path.json'
+                find dist -name "*.js" -type f -exec sed -i "s|from '\\.\\(/[^']*\\)'\\([^.]\\)|from '\\.\\1.js'\\2|g" {} \;
+                find dist -name "*.js" -type f -exec sed -i "s|from '\\.\\(/[^']*\\)'$|from '\\.\\1.js'|g" {} \;
+                # Double quotes
+                find dist -name "*.js" -type f -exec sed -i 's|from "\\.\\(/[^"]*\\)"\\([^.]\\)|from "\\.\\1.js"\\2|g' {} \;
+                find dist -name "*.js" -type f -exec sed -i 's|from "\\.\\(/[^"]*\\)"$|from "\\.\\1.js"|g' {} \;
+                # Remove any double .js extensions that might have been created
+                find dist -name "*.js" -type f -exec sed -i 's|\.js\.js|\.js|g' {} \;
                 
                 echo "✅ Fixed imports to include .js extensions"
                 echo "📋 Updated logger import:"
