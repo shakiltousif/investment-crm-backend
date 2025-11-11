@@ -240,10 +240,91 @@ jobs:
           
           echo "PM2 cleanup completed. Socket files removed and all daemons killed."
           
+          # Final check right before starting PM2 - ensure no daemons are running and socket files don't exist
+          echo "Final pre-start verification..."
+          sleep 1
+          
+          # Check if socket files were recreated
+          if [ -f "$PM2_HOME_DIR/rpc.sock" ] || [ -f "$PM2_HOME_DIR/pub.sock" ]; then
+            echo "WARNING: Socket files recreated before PM2 start. Removing again..."
+            sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+            
+            # Kill any PM2 daemons that might have restarted
+            REMAINING_PIDS=$(ps aux | grep -i "PM2.*God Daemon" | grep -v grep | awk '{print $2}' | tr '\n' ' ')
+            if [ -n "$REMAINING_PIDS" ]; then
+              echo "Killing recreated PM2 daemons: $REMAINING_PIDS"
+              for pid in $REMAINING_PIDS; do
+                sudo kill -9 "$pid" 2>/dev/null || true
+              done
+              sleep 2
+              sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+            fi
+          fi
+          
+          # Verify no PM2 daemons are running
+          REMAINING_DAEMONS=$(ps aux | grep -i "PM2.*God Daemon" | grep -v grep | wc -l)
+          if [ "$REMAINING_DAEMONS" -gt 0 ]; then
+            echo "WARNING: $REMAINING_DAEMONS PM2 daemon(s) still running. Listing them:"
+            ps aux | grep -i "PM2.*God Daemon" | grep -v grep
+            echo "Attempting to kill them again with multiple methods..."
+            
+            # Try multiple kill methods
+            sudo pkill -9 -f "PM2.*God Daemon" 2>/dev/null || true
+            sudo pkill -9 -f "pm2.*daemon" 2>/dev/null || true
+            
+            # Kill by PID again
+            REMAINING_PIDS=$(ps aux | grep -i "PM2.*God Daemon" | grep -v grep | awk '{print $2}' | tr '\n' ' ')
+            if [ -n "$REMAINING_PIDS" ]; then
+              for pid in $REMAINING_PIDS; do
+                echo "Force killing PID $pid..."
+                sudo kill -9 "$pid" 2>/dev/null || true
+                # Try killall as well
+                sudo killall -9 -u root -r ".*pm2.*" 2>/dev/null || true
+              done
+            fi
+            
+            sleep 3
+            
+            # Check again
+            STILL_RUNNING=$(ps aux | grep -i "PM2.*God Daemon" | grep -v grep | wc -l)
+            if [ "$STILL_RUNNING" -gt 0 ]; then
+              echo "ERROR: Cannot kill PM2 daemons. They may be managed by systemd or another service."
+              echo "Remaining daemons:"
+              ps aux | grep -i "PM2.*God Daemon" | grep -v grep
+              echo "Attempting to continue anyway..."
+            fi
+          fi
+          
+          # Ensure socket files are definitely gone
+          if [ -f "$PM2_HOME_DIR/rpc.sock" ] || [ -f "$PM2_HOME_DIR/pub.sock" ]; then
+            echo "ERROR: Cannot proceed - socket files still exist and cannot be removed"
+            echo "This indicates a PM2 daemon is actively recreating them"
+            ls -la "$PM2_HOME_DIR"/*.sock 2>/dev/null || true
+            ps aux | grep -i pm2 | grep -v grep || true
+            exit 1
+          fi
+          
+          echo "Pre-start verification passed. Starting PM2..."
+          
+          # Remove socket files one final time right before starting (in case they were recreated)
+          sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+          
+          # Try to kill the PM2 daemon for this PM2_HOME one more time
+          PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 kill 2>/dev/null || true
+          sleep 1
+          
+          # Remove socket files again after pm2 kill
+          sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+          
           # Restart PM2 process
-          /opt/nodejs/bin/pm2 restart investment-crm-backend 2>&1 || {
+          # Use explicit PM2_HOME to ensure we're using the right daemon
+          # The daemon should be created as the current user since we've killed all daemons
+          echo "Starting PM2 with PM2_HOME=$PM2_HOME_DIR"
+          PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 restart investment-crm-backend 2>&1 || {
             echo "PM2 restart failed, trying to start instead..."
-            /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend 2>&1 || {
+            # Remove socket files one more time before start
+            sudo rm -f "$PM2_HOME_DIR/rpc.sock" "$PM2_HOME_DIR/pub.sock" 2>/dev/null || true
+            PM2_HOME="$PM2_HOME_DIR" /opt/nodejs/bin/pm2 start dist/index.js --name investment-crm-backend 2>&1 || {
               echo "PM2 start also failed"
               echo "Checking PM2 directory state:"
               ls -la "$PM2_HOME_DIR" 2>/dev/null || true
