@@ -970,25 +970,31 @@ jobs:
             
             # Generate Prisma client
             echo "📦 Generating Prisma client..."
-            # Use npx or direct path to prisma binary
-            if [ -f "./node_modules/.bin/prisma" ]; then
-              PRISMA_CMD="./node_modules/.bin/prisma"
-              echo "✅ Using local Prisma binary"
-            elif command -v npx &> /dev/null; then
-              PRISMA_CMD="npx prisma"
-              echo "✅ Using npx to run Prisma"
+            # We're already in $TIMESTAMP directory where node_modules should be
+            # Use the local Prisma binary directly
+            PRISMA_BIN=""
+            if [ -f "node_modules/.bin/prisma" ]; then
+              PRISMA_BIN="node_modules/.bin/prisma"
+              echo "✅ Found local Prisma binary"
+            elif [ -f "./node_modules/.bin/prisma" ]; then
+              PRISMA_BIN="./node_modules/.bin/prisma"
+              echo "✅ Found local Prisma binary (relative path)"
             else
-              PRISMA_CMD="$NPM_CMD exec -- prisma"
-              echo "✅ Using npm exec to run Prisma"
+              echo "⚠️  Prisma binary not found in node_modules/.bin/prisma"
+              echo "   Current directory: $(pwd)"
+              echo "   Listing node_modules/.bin:"
+              ls -la node_modules/.bin/ 2>/dev/null | head -10 || echo "   node_modules/.bin not found"
+              echo "   Trying npx as fallback..."
+              PRISMA_BIN="npx prisma"
             fi
             
             if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-              sudo $PRISMA_CMD generate || {
+              sudo $PRISMA_BIN generate || {
                 echo "❌ Error: Failed to generate Prisma client"
                 exit 1
               }
             else
-              $PRISMA_CMD generate || {
+              $PRISMA_BIN generate || {
                 echo "❌ Error: Failed to generate Prisma client"
                 exit 1
               }
@@ -997,12 +1003,12 @@ jobs:
             # Run database migrations
             echo "🔄 Running database migrations..."
             if [ "$USE_SUDO_FOR_NODE" = "1" ]; then
-              sudo $PRISMA_CMD migrate deploy || {
+              sudo $PRISMA_BIN migrate deploy || {
                 echo "❌ Error: Database migration failed"
                 exit 1
               }
             else
-              $PRISMA_CMD migrate deploy || {
+              $PRISMA_BIN migrate deploy || {
                 echo "❌ Error: Database migration failed"
                 exit 1
               }
@@ -1104,8 +1110,13 @@ jobs:
               
               # Generate Prisma client
               echo '📦 Generating Prisma client...'
-              # Use npx or direct path to prisma binary
-              if [ -f './node_modules/.bin/prisma' ]; then
+              # Use the local Prisma binary directly
+              if [ -f 'node_modules/.bin/prisma' ]; then
+                node_modules/.bin/prisma generate || {
+                  echo '❌ Error: Failed to generate Prisma client'
+                  exit 1
+                }
+              elif [ -f './node_modules/.bin/prisma' ]; then
                 ./node_modules/.bin/prisma generate || {
                   echo '❌ Error: Failed to generate Prisma client'
                   exit 1
@@ -1124,7 +1135,12 @@ jobs:
               
               # Run database migrations
               echo '🔄 Running database migrations...'
-              if [ -f './node_modules/.bin/prisma' ]; then
+              if [ -f 'node_modules/.bin/prisma' ]; then
+                node_modules/.bin/prisma migrate deploy || {
+                  echo '❌ Error: Database migration failed'
+                  exit 1
+                }
+              elif [ -f './node_modules/.bin/prisma' ]; then
                 ./node_modules/.bin/prisma migrate deploy || {
                   echo '❌ Error: Database migration failed'
                   exit 1
@@ -1135,7 +1151,7 @@ jobs:
                   exit 1
                 }
               else
-                ${NPM_CMD:-npm} exec -- prisma migrate deploy || {
+                ${NPM_CMD:-npm} run db:generate || {
                   echo '❌ Error: Database migration failed'
                   exit 1
                 }
