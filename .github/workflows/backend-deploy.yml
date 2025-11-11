@@ -140,15 +140,20 @@ jobs:
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')) ||
       (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     
+    env:
+      USE_SELF_HOSTED: ${{ vars.USE_SELF_HOSTED_RUNNER == 'true' }}
+      WORKSPACE_PATH: $WORKSPACE_PATH
+      DEPLOY_PATH: ${{ secrets.BACKEND_DEPLOY_PATH || '/var/www/investment-crm/backend' }}
+    
     steps:
       - name: Setup SSH (for GitHub-hosted runners only)
-        if: vars.USE_SELF_HOSTED_RUNNER != 'true'
+        if: env.USE_SELF_HOSTED != 'true'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add server to known hosts (for GitHub-hosted runners only)
-        if: vars.USE_SELF_HOSTED_RUNNER != 'true'
+        if: env.USE_SELF_HOSTED != 'true'
         run: |
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
@@ -157,7 +162,7 @@ jobs:
           echo "🔍 Validating server prerequisites..."
           
           # For self-hosted runners, we're already on the server
-          if [ "${{ vars.USE_SELF_HOSTED_RUNNER }}" = "true" ]; then
+          if [ "$USE_SELF_HOSTED" = "true" ]; then
             echo "✅ Running on self-hosted runner - no SSH needed"
             
             # Source common profile files to ensure PATH is set correctly
@@ -502,7 +507,7 @@ jobs:
             
             # Check deployment directory
             echo "📁 Checking deployment directory..."
-            DEPLOY_PATH="${{ secrets.BACKEND_DEPLOY_PATH || '/var/www/investment-crm/backend' }}"
+            DEPLOY_PATH="$DEPLOY_PATH"
             if [ ! -d "$DEPLOY_PATH" ]; then
               echo "Creating deployment directory..."
               mkdir -p "$DEPLOY_PATH/releases"
@@ -555,9 +560,9 @@ jobs:
                 DOCKER_COMPOSE_DIR=""
                 
                 # Check in workspace first (for self-hosted runners)
-                if [ -f "${{ github.workspace }}/backend/docker-compose.yml" ]; then
-                  DOCKER_COMPOSE_FILE="${{ github.workspace }}/backend/docker-compose.yml"
-                  DOCKER_COMPOSE_DIR="${{ github.workspace }}/backend"
+                if [ -f "$WORKSPACE_PATH/backend/docker-compose.yml" ]; then
+                  DOCKER_COMPOSE_FILE="$WORKSPACE_PATH/backend/docker-compose.yml"
+                  DOCKER_COMPOSE_DIR="$WORKSPACE_PATH/backend"
                 # Check in current deployment
                 elif [ -f "$DEPLOY_PATH/current/docker-compose.yml" ]; then
                   DOCKER_COMPOSE_FILE="$DEPLOY_PATH/current/docker-compose.yml"
@@ -578,7 +583,7 @@ jobs:
                 if [ -z "$DOCKER_COMPOSE_FILE" ]; then
                   echo "⚠️  docker-compose.yml not found, skipping Docker service setup"
                   echo "   Searched in:"
-                  echo "   - ${{ github.workspace }}/backend/docker-compose.yml"
+                  echo "   - $WORKSPACE_PATH/backend/docker-compose.yml"
                   echo "   - $DEPLOY_PATH/current/docker-compose.yml"
                   echo "   - $DEPLOY_PATH/docker-compose.yml"
                 fi
@@ -845,6 +850,11 @@ jobs:
       (github.event_name == 'workflow_dispatch' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'))
     environment:
       name: production
+    
+    env:
+      USE_SELF_HOSTED: ${{ vars.USE_SELF_HOSTED_RUNNER == 'true' }}
+      WORKSPACE_PATH: ${{ github.workspace }}
+      DEPLOY_PATH: ${{ secrets.BACKEND_DEPLOY_PATH || '/var/www/investment-crm/backend' }}
 
     steps:
       - name: Checkout code
@@ -857,13 +867,13 @@ jobs:
           path: .
 
       - name: Setup SSH (for GitHub-hosted runners only)
-        if: vars.USE_SELF_HOSTED_RUNNER != 'true'
+        if: env.USE_SELF_HOSTED != 'true'
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add server to known hosts (for GitHub-hosted runners only)
-        if: vars.USE_SELF_HOSTED_RUNNER != 'true'
+        if: env.USE_SELF_HOSTED != 'true'
         run: |
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
 
@@ -930,10 +940,10 @@ jobs:
 
       - name: Deploy to server
         run: |
-          # Set deployment path
-          DEPLOY_PATH="${{ secrets.BACKEND_DEPLOY_PATH || '/var/www/investment-crm/backend' }}"
+          # Set deployment path (already set in env)
+          DEPLOY_PATH="${DEPLOY_PATH:-/var/www/investment-crm/backend}"
           
-          if [ "${{ vars.USE_SELF_HOSTED_RUNNER }}" = "true" ]; then
+          if [ "$USE_SELF_HOSTED" = "true" ]; then
             # Self-hosted runner: deploy directly
             echo "🚀 Deploying on self-hosted runner..."
             
@@ -976,10 +986,10 @@ jobs:
             mv backend-deploy.tar.gz "$DEPLOY_PATH/releases/"
             
             # Copy docker-compose.yml to deployment directory for easy access
-            if [ -f "${{ github.workspace }}/backend/docker-compose.yml" ]; then
+            if [ -f "$WORKSPACE_PATH/backend/docker-compose.yml" ]; then
               echo "📋 Copying docker-compose.yml to deployment directory..."
               mkdir -p "$DEPLOY_PATH"
-              cp "${{ github.workspace }}/backend/docker-compose.yml" "$DEPLOY_PATH/docker-compose.yml" || echo "⚠️  Failed to copy docker-compose.yml (non-critical)"
+              cp "$WORKSPACE_PATH/backend/docker-compose.yml" "$DEPLOY_PATH/docker-compose.yml" || echo "⚠️  Failed to copy docker-compose.yml (non-critical)"
             fi
             
             # Extract and deploy
@@ -998,9 +1008,9 @@ jobs:
             fi
             
             # Create .env file from secret or use shared .env
-            if [ -f "${{ github.workspace }}/backend-env.txt" ]; then
-              cp "${{ github.workspace }}/backend-env.txt" .env
-              rm "${{ github.workspace }}/backend-env.txt"
+            if [ -f "$WORKSPACE_PATH/backend-env.txt" ]; then
+              cp "$WORKSPACE_PATH/backend-env.txt" .env
+              rm "$WORKSPACE_PATH/backend-env.txt"
               echo "✅ Created .env file from BACKEND_ENV_FILE secret"
             elif [ -f "$DEPLOY_PATH/shared/.env" ]; then
               cp "$DEPLOY_PATH/shared/.env" .env
