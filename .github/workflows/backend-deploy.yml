@@ -19,33 +19,8 @@ jobs:
         node-version: [22.x]
 
     steps:
-      - name: Pre-checkout cleanup (handle permission issues)
-        env:
-          RUNNER_ALLOW_RUNASROOT: 1
-        run: |
-          echo "Pre-checkout cleanup to handle permission issues..."
-          # Based on the error, the workspace is typically in _work directory
-          # Try to find and clean logs directories in common locations
-          REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          
-          # Common workspace patterns for self-hosted runners
-          # Based on error path: /home/signin-fil-investments-api/htdocs/api.signin-fil-investments.com/actions-runner/_work
-          for base_dir in "/home/signin-fil-investments-api/htdocs/api.signin-fil-investments.com/actions-runner/_work" "$HOME/actions-runner/_work" "/opt/actions-runner/_work" "$PWD"; do
-            if [ -d "$base_dir" ]; then
-              # Look for the repository directory (try both repo name variations)
-              for repo_dir in "$base_dir/$REPO_NAME" "$base_dir/investment-crm-backend" "$base_dir"/*/"$REPO_NAME" "$base_dir"/*/investment-crm-backend; do
-                if [ -d "$repo_dir/logs" ]; then
-                  echo "Found logs directory at $repo_dir/logs, cleaning..."
-                  chmod -R u+w "$repo_dir/logs" 2>/dev/null || true
-                  rm -rf "$repo_dir/logs"/* 2>/dev/null || true
-                  find "$repo_dir/logs" -type f -delete 2>/dev/null || true
-                fi
-              done
-            fi
-          done
-          echo "Pre-checkout cleanup completed"
-
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Clean repository workspace
         env:
