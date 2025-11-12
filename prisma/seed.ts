@@ -2,9 +2,15 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { Decimal } from '@prisma/client/runtime/library';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Load environment variables
-dotenv.config();
+// Get the directory of the current module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from the backend root directory
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const prisma = new PrismaClient();
 
