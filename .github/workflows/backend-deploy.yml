@@ -91,17 +91,14 @@ jobs:
           fi
 
       - name: Install dependencies
-        working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: yarn install
 
       - name: write environment variables to .env
-        working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           touch .env
           echo "${{ secrets.BACKEND_ENV_FILE }}" >> .env
 
       - name: Check and start Docker Compose services (PostgreSQL and Redis)
-        working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           # Check if postgres container is running
           if ! docker ps --format '{{.Names}}' | grep -q '^investment_crm_db$'; then
@@ -124,20 +121,10 @@ jobs:
           fi
 
       - name: Restart PM2 process
-        working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           # Use runner user's HOME to avoid /root permission issues
           export HOME=/root
-          # Redirect Yarn config/cache to writable locations
-          export XDG_CONFIG_HOME="${{ secrets.BACKEND_DEPLOY_PATH }}/.config"
-          export YARN_CACHE_FOLDER="${{ secrets.BACKEND_DEPLOY_PATH }}/.yarn-cache"
-          mkdir -p "$XDG_CONFIG_HOME/yarn" "$YARN_CACHE_FOLDER"
-          # Use a short, writable PM2 home to avoid socket path length and permission issues
-          export PM2_HOME="/tmp/pm2-$(whoami)"
-          mkdir -p "$PM2_HOME"
-          # Clean any stale PM2 socket files
-          rm -f "$PM2_HOME"/*.sock 2>/dev/null || true
-          
+
           # Build the application first if dist doesn't exist
           if [ ! -d "dist" ]; then
             echo "Building application..."
@@ -145,8 +132,8 @@ jobs:
           fi
           
           # Ensure PM2 is on PATH and select executable
-          export PATH="/opt/nodejs/bin:$PATH"
           PM2_BIN="/opt/nodejs/bin/pm2"
+
           if ! command -v "$PM2_BIN" >/dev/null 2>&1; then
             PM2_BIN="$(command -v pm2 || true)"
           fi
@@ -173,7 +160,6 @@ jobs:
           fi
 
       - name: Check PM2 logs
-        working-directory: ${{ secrets.BACKEND_DEPLOY_PATH }}
         run: |
           export PATH="/opt/nodejs/bin:$PATH"
           export PM2_HOME="/tmp/pm2-$(whoami)"
