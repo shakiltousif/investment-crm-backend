@@ -34,12 +34,32 @@ import reportRoutes from './routes/report.routes.js';
 // Load environment variables
 dotenv.config();
 
+// Configure CORS origins
+// Support comma-separated list of origins or single origin
+const getCorsOrigins = (): string | string[] => {
+  const corsOrigin = process.env.CORS_ORIGIN || process.env.FRONTEND_URL;
+  
+  if (!corsOrigin) {
+    return 'http://localhost:3000';
+  }
+  
+  // If comma-separated, return array; otherwise return single string
+  if (corsOrigin.includes(',')) {
+    return corsOrigin.split(',').map(origin => origin.trim());
+  }
+  
+  return corsOrigin;
+};
+
+const corsOrigins = getCorsOrigins();
+
 const app: Express = express();
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: process.env.SOCKET_IO_CORS_ORIGIN ?? 'http://localhost:3000',
+    origin: corsOrigins,
     methods: ['GET', 'POST'],
+    credentials: true,
   },
 });
 
@@ -50,7 +70,7 @@ const NODE_ENV = process.env.NODE_ENV ?? 'development';
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
+    origin: corsOrigins,
     credentials: true,
   })
 );
