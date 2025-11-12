@@ -56,6 +56,9 @@ const getAllowedOrigins = (): string[] => {
 
 const allowedOrigins = getAllowedOrigins();
 
+// Log CORS configuration on startup
+logger.info(`CORS allowed origins: ${JSON.stringify(allowedOrigins)}`);
+
 // CORS origin function that properly handles multiple origins
 const corsOriginFunction = (
   origin: string | undefined,
