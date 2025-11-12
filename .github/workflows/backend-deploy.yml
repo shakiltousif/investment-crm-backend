@@ -19,8 +19,26 @@ jobs:
         node-version: [22.x]
 
     steps:
+      - name: Fix workspace permissions
+        env:
+          RUNNER_ALLOW_RUNASROOT: 1
+        run: |
+          echo "Fixing permissions on workspace directory..."
+          WORKSPACE_DIR="${{ github.workspace }}"
+          if [ -d "$WORKSPACE_DIR" ]; then
+            # Fix permissions on the entire workspace directory
+            chmod -R u+w "$WORKSPACE_DIR" 2>/dev/null || true
+            # Specifically fix .github directory if it exists
+            if [ -d "$WORKSPACE_DIR/.github" ]; then
+              chmod -R u+w "$WORKSPACE_DIR/.github" 2>/dev/null || true
+            fi
+            echo "Permissions fixed (or attempted)"
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          clean: true
 
       - name: Clean repository workspace
         env:
