@@ -19,26 +19,49 @@ jobs:
         node-version: [22.x]
 
     steps:
-      - name: Fix workspace permissions
+      - name: Fix workspace permissions (pre-checkout)
         env:
           RUNNER_ALLOW_RUNASROOT: 1
         run: |
-          echo "Fixing permissions on workspace directory..."
-          WORKSPACE_DIR="${{ github.workspace }}"
-          if [ -d "$WORKSPACE_DIR" ]; then
-            # Fix permissions on the entire workspace directory
-            chmod -R u+w "$WORKSPACE_DIR" 2>/dev/null || true
-            # Specifically fix .github directory if it exists
-            if [ -d "$WORKSPACE_DIR/.github" ]; then
-              chmod -R u+w "$WORKSPACE_DIR/.github" 2>/dev/null || true
+          echo "Fixing permissions on workspace directory before checkout..."
+          # Try to find the workspace directory in common locations
+          # Based on the error path structure
+          BASE_DIR="/home/signin-fil-investments-api/htdocs/api.signin-fil-investments.com/actions-runner/_work"
+          REPO_NAME="investment-crm-backend"
+          
+          # Try the expected workspace path
+          WORKSPACE_PATH="$BASE_DIR/$REPO_NAME/$REPO_NAME"
+          
+          # Also try alternative patterns
+          for path in "$WORKSPACE_PATH" "$BASE_DIR/$REPO_NAME" "$PWD"; do
+            if [ -d "$path" ]; then
+              echo "Found workspace at: $path"
+              echo "Fixing permissions recursively..."
+              # Fix permissions recursively, ignoring errors
+              chmod -R u+w "$path" 2>/dev/null || true
+              # Specifically ensure .github directory is writable
+              if [ -d "$path/.github" ]; then
+                echo "Fixing .github directory permissions..."
+                chmod -R u+w "$path/.github" 2>/dev/null || true
+                if [ -d "$path/.github/workflows" ]; then
+                  chmod -R u+w "$path/.github/workflows" 2>/dev/null || true
+                fi
+              fi
+              echo "Permissions fixed on: $path"
+              break
             fi
-            echo "Permissions fixed (or attempted)"
+          done
+          
+          # Also try to fix parent directories that might have permission issues
+          if [ -d "$BASE_DIR/$REPO_NAME" ]; then
+            chmod -R u+w "$BASE_DIR/$REPO_NAME" 2>/dev/null || true
           fi
 
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           clean: true
+          persist-credentials: false
 
       - name: Clean repository workspace
         env:
