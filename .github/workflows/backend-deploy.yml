@@ -46,13 +46,6 @@ jobs:
           echo "Pre-checkout cleanup completed"
 
       - uses: actions/checkout@v4
-        env:
-          RUNNER_ALLOW_RUNASROOT: 1
-        continue-on-error: true
-        with:
-          clean: false
-          fetch-depth: 0
-          lfs: false
 
       - name: Clean repository workspace
         env:
