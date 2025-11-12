@@ -68,7 +68,8 @@ const corsOriginFunction = (
 
   // Check if the origin is in the allowed list
   if (allowedOrigins.includes(origin)) {
-    return callback(null, true);
+    // Return the origin string so the header is set correctly
+    return callback(null, origin);
   }
 
   // Reject the request
