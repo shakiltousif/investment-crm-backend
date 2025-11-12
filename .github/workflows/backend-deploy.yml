@@ -120,47 +120,47 @@ jobs:
             echo "Redis container is already running."
           fi
 
-      - name: Restart PM2 process
-        run: |
-          # Use runner user's HOME to avoid /root permission issues
-          export HOME=/root
+      # - name: Restart PM2 process
+      #   run: |
+      #     # Use runner user's HOME to avoid /root permission issues
+      #     export HOME=/root
 
-          # Build the application first if dist doesn't exist
-          if [ ! -d "dist" ]; then
-            echo "Building application..."
-            yarn build
-          fi
+      #     # Build the application first if dist doesn't exist
+      #     if [ ! -d "dist" ]; then
+      #       echo "Building application..."
+      #       yarn build
+      #     fi
           
-          # Ensure PM2 is on PATH and select executable
-          PM2_BIN="/opt/nodejs/bin/pm2"
+      #     # Ensure PM2 is on PATH and select executable
+      #     PM2_BIN="/opt/nodejs/bin/pm2"
 
-          if ! command -v "$PM2_BIN" >/dev/null 2>&1; then
-            PM2_BIN="$(command -v pm2 || true)"
-          fi
-          echo "Using PM2 at: ${PM2_BIN:-pm2-not-found}"
+      #     if ! command -v "$PM2_BIN" >/dev/null 2>&1; then
+      #       PM2_BIN="$(command -v pm2 || true)"
+      #     fi
+      #     echo "Using PM2 at: ${PM2_BIN:-pm2-not-found}"
           
-          RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" restart investment-crm-backend
+      #     RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" restart investment-crm-backend
           
-          # Wait up to 10s for process to become online
-          for i in $(seq 1 10); do
-            if RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" list 2>&1 | grep -q "investment-crm-backend.*online"; then
-              break
-            fi
-            sleep 1
-          done
+      #     # Wait up to 10s for process to become online
+      #     for i in $(seq 1 10); do
+      #       if RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" list 2>&1 | grep -q "investment-crm-backend.*online"; then
+      #         break
+      #       fi
+      #       sleep 1
+      #     done
           
-          # Verify the process is actually running
-          if RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" list 2>&1 | grep -q "investment-crm-backend.*online"; then
-            echo "✅ PM2 process is running successfully"
-            RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" describe investment-crm-backend
-          else
-            echo "⚠️  PM2 process may not be running correctly"
-            RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" list
-            RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" logs investment-crm-backend --lines 20 --nostream
-          fi
+      #     # Verify the process is actually running
+      #     if RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" list 2>&1 | grep -q "investment-crm-backend.*online"; then
+      #       echo "✅ PM2 process is running successfully"
+      #       RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" describe investment-crm-backend
+      #     else
+      #       echo "⚠️  PM2 process may not be running correctly"
+      #       RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" list
+      #       RUNNER_ALLOW_RUNASROOT=1 "$PM2_BIN" logs investment-crm-backend --lines 20 --nostream
+      #     fi
 
-      - name: Check PM2 logs
-        run: |
-          export PATH="/opt/nodejs/bin:$PATH"
-          export PM2_HOME="/tmp/pm2-$(whoami)"
-          /opt/nodejs/bin/pm2 logs investment-crm-backend --nostream --lines 50
+      # - name: Check PM2 logs
+      #   run: |
+      #     export PATH="/opt/nodejs/bin:$PATH"
+      #     export PM2_HOME="/tmp/pm2-$(whoami)"
+      #     /opt/nodejs/bin/pm2 logs investment-crm-backend --nostream --lines 50

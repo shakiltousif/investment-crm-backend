@@ -36,28 +36,50 @@ dotenv.config();
 
 // Configure CORS origins
 // Support comma-separated list of origins or single origin
-const getCorsOrigins = (): string | string[] => {
-  const corsOrigin = process.env.CORS_ORIGIN || process.env.FRONTEND_URL;
-  
+const getAllowedOrigins = (): string[] => {
+  const corsOrigin = process.env.CORS_ORIGIN ?? process.env.FRONTEND_URL;
+
   if (!corsOrigin) {
-    return 'http://localhost:3000';
+    return ['http://localhost:3000'];
   }
-  
-  // If comma-separated, return array; otherwise return single string
+
+  // If comma-separated, split into array; otherwise return single item array
   if (corsOrigin.includes(',')) {
-    return corsOrigin.split(',').map(origin => origin.trim());
+    return corsOrigin
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
   }
-  
-  return corsOrigin;
+
+  return [corsOrigin.trim()];
 };
 
-const corsOrigins = getCorsOrigins();
+const allowedOrigins = getAllowedOrigins();
+
+// CORS origin function that properly handles multiple origins
+const corsOriginFunction = (
+  origin: string | undefined,
+  callback: (err: Error | null, origin?: string | boolean) => void
+): void => {
+  // Allow requests with no origin (like mobile apps or curl requests)
+  if (!origin) {
+    return callback(null, true);
+  }
+
+  // Check if the origin is in the allowed list
+  if (allowedOrigins.includes(origin)) {
+    return callback(null, true);
+  }
+
+  // Reject the request
+  callback(new Error('Not allowed by CORS'));
+};
 
 const app: Express = express();
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: corsOrigins,
+    origin: corsOriginFunction,
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -70,7 +92,7 @@ const NODE_ENV = process.env.NODE_ENV ?? 'development';
 app.use(helmet());
 app.use(
   cors({
-    origin: corsOrigins,
+    origin: corsOriginFunction,
     credentials: true,
   })
 );
