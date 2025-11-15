@@ -59,6 +59,12 @@ model User {
   documents             Document[]
   statements            Statement[]
   investmentApplications InvestmentApplication[]
+  emailNotificationSettings EmailNotificationSettings?
+  inAppNotificationSettings InAppNotificationSettings?
+  notifications         Notification[]
+  problemReports        ProblemReport[]           @relation("UserReports")
+  resolvedProblemReports ProblemReport[]          @relation("ResolvedBy")
+  problemReportResponses ProblemReportResponse[]
   
   @@index([email])
   @@index([kycStatus])
@@ -219,10 +225,7 @@ enum InvestmentType {
   FIXED_RATE_DEPOSIT
   HIGH_INTEREST_SAVINGS
   IPO
-  PRIVATE_EQUITY
   MUTUAL_FUND
-  ETF
-  CRYPTOCURRENCY
   OTHER
 }
 
@@ -266,6 +269,13 @@ enum DocumentType {
   TAX_DOCUMENT
   AGREEMENT
   OTHER
+}
+
+enum DocumentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
 }
 
 model MarketplaceItem {
@@ -353,6 +363,7 @@ model Document {
   fileSize          Int             // Size in bytes
   mimeType          String
   description       String?
+  status            DocumentStatus  @default(PENDING)
   
   uploadedBy        String          // User ID who uploaded
   isImportant       Boolean         @default(false) // Admin-uploaded important docs
@@ -362,6 +373,7 @@ model Document {
   
   @@index([userId])
   @@index([type])
+  @@index([status])
 }
 
 // Statement model for admin-uploaded statements
@@ -400,5 +412,237 @@ model SupportSettings {
   updatedAt         DateTime        @updatedAt
   
   @@map("support_settings")
+}
+
+// Email Notification Settings model
+model EmailNotificationSettings {
+  id                String          @id @default(cuid())
+  userId            String?         // null for global settings, userId for user-specific
+  user              User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Notification type flags
+  accountCreated    Boolean         @default(true)
+  accountLocked     Boolean         @default(true)
+  accountUnlocked   Boolean         @default(true)
+  kycStatusChange   Boolean         @default(true)
+  documentStatusChange Boolean      @default(true)
+  documentUploaded  Boolean         @default(true)
+  depositSubmitted  Boolean         @default(true)
+  depositStatusChange Boolean       @default(true)
+  withdrawalSubmitted Boolean       @default(true)
+  withdrawalStatusChange Boolean    @default(true)
+  investmentApplicationSubmitted Boolean @default(true)
+  investmentApplicationStatusChange Boolean @default(true)
+  investmentPurchase Boolean        @default(true)
+  investmentMatured Boolean         @default(true)
+  balanceAdjustment Boolean         @default(true)
+  adminNotifications Boolean        @default(true)  // For admins only
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@unique([userId])
+  @@index([userId])
+  @@map("email_notification_settings")
+}
+
+// Notification Types enum
+enum NotificationType {
+  ACCOUNT_CREATED
+  ACCOUNT_LOCKED
+  ACCOUNT_UNLOCKED
+  KYC_STATUS_CHANGE
+  DOCUMENT_STATUS_CHANGE
+  DOCUMENT_UPLOADED
+  DEPOSIT_SUBMITTED
+  DEPOSIT_STATUS_CHANGE
+  WITHDRAWAL_SUBMITTED
+  WITHDRAWAL_STATUS_CHANGE
+  INVESTMENT_APPLICATION_SUBMITTED
+  INVESTMENT_APPLICATION_STATUS_CHANGE
+  INVESTMENT_PURCHASE
+  INVESTMENT_MATURED
+  BALANCE_ADJUSTMENT
+  ADMIN_NOTIFICATION
+  PROBLEM_REPORT_SUBMITTED
+  PROBLEM_REPORT_RESPONSE
+  PROBLEM_REPORT_STATUS_CHANGE
+}
+
+// SMTP Configuration model (single record for system-wide SMTP settings)
+model SMTPConfiguration {
+  id                String          @id @default(cuid())
+  host              String          // SMTP host (e.g., smtp.hostinger.com)
+  port              Int             // SMTP port (e.g., 465, 587)
+  secure            Boolean         @default(true) // true for SSL/TLS (port 465), false for STARTTLS (port 587)
+  user              String          // SMTP username/email
+  password          String          // SMTP password (encrypted)
+  from              String?         // From email address (defaults to user if not set)
+  isActive          Boolean         @default(true)
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@map("smtp_configuration")
+}
+
+// Notification model
+model Notification {
+  id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              NotificationType
+  title             String
+  message           String
+  data              Json?           // Store related entity IDs and metadata
+  actionUrl          String?         // Optional navigation path
+  isRead            Boolean         @default(false)
+  readAt            DateTime?
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@index([userId])
+  @@index([isRead])
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// In-App Notification Settings model
+model InAppNotificationSettings {
+  id                String          @id @default(cuid())
+  userId            String?         // null for global settings, userId for user-specific
+  user              User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Notification type flags
+  accountCreated    Boolean         @default(true)
+  accountLocked     Boolean         @default(true)
+  accountUnlocked   Boolean         @default(true)
+  kycStatusChange   Boolean         @default(true)
+  documentStatusChange Boolean      @default(true)
+  documentUploaded  Boolean         @default(true)
+  depositSubmitted  Boolean         @default(true)
+  depositStatusChange Boolean       @default(true)
+  withdrawalSubmitted Boolean       @default(true)
+  withdrawalStatusChange Boolean    @default(true)
+  investmentApplicationSubmitted Boolean @default(true)
+  investmentApplicationStatusChange Boolean @default(true)
+  investmentPurchase Boolean        @default(true)
+  investmentMatured Boolean         @default(true)
+  balanceAdjustment Boolean         @default(true)
+  adminNotifications Boolean        @default(true)  // For admins only
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  @@unique([userId])
+  @@index([userId])
+  @@map("in_app_notification_settings")
+}
+
+// Problem Report Enums
+enum ProblemReportStatus {
+  OPEN
+  RESOLVED
+}
+
+enum ProblemPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ProblemCategory {
+  TECHNICAL
+  ACCOUNT
+  TRANSACTION
+  INVESTMENT
+  DOCUMENT
+  OTHER
+}
+
+// Problem Report model
+model ProblemReport {
+  id                String              @id @default(cuid())
+  userId            String
+  user              User                @relation("UserReports", fields: [userId], references: [id], onDelete: Cascade)
+  
+  subject           String
+  description       String
+  category          ProblemCategory
+  priority          ProblemPriority     @default(MEDIUM)
+  status            ProblemReportStatus @default(OPEN)
+  
+  attachments       ProblemReportAttachment[]
+  responses         ProblemReportResponse[]
+  
+  resolvedAt        DateTime?
+  resolvedBy        String?             // Admin user ID
+  resolvedByUser    User?               @relation("ResolvedBy", fields: [resolvedBy], references: [id])
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  
+  @@index([userId])
+  @@index([status])
+  @@index([category])
+  @@index([priority])
+  @@map("problem_reports")
+}
+
+// Problem Report Attachment model
+model ProblemReportAttachment {
+  id                String          @id @default(cuid())
+  problemReportId  String
+  problemReport    ProblemReport    @relation(fields: [problemReportId], references: [id], onDelete: Cascade)
+  
+  fileName          String
+  fileUrl           String
+  fileSize          Int
+  mimeType          String
+  
+  createdAt         DateTime        @default(now())
+  
+  @@index([problemReportId])
+  @@map("problem_report_attachments")
+}
+
+// Problem Report Response model
+model ProblemReportResponse {
+  id                String          @id @default(cuid())
+  problemReportId  String
+  problemReport    ProblemReport    @relation(fields: [problemReportId], references: [id], onDelete: Cascade)
+  
+  userId            String          // User ID who responded (admin or user)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isAdminResponse   Boolean         @default(false)
+  
+  message           String
+  attachments       ProblemReportResponseAttachment[]
+  
+  createdAt         DateTime        @default(now())
+  
+  @@index([problemReportId])
+  @@index([userId])
+  @@map("problem_report_responses")
+}
+
+// Problem Report Response Attachment model
+model ProblemReportResponseAttachment {
+  id                String                @id @default(cuid())
+  responseId        String
+  response          ProblemReportResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  
+  fileName          String
+  fileUrl           String
+  fileSize          Int
+  mimeType          String
+  
+  createdAt         DateTime        @default(now())
+  
+  @@index([responseId])
+  @@map("problem_report_response_attachments")
 }
 

@@ -155,7 +155,7 @@ async function main() {
     },
     {
       name: 'Gold ETF (GLD)',
-      type: 'ETF' as const,
+      type: 'OTHER' as const,
       symbol: 'GLD',
       description: 'SPDR Gold Trust ETF tracking gold prices',
       currentPrice: new Decimal(185.75),
@@ -194,6 +194,54 @@ async function main() {
 
   // Created marketplace items - using console.warn for consistency
   console.warn('Created marketplace items');
+
+  // Create basic support settings
+  const supportSettings = [
+    {
+      key: 'phone',
+      value: '+44 20 1234 5678',
+      label: 'Support Phone',
+      displayOrder: 0,
+      isActive: true,
+    },
+    {
+      key: 'email',
+      value: 'support@fil-limited.com',
+      label: 'Support Email',
+      displayOrder: 1,
+      isActive: true,
+    },
+    {
+      key: 'address',
+      value: '123 Investment Street, London, UK, SW1A 1AA',
+      label: 'Office Address',
+      displayOrder: 2,
+      isActive: true,
+    },
+    {
+      key: 'hours',
+      value: 'Monday - Friday: 9:00 AM - 5:00 PM GMT',
+      label: 'Business Hours',
+      displayOrder: 3,
+      isActive: true,
+    },
+    {
+      key: 'website',
+      value: 'https://www.fil-limited.com',
+      label: 'Website',
+      displayOrder: 4,
+      isActive: true,
+    },
+  ];
+
+  // Clear existing support settings and create new ones
+  await prisma.supportSettings.deleteMany({});
+  await prisma.supportSettings.createMany({
+    data: supportSettings,
+  });
+
+  // Created support settings - using console.warn for consistency
+  console.warn('Created support settings');
 
   // Database seed completed successfully - using console.warn for consistency
   console.warn('Database seed completed successfully!');

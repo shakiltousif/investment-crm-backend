@@ -1,11 +1,21 @@
 import { Router, Response, NextFunction } from 'express';
+import multer from 'multer';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { PrismaClient } from '@prisma/client';
 import { updateProfileSchema } from '../lib/validators.js';
 import { ValidationError, NotFoundError } from '../middleware/errorHandler.js';
+import { documentService } from '../services/document.service.js';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB for profile pictures
+  },
+});
 
 // Get current user profile
 router.get(
@@ -47,6 +57,67 @@ router.get(
 
       res.status(200).json({
         message: 'User profile retrieved successfully',
+        data: user,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// Upload profile picture
+router.post(
+  '/profile/picture',
+  authenticate,
+  upload.single('picture'),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.userId) {
+        throw new Error('User ID not found');
+      }
+
+      if (!req.file) {
+        throw new ValidationError('No file uploaded');
+      }
+
+      const profilePictureUrl = await documentService.uploadProfilePicture(req.userId, {
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        fileBuffer: req.file.buffer,
+      });
+
+      // Update user profile with new picture URL
+      const user = await prisma.user.update({
+        where: { id: req.userId },
+        data: { profilePicture: profilePictureUrl },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          phoneNumber: true,
+          profilePicture: true,
+          dateOfBirth: true,
+          address: true,
+          city: true,
+          state: true,
+          zipCode: true,
+          country: true,
+          role: true,
+          kycStatus: true,
+          kycVerifiedAt: true,
+          isEmailVerified: true,
+          emailVerifiedAt: true,
+          isActive: true,
+          lastLoginAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      res.status(200).json({
+        message: 'Profile picture uploaded successfully',
         data: user,
       });
     } catch (error) {

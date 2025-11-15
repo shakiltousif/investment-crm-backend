@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import path from 'path';
+import jwt from 'jsonwebtoken';
 
 import { logger } from './config/logger.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -30,6 +31,11 @@ import documentRoutes from './routes/document.routes.js';
 import supportRoutes from './routes/support.routes.js';
 import investmentProductRoutes from './routes/investmentProduct.routes.js';
 import reportRoutes from './routes/report.routes.js';
+import emailSettingsRoutes from './routes/emailSettings.routes.js';
+import notificationRoutes from './routes/notification.routes.js';
+import notificationSettingsRoutes from './routes/notificationSettings.routes.js';
+import problemReportRoutes from './routes/problemReport.routes.js';
+import smtpConfigRoutes from './routes/smtpConfig.routes.js';
 
 // Load environment variables
 dotenv.config();
@@ -140,6 +146,11 @@ app.use('/api/documents', documentRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/investment-products', investmentProductRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/email-settings', emailSettingsRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/notification-settings', notificationSettingsRoutes);
+app.use('/api/smtp-config', smtpConfigRoutes);
+app.use('/api/problem-reports', problemReportRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
@@ -152,21 +163,64 @@ app.use((_req: Request, res: Response) => {
 // Error handling middleware
 app.use(errorHandler);
 
-// Socket.io connection handling
+// Socket.io connection handling with authentication
+io.use((socket, next) => {
+  const token =
+    socket.handshake.auth.token ?? socket.handshake.headers.authorization?.replace('Bearer ', '');
+
+  if (!token) {
+    return next(new Error('Authentication token required'));
+  }
+
+  const secret = process.env.JWT_SECRET;
+
+  if (!secret) {
+    return next(new Error('JWT_SECRET is not defined'));
+  }
+
+  try {
+    const decoded = jwt.verify(token, secret) as { userId: string; email: string };
+    socket.data.userId = decoded.userId;
+    socket.data.email = decoded.email;
+    next();
+  } catch {
+    next(new Error('Invalid token'));
+  }
+});
+
 io.on('connection', (socket) => {
-  logger.info(`Client connected: ${socket.id}`);
+  const userId = socket.data.userId;
+  logger.info(`Client connected: ${socket.id} (User: ${userId})`);
+
+  // Join user's personal room for targeted notifications
+  if (userId) {
+    void socket.join(`user:${userId}`);
+    logger.info(`User ${userId} joined room: user:${userId}`);
+  }
 
   socket.on('disconnect', () => {
-    logger.info(`Client disconnected: ${socket.id}`);
+    logger.info(`Client disconnected: ${socket.id} (User: ${userId})`);
   });
 });
 
 // Start server (skip in test environment)
 if (NODE_ENV !== 'test' && !process.env.VITEST) {
-  httpServer.listen(PORT, () => {
-    logger.info(`Server running on port ${PORT} in ${NODE_ENV} mode`);
-    logger.info(`API URL: ${process.env.API_URL ?? `http://localhost:${PORT}`}`);
-  });
+  // Perform health checks before starting the server
+  void (async (): Promise<void> => {
+    try {
+      const { performHealthChecks } = await import('./lib/healthCheck.js');
+      await performHealthChecks();
+
+      // Health checks passed, start the server
+      httpServer.listen(PORT, () => {
+        logger.info(`Server running on port ${PORT} in ${NODE_ENV} mode`);
+        logger.info(`API URL: ${process.env.API_URL ?? `http://localhost:${PORT}`}`);
+      });
+    } catch (error) {
+      logger.error('Failed to perform health checks:', error);
+      process.exit(1);
+    }
+  })();
 }
 
 // Graceful shutdown

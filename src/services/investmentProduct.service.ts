@@ -1,6 +1,17 @@
 import { prisma } from '../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
+import { emailService } from './email.service.js';
+import { emailSettingsService } from './emailSettings.service.js';
+import { notificationService } from './notification.service.js';
+
+// Import NotificationType enum properly from Prisma client
+// Define enum values as const object matching Prisma NotificationType enum
+// Using string literals that match the Prisma enum values for type compatibility
+const NotificationType = {
+  INVESTMENT_APPLICATION_SUBMITTED: 'INVESTMENT_APPLICATION_SUBMITTED' as const,
+  ADMIN_NOTIFICATION: 'ADMIN_NOTIFICATION' as const,
+} as const;
 
 export interface CreateBondProductInput {
   name: string;
@@ -15,7 +26,7 @@ export interface CreateBondProductInput {
   issuer: string;
   maturityDate: Date;
   couponRate: number;
-  payoutFrequency: 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+  payoutFrequency: 'MONTHLY' | 'QUARTERLY' | 'BI_ANNUALLY' | 'ANNUAL';
   nextPayoutDate?: Date;
 }
 
@@ -75,17 +86,17 @@ export class InvestmentProductService {
         type: 'CORPORATE_BOND',
         symbol: data.symbol,
         description: data.description,
-        currentPrice: new Decimal(data.currentPrice),
+        currentPrice: new Decimal(data.minimumInvestment), // Use minimum investment as base price
         minimumInvestment: new Decimal(data.minimumInvestment),
-        maximumInvestment: data.maximumInvestment ? new Decimal(data.maximumInvestment) : null,
+        maximumInvestment: null, // No max for corporate bonds
         currency: data.currency ?? 'GBP',
         riskLevel: data.riskLevel,
-        expectedReturn: data.expectedReturn ? new Decimal(data.expectedReturn) : null,
+        expectedReturn: null, // Not used for corporate bonds
         issuer: data.issuer,
         maturityDate: data.maturityDate,
         couponRate: new Decimal(data.couponRate),
         payoutFrequency: data.payoutFrequency,
-        nextPayoutDate: data.nextPayoutDate ?? null,
+        nextPayoutDate: null, // Not used for corporate bonds
       },
     });
 
@@ -208,8 +219,125 @@ export class InvestmentProductService {
       },
       include: {
         marketplaceItem: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+          },
+        },
       },
     });
+
+    // Send email notification to client
+    try {
+      // Check if investment application submitted emails are enabled
+      const shouldSend = await emailSettingsService.shouldSendNotification(
+        application.userId,
+        'investmentApplicationSubmitted'
+      );
+      if (shouldSend) {
+        await emailService
+          .sendInvestmentApplicationSubmittedEmail(
+            application.user.email,
+            application.user.firstName,
+            item.name,
+            referenceNumber,
+            data.requestedAmount,
+            item.currency
+          )
+          .then(() => {
+            console.warn(
+              `Investment application submitted email sent successfully to ${application.user.email}`
+            );
+          })
+          .catch((error) => {
+            console.error('Failed to send investment application submitted email:', error);
+          });
+      } else {
+        console.warn(
+          `Investment application submitted email skipped for ${application.user.email} (disabled in settings)`
+        );
+      }
+
+      // Create notification for user
+      notificationService
+        .createNotification({
+          userId: application.userId,
+          type: NotificationType.INVESTMENT_APPLICATION_SUBMITTED,
+          title: 'Investment Enrollment Submitted',
+          message: `Your enrollment for ${item.name} has been submitted successfully and is pending review.`,
+          actionUrl: '/dashboard/investments',
+          data: { applicationId: application.id, productId: item.id },
+        })
+        .catch((error) => {
+          console.error('Failed to create application submitted notification:', error);
+        });
+    } catch (error) {
+      console.error('Failed to send investment application submitted email:', error);
+      // Don't throw - email failure shouldn't break the application creation
+    }
+
+    // Send admin notification
+    try {
+      // Create admin notifications
+      const admins = await prisma.user.findMany({
+        where: { role: 'ADMIN', isActive: true },
+        select: { id: true },
+      });
+
+      await Promise.all(
+        admins.map((admin) =>
+          notificationService
+            .createNotification({
+              userId: admin.id,
+              type: NotificationType.ADMIN_NOTIFICATION,
+              title: 'New Investment Enrollment',
+              message: `A new investment enrollment for ${item.name} has been submitted by ${application.user.firstName} ${application.user.email}.`,
+              actionUrl: `/admin/investment-products`,
+              data: {
+                applicationId: application.id,
+                userId: application.userId,
+                productId: item.id,
+              },
+            })
+            .catch((error) => {
+              console.error('Failed to create admin notification:', error);
+            })
+        )
+      );
+
+      // Check if admin notifications are enabled
+      const shouldSendAdmin = await emailSettingsService.shouldSendNotification(
+        null,
+        'adminNotifications'
+      );
+      if (shouldSendAdmin) {
+        const adminEmails = await emailService.getAdminEmails();
+        if (adminEmails.length > 0) {
+          await emailService
+            .sendAdminNotificationEmail(
+              adminEmails,
+              'New Investment Enrollment',
+              `A new investment enrollment has been submitted.`,
+              {
+                Client: `${application.user.firstName} ${application.user.email}`,
+                Investment: item.name,
+                'Reference Number': referenceNumber,
+                'Requested Amount': `${item.currency} ${data.requestedAmount.toLocaleString()}`,
+              }
+            )
+            .catch((error) => {
+              console.error('Failed to send admin notification email:', error);
+            });
+        }
+      } else {
+        console.warn('Admin notification email skipped (disabled in settings)');
+      }
+    } catch (error) {
+      console.error('Failed to send admin notification email:', error);
+      // Don't throw - email failure shouldn't break the application creation
+    }
 
     return application;
   }

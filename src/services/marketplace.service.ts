@@ -1,8 +1,11 @@
 import { prisma } from '../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
+import { InvestmentType } from '@prisma/client';
 import { quotesService } from './quotes.service.js';
 import { CreateMarketplaceItemInput, UpdateMarketplaceItemInput } from '../lib/validators.js';
+import { emailService } from './email.service.js';
+import { emailSettingsService } from './emailSettings.service.js';
 
 export interface MarketplaceFilters {
   type?: string;
@@ -17,7 +20,7 @@ export interface MarketplaceFilters {
 
 export interface BuyInvestmentInput {
   investmentId: string;
-  quantity: number;
+  amount: number; // Investment amount in currency
   portfolioId: string;
 }
 
@@ -413,17 +416,38 @@ export class MarketplaceService {
     }
 
     // Calculate transaction details
+    // For amount-based investments, use amount directly as investment value
+    const investmentAmount = new Decimal(input.amount);
+    const totalCost = investmentAmount; // Amount is the investment value
+    const estimatedFee = totalCost.times(new Decimal(0.001)); // 0.1% fee
+    const totalAmount = totalCost.plus(estimatedFee);
+
+    // Calculate quantity: for fixed investments, quantity = 1; for price-based, calculate from amount
+    let quantity: Decimal;
     const currentPrice =
       typeof investment.currentPrice === 'number'
         ? new Decimal(investment.currentPrice)
         : investment.currentPrice;
-    const totalCost = new Decimal(input.quantity).times(currentPrice);
-    const estimatedFee = totalCost.times(new Decimal(0.01)); // 1% fee
-    const totalAmount = totalCost.plus(estimatedFee);
+
+    // For bonds and fixed investments, quantity is 1 (amount is the investment value)
+    if (
+      investment.type === 'BOND' ||
+      investment.type === 'CORPORATE_BOND' ||
+      investment.type === 'TERM_DEPOSIT' ||
+      investment.type === 'FIXED_RATE_DEPOSIT'
+    ) {
+      quantity = new Decimal(1);
+    } else if (currentPrice.gt(0)) {
+      // For stocks and other price-based investments, calculate quantity
+      quantity = investmentAmount.dividedBy(currentPrice);
+    } else {
+      // Default to 1 if no price
+      quantity = new Decimal(1);
+    }
 
     return {
       investment,
-      quantity: input.quantity,
+      quantity: quantity.toNumber(),
       unitPrice:
         typeof investment.currentPrice === 'number'
           ? investment.currentPrice
@@ -469,19 +493,38 @@ export class MarketplaceService {
     }
 
     // Calculate transaction details
+    // For amount-based investments, use amount directly as investment value
+    const investmentAmount = new Decimal(input.amount);
+    const totalCost = investmentAmount; // Amount is the investment value
+    const estimatedFee = totalCost.times(new Decimal(0.001)); // 0.1% fee
+    const totalAmount = totalCost.plus(estimatedFee);
+
+    // Calculate quantity and purchase price
+    let quantity: Decimal;
+    let purchasePrice: Decimal;
     const currentPrice =
       typeof marketplaceInvestment.currentPrice === 'number'
         ? new Decimal(marketplaceInvestment.currentPrice)
         : marketplaceInvestment.currentPrice;
-    const totalCost = new Decimal(input.quantity).times(currentPrice);
-    const estimatedFee = totalCost.times(new Decimal(0.01)); // 1% fee
-    const totalAmount = totalCost.plus(estimatedFee);
 
-    // Create the investment record in user's portfolio
-    const purchasePrice =
-      typeof marketplaceInvestment.currentPrice === 'number'
-        ? new Decimal(marketplaceInvestment.currentPrice)
-        : marketplaceInvestment.currentPrice;
+    // For bonds and fixed investments, quantity is 1 and purchasePrice is the amount
+    if (
+      marketplaceInvestment.type === 'BOND' ||
+      marketplaceInvestment.type === 'CORPORATE_BOND' ||
+      marketplaceInvestment.type === 'TERM_DEPOSIT' ||
+      marketplaceInvestment.type === 'FIXED_RATE_DEPOSIT'
+    ) {
+      quantity = new Decimal(1);
+      purchasePrice = investmentAmount; // Purchase price is the amount invested
+    } else if (currentPrice.gt(0)) {
+      // For stocks and other price-based investments, calculate quantity from amount
+      quantity = investmentAmount.dividedBy(currentPrice);
+      purchasePrice = currentPrice;
+    } else {
+      // Default to 1 if no price
+      quantity = new Decimal(1);
+      purchasePrice = investmentAmount;
+    }
     const expectedReturn = marketplaceInvestment.expectedReturn
       ? typeof marketplaceInvestment.expectedReturn === 'number'
         ? new Decimal(marketplaceInvestment.expectedReturn)
@@ -491,22 +534,10 @@ export class MarketplaceService {
       data: {
         userId,
         portfolioId: input.portfolioId,
-        type: marketplaceInvestment.type as
-          | 'STOCK'
-          | 'BOND'
-          | 'CORPORATE_BOND'
-          | 'TERM_DEPOSIT'
-          | 'FIXED_RATE_DEPOSIT'
-          | 'HIGH_INTEREST_SAVINGS'
-          | 'IPO'
-          | 'PRIVATE_EQUITY'
-          | 'MUTUAL_FUND'
-          | 'ETF'
-          | 'CRYPTOCURRENCY'
-          | 'OTHER',
+        type: marketplaceInvestment.type as InvestmentType,
         name: marketplaceInvestment.name,
         symbol: marketplaceInvestment.symbol,
-        quantity: new Decimal(input.quantity),
+        quantity,
         purchasePrice,
         currentPrice: purchasePrice,
         totalValue: totalCost,
@@ -526,7 +557,7 @@ export class MarketplaceService {
         amount: totalAmount,
         currency: 'GBP',
         status: 'COMPLETED',
-        description: `Buy ${input.quantity} units of ${marketplaceInvestment.name}`,
+        description: `Buy £${input.amount} of ${marketplaceInvestment.name}`,
         investmentId: userInvestment.id,
         transactionDate: new Date(),
       },
@@ -535,16 +566,58 @@ export class MarketplaceService {
     // Update portfolio totals
     await this.updatePortfolioTotals(input.portfolioId);
 
+    // Send purchase confirmation email
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true, firstName: true },
+      });
+
+      if (user?.email) {
+        // Check if investment purchase emails are enabled
+        const shouldSend = await emailSettingsService.shouldSendNotification(
+          userId,
+          'investmentPurchase'
+        );
+        if (shouldSend) {
+          await emailService
+            .sendInvestmentPurchaseConfirmationEmail(
+              user.email,
+              user.firstName,
+              marketplaceInvestment.name,
+              quantity.toNumber(),
+              typeof marketplaceInvestment.currentPrice === 'number'
+                ? marketplaceInvestment.currentPrice
+                : marketplaceInvestment.currentPrice.toNumber(),
+              totalAmount.toNumber(),
+              marketplaceInvestment.currency
+            )
+            .then(() => {
+              console.warn(
+                `Investment purchase confirmation email sent successfully to ${user.email}`
+              );
+            })
+            .catch((error) => {
+              console.error('Failed to send purchase confirmation email:', error);
+            });
+        } else {
+          console.warn(
+            `Investment purchase confirmation email skipped for ${user.email} (disabled in settings)`
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Failed to send purchase confirmation email:', error);
+      // Don't throw - email failure shouldn't break the purchase
+    }
+
     return {
       transaction,
       investment: userInvestment,
       details: {
         marketplaceInvestment,
-        quantity: input.quantity,
-        unitPrice:
-          typeof marketplaceInvestment.currentPrice === 'number'
-            ? marketplaceInvestment.currentPrice
-            : marketplaceInvestment.currentPrice.toNumber(),
+        quantity: quantity.toNumber(),
+        unitPrice: purchasePrice.toNumber(),
         totalCost,
         fee: estimatedFee,
         totalAmount,
@@ -617,7 +690,7 @@ export class MarketplaceService {
 
     // Calculate transaction details
     const totalProceeds = new Decimal(input.quantity).times(investment.currentPrice);
-    const estimatedFee = totalProceeds.times(new Decimal(0.01)); // 1% fee
+    const estimatedFee = totalProceeds.times(new Decimal(0.001)); // 0.1% fee
     const netProceeds = totalProceeds.minus(estimatedFee);
 
     // Calculate gain/loss
@@ -676,7 +749,7 @@ export class MarketplaceService {
 
     // Calculate transaction details
     const totalProceeds = new Decimal(input.quantity).times(investment.currentPrice);
-    const estimatedFee = totalProceeds.times(new Decimal(0.01)); // 1% fee
+    const estimatedFee = totalProceeds.times(new Decimal(0.001)); // 0.1% fee
     const netProceeds = totalProceeds.minus(estimatedFee);
 
     // Create transaction record

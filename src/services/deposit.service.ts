@@ -2,6 +2,15 @@ import { prisma } from '../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
 import { emailService } from './email.service.js';
+import { emailSettingsService } from './emailSettings.service.js';
+import { notificationService } from './notification.service.js';
+
+// Import NotificationType enum properly from Prisma client
+// Define enum values as const object matching Prisma NotificationType enum
+const NotificationType = {
+  DEPOSIT_SUBMITTED: 'DEPOSIT_SUBMITTED' as const,
+  ADMIN_NOTIFICATION: 'ADMIN_NOTIFICATION' as const,
+} as const;
 
 export interface CreateDepositInput {
   amount: number;
@@ -57,7 +66,7 @@ export class DepositService {
     // Get user email for notification
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { email: true, firstName: true },
+      select: { id: true, email: true, firstName: true, lastName: true },
     });
 
     // Create deposit request
@@ -77,15 +86,115 @@ export class DepositService {
       },
     });
 
-    // Send email notification (non-blocking)
+    // Send email notification to client (non-blocking)
     if (user?.email) {
-      emailService
-        .sendDepositNotification(user.email, Number(deposit.amount), deposit.currency, 'PENDING')
+      // Check if deposit submitted emails are enabled
+      emailSettingsService
+        .shouldSendNotification(user.id, 'depositSubmitted')
+        .then((shouldSend) => {
+          if (shouldSend) {
+            return emailService
+              .sendDepositNotification(
+                user.email,
+                Number(deposit.amount),
+                deposit.currency,
+                'PENDING'
+              )
+              .then(() => {
+                console.warn(`Deposit submitted email sent successfully to ${user.email}`);
+              })
+              .catch((error) => {
+                console.error('Failed to send deposit notification email:', error);
+                // Don't throw - email failure shouldn't break the deposit creation
+              });
+          } else {
+            console.warn(
+              `Deposit submitted email skipped for ${user.email} (disabled in settings)`
+            );
+          }
+          return undefined;
+        })
         .catch((error) => {
-          console.error('Failed to send deposit notification email:', error);
-          // Don't throw - email failure shouldn't break the deposit creation
+          console.error('Failed to check email settings:', error);
+        });
+
+      // Create notification for user
+      notificationService
+        .createNotification({
+          userId: user.id,
+          type: NotificationType.DEPOSIT_SUBMITTED,
+          title: 'Deposit Submitted',
+          message: `Your deposit request of ${deposit.currency} ${Number(deposit.amount).toFixed(2)} has been submitted and is pending review.`,
+          actionUrl: '/dashboard/transactions',
+          data: {
+            depositId: deposit.id,
+            amount: Number(deposit.amount),
+            currency: deposit.currency,
+          },
+        })
+        .catch((error) => {
+          console.error('Failed to create deposit submitted notification:', error);
         });
     }
+
+    // Send admin notification (non-blocking)
+    // Create admin notifications
+    prisma.user
+      .findMany({
+        where: { role: 'ADMIN', isActive: true },
+        select: { id: true },
+      })
+      .then((admins) => {
+        return Promise.all(
+          admins.map((admin) =>
+            notificationService
+              .createNotification({
+                userId: admin.id,
+                type: NotificationType.ADMIN_NOTIFICATION,
+                title: 'New Deposit Request',
+                message: `A new deposit request of ${deposit.currency} ${Number(deposit.amount).toFixed(2)} has been submitted by ${user?.firstName ?? ''} ${user?.lastName ?? ''}.`,
+                actionUrl: `/admin/deposits`,
+                data: { depositId: deposit.id, userId: user?.id ?? userId },
+              })
+              .catch((error) => {
+                console.error('Failed to create admin notification:', error);
+              })
+          )
+        );
+      })
+      .catch((error) => {
+        console.error('Failed to create admin notifications:', error);
+      });
+
+    // Check if admin notifications are enabled before sending
+    emailSettingsService
+      .shouldSendNotification(null, 'adminNotifications')
+      .then((shouldSend) => {
+        if (shouldSend) {
+          return emailService.getAdminEmails().then((adminEmails) => {
+            if (adminEmails.length > 0) {
+              return emailService.sendAdminNotificationEmail(
+                adminEmails,
+                'New Deposit Request',
+                'A new deposit request has been submitted and requires review.',
+                {
+                  Client: `${user?.firstName ?? ''} ${user?.email ?? ''}`,
+                  Amount: `${deposit.currency} ${Number(deposit.amount).toLocaleString()}`,
+                  'Transaction ID': deposit.id,
+                }
+              );
+            }
+            return undefined;
+          });
+        } else {
+          console.warn('Admin notification email skipped (disabled in settings)');
+        }
+        return undefined;
+      })
+      .catch((error) => {
+        console.error('Failed to send admin notification email:', error);
+        // Don't throw - email failure shouldn't break the deposit creation
+      });
 
     return {
       deposit,

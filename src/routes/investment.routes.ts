@@ -87,4 +87,28 @@ router.get('/:id/performance', authenticate, async (req: AuthRequest, res: Respo
   }
 });
 
+// Sync investment prices from marketplace (admin only)
+router.post('/sync-prices', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    // Check if user is admin
+    const { prisma } = await import('../lib/prisma.js');
+    const user = await prisma.user.findUnique({
+      where: { id: req.userId! },
+      select: { role: true },
+    });
+
+    if (user?.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const result = await investmentService.syncInvestmentPricesFromMarketplace();
+    return res.status(200).json({
+      message: 'Investment prices synced successfully',
+      data: result,
+    });
+  } catch (error) {
+    throw error;
+  }
+});
+
 export default router;

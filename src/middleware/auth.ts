@@ -21,17 +21,28 @@ export const authenticate = async (
     const authHeader = req.headers.authorization;
 
     if (!authHeader?.startsWith('Bearer ')) {
-      throw new AuthenticationError('Missing or invalid authorization header');
+      return next(new AuthenticationError('Missing or invalid authorization header'));
     }
 
     const token = authHeader.substring(7);
     const secret = process.env.JWT_SECRET;
 
     if (!secret) {
-      throw new Error('JWT_SECRET is not defined');
+      return next(new Error('JWT_SECRET is not defined'));
     }
 
-    const decoded = jwt.verify(token, secret) as { userId: string; email: string };
+    let decoded: { userId: string; email: string };
+    try {
+      decoded = jwt.verify(token, secret) as { userId: string; email: string };
+    } catch (error) {
+      if (error instanceof jwt.TokenExpiredError) {
+        return next(new AuthenticationError('Token has expired'));
+      }
+      if (error instanceof jwt.JsonWebTokenError) {
+        return next(new AuthenticationError('Invalid token'));
+      }
+      return next(error);
+    }
 
     // Fetch user from database to get role
     let user: { id: string; email: string; role?: string; isActive: boolean } | null;
@@ -61,16 +72,16 @@ export const authenticate = async (
           user = { ...user, role: 'CLIENT' };
         }
       } else {
-        throw error;
+        return next(error as Error);
       }
     }
 
     if (!user) {
-      throw new AuthenticationError('User not found');
+      return next(new AuthenticationError('User not found'));
     }
 
     if (!user.isActive) {
-      throw new AuthenticationError('Account is deactivated');
+      return next(new AuthenticationError('Account is deactivated'));
     }
 
     req.userId = user.id;
@@ -82,13 +93,8 @@ export const authenticate = async (
 
     next();
   } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) {
-      throw new AuthenticationError('Token has expired');
-    }
-    if (error instanceof jwt.JsonWebTokenError) {
-      throw new AuthenticationError('Invalid token');
-    }
-    throw error;
+    // Catch any unexpected errors and pass them to the error handler
+    next(error as Error);
   }
 };
 
@@ -97,7 +103,7 @@ export const authenticate = async (
  */
 export const requireAdmin = (req: AuthRequest, _res: Response, next: NextFunction): void => {
   if (req.user?.role !== 'ADMIN') {
-    throw new AuthorizationError('Admin access required');
+    return next(new AuthorizationError('Admin access required'));
   }
   next();
 };
@@ -108,7 +114,7 @@ export const requireAdmin = (req: AuthRequest, _res: Response, next: NextFunctio
 export const requireRole = (role: string) => {
   return (req: AuthRequest, _res: Response, next: NextFunction): void => {
     if (req.user?.role !== role) {
-      throw new AuthorizationError(`Access denied. Required role: ${role}`);
+      return next(new AuthorizationError(`Access denied. Required role: ${role}`));
     }
     next();
   };

@@ -228,6 +228,113 @@ export class InvestmentService {
     };
   }
 
+  /**
+   * Sync investment prices from marketplace and recalculate gains
+   * This updates all user investments that have symbols matching marketplace items
+   */
+  async syncInvestmentPricesFromMarketplace(): Promise<{
+    updated: number;
+    errors: string[];
+  }> {
+    try {
+      // Get all investments with symbols
+      const investments = await prisma.investment.findMany({
+        where: {
+          symbol: { not: null },
+          status: 'ACTIVE',
+        },
+        include: {
+          portfolio: true,
+        },
+      });
+
+      if (investments.length === 0) {
+        return { updated: 0, errors: [] };
+      }
+
+      // Get unique symbols
+      const symbols = [
+        ...new Set(investments.map((inv) => inv.symbol).filter((s): s is string => s !== null)),
+      ];
+
+      // Get marketplace prices for these symbols
+      const marketplaceItems = await prisma.marketplaceItem.findMany({
+        where: {
+          symbol: { in: symbols },
+          isAvailable: true,
+        },
+      });
+
+      // Create a map of symbol to marketplace price
+      const priceMap = new Map<string, Decimal>();
+      for (const item of marketplaceItems) {
+        if (item.symbol) {
+          priceMap.set(item.symbol, item.currentPrice);
+        }
+      }
+
+      let updated = 0;
+      const errors: string[] = [];
+      const portfolioIdsToUpdate = new Set<string>();
+
+      // Update each investment with matching marketplace price
+      for (const investment of investments) {
+        if (!investment.symbol) {
+          continue;
+        }
+
+        const newPrice = priceMap.get(investment.symbol);
+        if (!newPrice) {
+          continue; // No marketplace price available
+        }
+
+        // Only update if price has changed
+        if (investment.currentPrice.equals(newPrice)) {
+          continue;
+        }
+
+        try {
+          // Recalculate gains
+          const totalValue = investment.quantity.times(newPrice);
+          const totalInvested = investment.quantity.times(investment.purchasePrice);
+          const totalGain = totalValue.minus(totalInvested);
+          const gainPercentage = totalInvested.isZero()
+            ? new Decimal(0)
+            : totalGain.dividedBy(totalInvested).times(100);
+
+          await prisma.investment.update({
+            where: { id: investment.id },
+            data: {
+              currentPrice: newPrice,
+              totalValue,
+              totalGain,
+              gainPercentage,
+            },
+          });
+
+          portfolioIdsToUpdate.add(investment.portfolioId);
+          updated++;
+        } catch (error) {
+          errors.push(`Failed to update investment ${investment.id}: ${error}`);
+        }
+      }
+
+      // Update portfolio totals for all affected portfolios
+      for (const portfolioId of portfolioIdsToUpdate) {
+        try {
+          await this.updatePortfolioTotals(portfolioId);
+        } catch (error) {
+          errors.push(`Failed to update portfolio ${portfolioId}: ${error}`);
+        }
+      }
+
+      return { updated, errors };
+    } catch (error) {
+      console.error('Error syncing investment prices:', error);
+      throw new Error('Failed to sync investment prices');
+    }
+  }
+
   private async updatePortfolioTotals(portfolioId: string): Promise<void> {
     const investments = await prisma.investment.findMany({
       where: { portfolioId },

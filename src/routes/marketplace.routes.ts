@@ -1,5 +1,5 @@
 import { Router, Response, NextFunction } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth.js';
 import { marketplaceService } from '../services/marketplace.service.js';
 import { z } from 'zod';
 
@@ -8,7 +8,7 @@ const router = Router();
 // Validation schemas
 const buyInvestmentSchema = z.object({
   investmentId: z.string().min(1, 'Investment ID is required'),
-  quantity: z.number().positive('Quantity must be positive'),
+  amount: z.number().positive('Amount must be positive'),
   portfolioId: z.string().min(1, 'Portfolio ID is required'),
 });
 
@@ -151,9 +151,9 @@ router.post('/sell', authenticate, async (req: AuthRequest, res: Response, next:
 
 /**
  * POST /api/marketplace/items
- * Create a new marketplace item
+ * Create a new marketplace item (admin only)
  */
-router.post('/items', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/items', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const { createMarketplaceItemSchema } = await import('../lib/validators');
     const input = createMarketplaceItemSchema.parse(req.body);
@@ -173,9 +173,9 @@ router.post('/items', authenticate, async (req: AuthRequest, res: Response) => {
 
 /**
  * PUT /api/marketplace/items/:id
- * Update a marketplace item
+ * Update a marketplace item (admin only)
  */
-router.put('/items/:id', authenticate, async (req: AuthRequest, res: Response) => {
+router.put('/items/:id', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const { updateMarketplaceItemSchema } = await import('../lib/validators');
     const input = updateMarketplaceItemSchema.parse(req.body);
@@ -195,9 +195,9 @@ router.put('/items/:id', authenticate, async (req: AuthRequest, res: Response) =
 
 /**
  * DELETE /api/marketplace/items/:id
- * Delete a marketplace item
+ * Delete a marketplace item (admin only)
  */
-router.delete('/items/:id', authenticate, async (req: AuthRequest, res: Response) => {
+router.delete('/items/:id', authenticate, requireAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const result = await marketplaceService.deleteMarketplaceItem(req.params.id);
     res.status(200).json({
@@ -235,22 +235,27 @@ router.get('/items/:id', async (req: AuthRequest, res: Response) => {
 
 /**
  * POST /api/marketplace/update-prices
- * Update all marketplace item prices with live quotes
+ * Update all marketplace item prices with live quotes (admin only)
  */
-router.post('/update-prices', authenticate, async (_req: AuthRequest, res: Response) => {
-  try {
-    const result = await marketplaceService.updatePricesWithLiveQuotes();
-    res.status(200).json({
-      success: true,
-      data: result,
-    });
-  } catch (error) {
-    console.error('Update prices error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update prices',
-    });
+router.post(
+  '/update-prices',
+  authenticate,
+  requireAdmin,
+  async (_req: AuthRequest, res: Response) => {
+    try {
+      const result = await marketplaceService.updatePricesWithLiveQuotes();
+      res.status(200).json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      console.error('Update prices error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to update prices',
+      });
+    }
   }
-});
+);
 
 export default router;

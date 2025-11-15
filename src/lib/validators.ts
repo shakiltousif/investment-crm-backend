@@ -54,6 +54,32 @@ export const createBankAccountSchema = z.object({
 
 export const updateBankAccountSchema = createBankAccountSchema.partial();
 
+// Admin Bank Account Validators
+export const adminCreateBankAccountSchema = z.object({
+  userId: z.string().min(1, 'User ID is required'),
+  accountHolderName: z.string().min(1, 'Account holder name is required'),
+  accountNumber: z.string().min(1, 'Account number is required'),
+  bankName: z.string().min(1, 'Bank name is required'),
+  bankCode: z.string().optional().nullable(),
+  accountType: z.string().min(1, 'Account type is required'),
+  currency: z.string().default('GBP'),
+  balance: z.number().min(0).optional(),
+  isVerified: z.boolean().optional(),
+  isPrimary: z.boolean().optional(),
+});
+
+export const adminUpdateBankAccountSchema = z.object({
+  accountHolderName: z.string().min(1).optional(),
+  accountNumber: z.string().min(1).optional(),
+  bankName: z.string().min(1).optional(),
+  bankCode: z.string().optional().nullable(),
+  accountType: z.string().min(1).optional(),
+  currency: z.string().optional(),
+  balance: z.number().min(0).optional(),
+  isVerified: z.boolean().optional(),
+  isPrimary: z.boolean().optional(),
+});
+
 // Portfolio Validators
 export const createPortfolioSchema = z
   .object({
@@ -114,19 +140,19 @@ export const updatePortfolioSchema = z.object({
   gainPercentage: z.number().min(-100, 'Gain percentage cannot be less than -100%').optional(),
 });
 
+export const adminCreatePortfolioSchema = z.object({
+  userId: z.string().min(1, 'User ID is required'),
+  name: z.string().min(1, 'Portfolio name is required'),
+  description: z.string().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export type AdminCreatePortfolioInput = z.infer<typeof adminCreatePortfolioSchema>;
+
 // Investment Validators
 export const createInvestmentSchema = z.object({
   portfolioId: z.string().min(1, 'Portfolio ID is required'),
-  type: z.enum([
-    'STOCK',
-    'BOND',
-    'TERM_DEPOSIT',
-    'PRIVATE_EQUITY',
-    'MUTUAL_FUND',
-    'ETF',
-    'CRYPTOCURRENCY',
-    'OTHER',
-  ]),
+  type: z.enum(['STOCK', 'BOND', 'TERM_DEPOSIT', 'MUTUAL_FUND', 'OTHER']),
   name: z.string().min(1, 'Investment name is required'),
   symbol: z.string().optional(),
   quantity: z.number().positive('Quantity must be positive'),
@@ -152,27 +178,28 @@ export const createTransactionSchema = z.object({
 // Marketplace Validators
 export const createMarketplaceItemSchema = z.object({
   name: z.string().min(1, 'Investment name is required'),
-  type: z.enum([
-    'STOCK',
-    'BOND',
-    'TERM_DEPOSIT',
-    'PRIVATE_EQUITY',
-    'MUTUAL_FUND',
-    'ETF',
-    'CRYPTOCURRENCY',
-    'OTHER',
-  ]),
+  type: z.enum(['STOCK', 'BOND', 'TERM_DEPOSIT', 'MUTUAL_FUND', 'OTHER']),
   symbol: z.string().optional(),
   description: z.string().optional(),
   currentPrice: z.coerce.number().positive('Current price must be positive'),
   minimumInvestment: z.coerce.number().positive('Minimum investment must be positive'),
-  maximumInvestment: z.coerce.number().positive('Maximum investment must be positive').optional(),
+  maximumInvestment: z
+    .preprocess(
+      (val) => (val === null || val === '' || val === undefined ? null : val),
+      z.union([z.coerce.number().positive('Maximum investment must be positive'), z.null()])
+    )
+    .optional(),
   currency: z.string().default('GBP'),
   riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']),
   expectedReturn: z.coerce.number().min(0, 'Expected return must be non-negative').optional(),
   category: z.string().optional(),
   issuer: z.string().optional(),
-  maturityDate: z.string().datetime().optional(),
+  maturityDate: z
+    .preprocess(
+      (val) => (val === null || val === '' || val === undefined ? null : val),
+      z.union([z.string().datetime(), z.null()])
+    )
+    .optional(),
   isAvailable: z.boolean().default(true),
 });
 
@@ -187,6 +214,22 @@ export const marketplaceFiltersSchema = z.object({
   maxPrice: z.number().min(0).optional(),
   limit: z.number().min(1).max(100).default(20),
   offset: z.number().min(0).default(0),
+});
+
+// Problem Report Validators
+export const createProblemReportSchema = z.object({
+  subject: z.string().min(1, 'Subject is required'),
+  description: z.string().min(1, 'Description is required'),
+  category: z.enum(['TECHNICAL', 'ACCOUNT', 'TRANSACTION', 'INVESTMENT', 'DOCUMENT', 'OTHER']),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
+});
+
+export const updateProblemReportStatusSchema = z.object({
+  status: z.enum(['OPEN', 'RESOLVED']),
+});
+
+export const createProblemReportResponseSchema = z.object({
+  message: z.string().min(1, 'Message is required'),
 });
 
 // Type exports

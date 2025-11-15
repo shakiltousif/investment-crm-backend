@@ -14,14 +14,12 @@ const createBondSchema = z.object({
   description: z.string().optional(),
   currentPrice: z.number().positive(),
   minimumInvestment: z.number().positive(),
-  maximumInvestment: z.number().positive().optional(),
   currency: z.string().optional(),
   riskLevel: z.enum(['LOW', 'MEDIUM', 'HIGH']),
-  expectedReturn: z.number().optional(),
   issuer: z.string().min(1),
   maturityDate: z.string().datetime(),
   couponRate: z.number().min(0).max(100),
-  payoutFrequency: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']),
+  payoutFrequency: z.enum(['MONTHLY', 'QUARTERLY', 'BI_ANNUALLY', 'ANNUAL']),
   nextPayoutDate: z.string().datetime().optional(),
 });
 
@@ -81,6 +79,7 @@ router.post('/bonds', authenticate, requireAdmin, async (req: AuthRequest, res: 
       ...data,
       maturityDate: new Date(data.maturityDate),
       nextPayoutDate: data.nextPayoutDate ? new Date(data.nextPayoutDate) : undefined,
+      currentPrice: data.currentPrice,
     });
     res.status(201).json({
       message: 'Corporate Bond product created successfully',
@@ -160,7 +159,7 @@ router.post('/applications', authenticate, async (req: AuthRequest, res: Respons
     const data = createApplicationSchema.parse(req.body);
     const application = await investmentProductService.createApplication(req.userId!, data);
     res.status(201).json({
-      message: 'Investment application submitted successfully',
+      message: 'Investment enrollment submitted successfully',
       data: application,
     });
   } catch (error) {

@@ -2,6 +2,15 @@ import { prisma } from '../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { emailService } from './email.service.js';
+import { emailSettingsService } from './emailSettings.service.js';
+import { notificationService } from './notification.service.js';
+
+// Import NotificationType enum properly from Prisma client
+// Define enum values as const object matching Prisma NotificationType enum
+const NotificationType = {
+  ADMIN_NOTIFICATION: 'ADMIN_NOTIFICATION' as const,
+} as const;
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? './uploads';
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -12,6 +21,7 @@ async function ensureUploadDir(): Promise<void> {
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
     await fs.mkdir(path.join(UPLOAD_DIR, 'documents'), { recursive: true });
     await fs.mkdir(path.join(UPLOAD_DIR, 'statements'), { recursive: true });
+    await fs.mkdir(path.join(UPLOAD_DIR, 'profile-pictures'), { recursive: true });
   } catch (error) {
     console.error('Failed to create upload directories:', error);
   }
@@ -95,6 +105,88 @@ export class DocumentService {
         isImportant: uploadedBy !== userId, // Admin uploads are marked as important
       },
     });
+
+    // Send admin notification if document is uploaded by client (not admin)
+    if (uploadedBy === userId) {
+      // Create admin notifications
+      prisma.user
+        .findMany({
+          where: { role: 'ADMIN', isActive: true },
+          select: { id: true },
+        })
+        .then((admins) => {
+          return prisma.user
+            .findUnique({
+              where: { id: userId },
+              select: { email: true, firstName: true, lastName: true },
+            })
+            .then((user) => {
+              if (user) {
+                return Promise.all(
+                  admins.map((admin) =>
+                    notificationService
+                      .createNotification({
+                        userId: admin.id,
+                        type: NotificationType.ADMIN_NOTIFICATION,
+                        title: 'New Document Uploaded',
+                        message: `A new document (${data.fileName}) has been uploaded by ${user.firstName} ${user.lastName}.`,
+                        actionUrl: `/admin/documents`,
+                        data: { documentId: document.id, userId: userId },
+                      })
+                      .catch((error) => {
+                        console.error('Failed to create admin notification:', error);
+                      })
+                  )
+                );
+              }
+              return undefined;
+            });
+        })
+        .catch((error) => {
+          console.error('Failed to create admin notifications:', error);
+        });
+
+      // Check if admin notifications are enabled
+      emailSettingsService
+        .shouldSendNotification(null, 'adminNotifications')
+        .then((shouldSend) => {
+          if (shouldSend) {
+            return emailService.getAdminEmails().then((adminEmails) => {
+              if (adminEmails.length > 0) {
+                return prisma.user
+                  .findUnique({
+                    where: { id: userId },
+                    select: { email: true, firstName: true },
+                  })
+                  .then((user) => {
+                    if (user) {
+                      return emailService.sendAdminNotificationEmail(
+                        adminEmails,
+                        'New Document Uploaded',
+                        'A new document has been uploaded by a client and requires review.',
+                        {
+                          Client: `${user.firstName} ${user.email}`,
+                          'Document Type': data.type,
+                          'File Name': data.fileName,
+                          'Document ID': document.id,
+                        }
+                      );
+                    }
+                    return undefined;
+                  });
+              }
+              return undefined;
+            });
+          } else {
+            console.warn('Admin notification email skipped (disabled in settings)');
+          }
+          return undefined;
+        })
+        .catch((error) => {
+          console.error('Failed to send admin notification email:', error);
+          // Don't throw - email failure shouldn't break the document upload
+        });
+    }
 
     return document;
   }
@@ -228,6 +320,65 @@ export class DocumentService {
     });
 
     return { message: 'Document deleted successfully' };
+  }
+
+  /**
+   * Upload profile picture
+   */
+  async uploadProfilePicture(
+    userId: string,
+    data: {
+      fileName: string;
+      fileSize: number;
+      mimeType: string;
+      fileBuffer: Buffer;
+    }
+  ): Promise<string> {
+    // Validate file size (5MB max for profile pictures)
+    const MAX_PROFILE_PIC_SIZE = 5 * 1024 * 1024; // 5MB
+    if (data.fileSize > MAX_PROFILE_PIC_SIZE) {
+      throw new ValidationError(
+        `File size exceeds maximum of ${MAX_PROFILE_PIC_SIZE / 1024 / 1024}MB`
+      );
+    }
+
+    // Validate mime type (only images)
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    if (!allowedMimeTypes.includes(data.mimeType)) {
+      throw new ValidationError('Invalid file type. Allowed: JPG, PNG, WEBP');
+    }
+
+    // Get existing profile picture to delete it
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { profilePicture: true },
+    });
+
+    // Delete old profile picture if exists
+    if (user?.profilePicture) {
+      const oldFilePath = path.join(
+        UPLOAD_DIR,
+        'profile-pictures',
+        path.basename(user.profilePicture)
+      );
+      try {
+        await fs.unlink(oldFilePath);
+      } catch (error) {
+        // Ignore if file doesn't exist
+        console.warn('Failed to delete old profile picture:', error);
+      }
+    }
+
+    // Generate unique filename
+    const fileExt = path.extname(data.fileName);
+    const uniqueFileName = `${userId}-${Date.now()}${fileExt}`;
+    const filePath = path.join(UPLOAD_DIR, 'profile-pictures', uniqueFileName);
+
+    // Save file
+    await fs.writeFile(filePath, data.fileBuffer);
+
+    // Return the URL path
+    return `/uploads/profile-pictures/${uniqueFileName}`;
   }
 
   /**

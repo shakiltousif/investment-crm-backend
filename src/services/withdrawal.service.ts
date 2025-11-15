@@ -2,6 +2,15 @@ import { prisma } from '../lib/prisma.js';
 import { NotFoundError, ValidationError } from '../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
 import { emailService } from './email.service.js';
+import { emailSettingsService } from './emailSettings.service.js';
+import { notificationService } from './notification.service.js';
+
+// Import NotificationType enum properly from Prisma client
+// Define enum values as const object matching Prisma NotificationType enum
+const NotificationType = {
+  WITHDRAWAL_SUBMITTED: 'WITHDRAWAL_SUBMITTED' as const,
+  ADMIN_NOTIFICATION: 'ADMIN_NOTIFICATION' as const,
+} as const;
 
 export interface CreateWithdrawalInput {
   amount: number;
@@ -61,7 +70,7 @@ export class WithdrawalService {
     // Get user email for notification
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { email: true, firstName: true },
+      select: { id: true, email: true, firstName: true, lastName: true },
     });
 
     // Create withdrawal request
@@ -81,20 +90,115 @@ export class WithdrawalService {
       },
     });
 
-    // Send email notification (non-blocking)
+    // Send email notification to client (non-blocking)
     if (user?.email) {
-      emailService
-        .sendWithdrawalNotification(
-          user.email,
-          Number(withdrawal.amount),
-          withdrawal.currency,
-          'PENDING'
-        )
+      // Check if withdrawal submitted emails are enabled
+      emailSettingsService
+        .shouldSendNotification(user.id, 'withdrawalSubmitted')
+        .then((shouldSend) => {
+          if (shouldSend) {
+            return emailService
+              .sendWithdrawalNotification(
+                user.email,
+                Number(withdrawal.amount),
+                withdrawal.currency,
+                'PENDING'
+              )
+              .then(() => {
+                console.warn(`Withdrawal submitted email sent successfully to ${user.email}`);
+              })
+              .catch((error) => {
+                console.error('Failed to send withdrawal notification email:', error);
+                // Don't throw - email failure shouldn't break the withdrawal creation
+              });
+          } else {
+            console.warn(
+              `Withdrawal submitted email skipped for ${user.email} (disabled in settings)`
+            );
+          }
+          return undefined;
+        })
         .catch((error) => {
-          console.error('Failed to send withdrawal notification email:', error);
-          // Don't throw - email failure shouldn't break the withdrawal creation
+          console.error('Failed to check email settings:', error);
+        });
+
+      // Create notification for user
+      notificationService
+        .createNotification({
+          userId: user.id,
+          type: NotificationType.WITHDRAWAL_SUBMITTED,
+          title: 'Withdrawal Submitted',
+          message: `Your withdrawal request of ${withdrawal.currency} ${Number(withdrawal.amount).toFixed(2)} has been submitted and is pending review.`,
+          actionUrl: '/dashboard/transactions',
+          data: {
+            withdrawalId: withdrawal.id,
+            amount: Number(withdrawal.amount),
+            currency: withdrawal.currency,
+          },
+        })
+        .catch((error) => {
+          console.error('Failed to create withdrawal submitted notification:', error);
         });
     }
+
+    // Send admin notification (non-blocking)
+    // Create admin notifications
+    prisma.user
+      .findMany({
+        where: { role: 'ADMIN', isActive: true },
+        select: { id: true },
+      })
+      .then((admins) => {
+        return Promise.all(
+          admins.map((admin) =>
+            notificationService
+              .createNotification({
+                userId: admin.id,
+                type: NotificationType.ADMIN_NOTIFICATION,
+                title: 'New Withdrawal Request',
+                message: `A new withdrawal request of ${withdrawal.currency} ${Number(withdrawal.amount).toFixed(2)} has been submitted by ${user?.firstName ?? ''} ${user?.lastName ?? ''}.`,
+                actionUrl: `/admin/withdrawals`,
+                data: { withdrawalId: withdrawal.id, userId: user?.id ?? userId },
+              })
+              .catch((error) => {
+                console.error('Failed to create admin notification:', error);
+              })
+          )
+        );
+      })
+      .catch((error) => {
+        console.error('Failed to create admin notifications:', error);
+      });
+
+    // Check if admin notifications are enabled before sending
+    emailSettingsService
+      .shouldSendNotification(null, 'adminNotifications')
+      .then((shouldSend) => {
+        if (shouldSend) {
+          return emailService.getAdminEmails().then((adminEmails) => {
+            if (adminEmails.length > 0) {
+              return emailService.sendAdminNotificationEmail(
+                adminEmails,
+                'New Withdrawal Request',
+                'A new withdrawal request has been submitted and requires review.',
+                {
+                  Client: `${user?.firstName ?? ''} ${user?.email ?? ''}`,
+                  Amount: `${withdrawal.currency} ${Number(withdrawal.amount).toLocaleString()}`,
+                  'Transaction ID': withdrawal.id,
+                }
+              );
+            }
+            return undefined;
+          });
+        } else {
+          console.warn('Admin notification email skipped (disabled in settings)');
+        }
+        return undefined;
+      })
+      .catch((error) => {
+        console.error('Failed to send admin notification email:', error);
+        // Don't throw - email failure shouldn't break the withdrawal creation
+      });
 
     return {
       withdrawal,
