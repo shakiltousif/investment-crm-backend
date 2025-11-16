@@ -1231,6 +1231,7 @@ export class AdminService {
     userId?: string;
     portfolioId?: string;
     type?: string;
+    status?: string;
     limit?: number;
     offset?: number;
   }): Promise<{
@@ -1273,6 +1274,10 @@ export class AdminService {
 
     if (filters.type) {
       where.type = filters.type;
+    }
+
+    if (filters.status) {
+      where.status = filters.status;
     }
 
     const [investments, total] = await Promise.all([
@@ -1694,6 +1699,207 @@ export class AdminService {
     await this.recalculatePortfolioTotals(portfolioId);
 
     return { message: 'Investment deleted successfully' };
+  }
+
+  /**
+   * Approve pending investment (admin only)
+   */
+  async approveInvestment(investmentId: string, _adminId: string): Promise<unknown> {
+    // Find the investment
+    const investment = await prisma.investment.findUnique({
+      where: { id: investmentId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        portfolio: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!investment) {
+      throw new NotFoundError('Investment not found');
+    }
+
+    if (investment.status !== 'PENDING') {
+      throw new ValidationError('Investment is not pending approval');
+    }
+
+    // Update investment status to ACTIVE
+    const updated = await prisma.investment.update({
+      where: { id: investmentId },
+      data: {
+        status: 'ACTIVE',
+      },
+    });
+
+    // Update associated transaction status to COMPLETED
+    await prisma.transaction.updateMany({
+      where: {
+        investmentId: investmentId,
+        status: 'PENDING',
+      },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+      },
+    });
+
+    // Update portfolio totals now that investment is active
+    const { investmentService } = await import('./investment.service.js');
+    await investmentService.updatePortfolioTotals(investment.portfolioId);
+
+    // Send approval email to client
+    try {
+      const shouldSend = await emailSettingsService.shouldSendNotification(
+        investment.userId,
+        'investmentPurchase'
+      );
+      if (shouldSend) {
+        await emailService
+          .sendInvestmentApprovalEmail(
+            investment.user.email,
+            investment.user.firstName,
+            investment.name,
+            investment.totalValue.toNumber()
+          )
+          .then(() => {
+            console.warn(
+              `Investment approval email sent successfully to ${investment.user.email}`
+            );
+          })
+          .catch((error) => {
+            console.error('Failed to send investment approval email:', error);
+          });
+      }
+    } catch (error) {
+      console.error('Failed to send investment approval email:', error);
+    }
+
+    // Create notification
+    try {
+      await notificationService.createNotification({
+        userId: investment.userId,
+        type: NotificationType.DOCUMENT_STATUS_CHANGE, // Reuse existing type or create new one
+        title: 'Investment Approved',
+        message: `Your investment in "${investment.name}" has been approved and is now active in your portfolio.`,
+        actionUrl: '/investments',
+        data: { investmentId: investment.id, status: 'ACTIVE' },
+      });
+    } catch (error) {
+      console.error('Failed to create investment approval notification:', error);
+    }
+
+    return updated;
+  }
+
+  /**
+   * Reject pending investment (admin only)
+   */
+  async rejectInvestment(
+    investmentId: string,
+    _adminId: string,
+    reason?: string
+  ): Promise<unknown> {
+    // Find the investment
+    const investment = await prisma.investment.findUnique({
+      where: { id: investmentId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        portfolio: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!investment) {
+      throw new NotFoundError('Investment not found');
+    }
+
+    if (investment.status !== 'PENDING') {
+      throw new ValidationError('Investment is not pending approval');
+    }
+
+    // Update investment status to CANCELLED
+    const updated = await prisma.investment.update({
+      where: { id: investmentId },
+      data: {
+        status: 'CANCELLED',
+      },
+    });
+
+    // Update associated transaction status to CANCELLED
+    await prisma.transaction.updateMany({
+      where: {
+        investmentId: investmentId,
+        status: 'PENDING',
+      },
+      data: {
+        status: 'CANCELLED',
+      },
+    });
+
+    // Send rejection email to client
+    try {
+      const shouldSend = await emailSettingsService.shouldSendNotification(
+        investment.userId,
+        'investmentPurchase'
+      );
+      if (shouldSend) {
+        await emailService
+          .sendInvestmentRejectionEmail(
+            investment.user.email,
+            investment.user.firstName,
+            investment.name,
+            reason
+          )
+          .then(() => {
+            console.warn(
+              `Investment rejection email sent successfully to ${investment.user.email}`
+            );
+          })
+          .catch((error) => {
+            console.error('Failed to send investment rejection email:', error);
+          });
+      }
+    } catch (error) {
+      console.error('Failed to send investment rejection email:', error);
+    }
+
+    // Create notification
+    try {
+      await notificationService.createNotification({
+        userId: investment.userId,
+        type: NotificationType.DOCUMENT_STATUS_CHANGE, // Reuse existing type
+        title: 'Investment Rejected',
+        message: `Your investment in "${investment.name}" has been rejected.${reason ? ` Reason: ${reason}` : ''}`,
+        actionUrl: '/marketplace',
+        data: { investmentId: investment.id, status: 'CANCELLED', reason },
+      });
+    } catch (error) {
+      console.error('Failed to create investment rejection notification:', error);
+    }
+
+    return updated;
   }
 
   /**
@@ -2762,6 +2968,87 @@ export class AdminService {
         : `${apiBaseUrl}${updated.fileUrl}`,
       downloadUrl: `${apiBaseUrl}/api/documents/${updated.id}/download`,
     };
+  }
+
+  /**
+   * Update statement status (admin only)
+   */
+  async updateStatementStatus(
+    statementId: string,
+    status: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'EXPIRED',
+    reason?: string
+  ): Promise<unknown> {
+    const { documentService } = await import('./document.service.js');
+    const result = await documentService.updateStatementStatus(statementId, status, reason);
+
+    const updated = result as {
+      id: string;
+      userId: string;
+      fileName: string;
+      status: string;
+      oldStatus: string;
+      user: {
+        id: string;
+        email: string;
+        firstName: string;
+        lastName: string;
+      };
+    };
+
+    // Send email notification if status changed to VERIFIED or REJECTED
+    if (
+      status !== updated.oldStatus &&
+      ['VERIFIED', 'REJECTED'].includes(status)
+    ) {
+      try {
+        // Check if document status change emails are enabled (reuse same setting)
+        const shouldSend = await emailSettingsService.shouldSendNotification(
+          updated.userId,
+          'documentStatusChange'
+        );
+        if (shouldSend) {
+          await emailService
+            .sendStatementStatusChangeEmail(
+              updated.user.email,
+              updated.user.firstName,
+              updated.fileName,
+              status as 'VERIFIED' | 'REJECTED',
+              reason
+            )
+            .then(() => {
+              console.warn(
+                `Statement status change email sent successfully to ${updated.user.email}`
+              );
+            })
+            .catch((error) => {
+              console.error('Failed to send statement status change email:', error);
+            });
+        } else {
+          console.warn(
+            `Statement status change email skipped for ${updated.user.email} (disabled in settings)`
+          );
+        }
+
+        // Create notification
+        notificationService
+          .createNotification({
+            userId: updated.userId,
+            type: NotificationType.DOCUMENT_STATUS_CHANGE, // Reuse same notification type
+            title: `Statement ${status}`,
+            message: `Your statement "${updated.fileName}" has been ${status.toLowerCase()}.${reason ? ` ${reason}` : ''}`,
+            actionUrl: '/dashboard/documents',
+            data: { statementId: updated.id, status },
+          })
+          .catch((error) => {
+            console.error('Failed to create statement status change notification:', error);
+          });
+      } catch (error) {
+        console.error('Failed to send statement status change email:', error);
+        // Don't throw - email failure shouldn't break the statement update
+      }
+    }
+
+    return result;
   }
 
   /**

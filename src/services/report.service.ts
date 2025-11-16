@@ -1,5 +1,3 @@
-import { InvestmentType } from '@prisma/client';
-import { Decimal } from '@prisma/client/runtime/library';
 import { prisma } from '../lib/prisma.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
 
@@ -104,33 +102,46 @@ export class ReportService {
       take: 100, // Limit to recent transactions
     });
 
-    // Calculate portfolio data
+    // Calculate portfolio data using stored values from database
     const portfolioData = portfolios.map((portfolio) => {
-      const investments = portfolio.investments.map((inv) => ({
-        id: inv.id,
-        name: inv.name,
-        symbol: inv.symbol,
-        type: inv.type,
-        quantity: inv.quantity,
-        purchasePrice: Number(inv.purchasePrice),
-        currentPrice: Number(inv.currentPrice),
-        totalValue: Number(inv.currentPrice) * Number(inv.quantity),
-        totalGain: (Number(inv.currentPrice) - Number(inv.purchasePrice)) * Number(inv.quantity),
-        gainPercentage:
-          Number(inv.purchasePrice) > 0
-            ? ((Number(inv.currentPrice) - Number(inv.purchasePrice)) / Number(inv.purchasePrice)) *
-              100
-            : 0,
-        purchaseDate: inv.purchaseDate,
-        maturityDate: inv.maturityDate ?? undefined,
-      }));
+      const investments = portfolio.investments.map((inv) => {
+        // Use stored values from database (more accurate, especially for fixed-rate investments)
+        // Fallback to manual calculation if stored values are missing
+        const storedTotalValue = inv.totalValue ? Number(inv.totalValue) : null;
+        const storedTotalGain = inv.totalGain ? Number(inv.totalGain) : null;
+        const storedGainPercentage = inv.gainPercentage ? Number(inv.gainPercentage) : null;
 
+        // Manual calculation as fallback
+        const calculatedTotalValue = Number(inv.currentPrice) * Number(inv.quantity);
+        const calculatedTotalGain = (Number(inv.currentPrice) - Number(inv.purchasePrice)) * Number(inv.quantity);
+        const calculatedGainPercentage =
+          Number(inv.purchasePrice) > 0
+            ? ((Number(inv.currentPrice) - Number(inv.purchasePrice)) / Number(inv.purchasePrice)) * 100
+            : 0;
+
+        return {
+          id: inv.id,
+          name: inv.name,
+          symbol: inv.symbol,
+          type: inv.type,
+          quantity: Number(inv.quantity),
+          purchasePrice: Number(inv.purchasePrice),
+          currentPrice: Number(inv.currentPrice),
+          totalValue: storedTotalValue ?? calculatedTotalValue,
+          totalGain: storedTotalGain ?? calculatedTotalGain,
+          gainPercentage: storedGainPercentage ?? calculatedGainPercentage,
+          purchaseDate: inv.purchaseDate,
+          maturityDate: inv.maturityDate ?? undefined,
+        };
+      });
+
+      // Calculate portfolio totals from investment values
       const totalValue = investments.reduce((sum, inv) => sum + inv.totalValue, 0);
       const totalInvested = investments.reduce(
-        (sum, inv) => sum + inv.purchasePrice * Number(inv.quantity),
+        (sum, inv) => sum + inv.purchasePrice * inv.quantity,
         0
       );
-      const totalGain = totalValue - totalInvested;
+      const totalGain = investments.reduce((sum, inv) => sum + inv.totalGain, 0);
       const gainPercentage = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
 
       return {
@@ -150,12 +161,40 @@ export class ReportService {
     const totalGain = totalPortfolioValue - totalInvested;
     const gainPercentage = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
 
-    const deposits = transactions.filter((t) => t.type === 'DEPOSIT' && t.status === 'COMPLETED');
+    // Include only COMPLETED transactions (APPROVED is not a valid TransactionStatus)
+    const deposits = transactions.filter(
+      (t) => t.type === 'DEPOSIT' && t.status === 'COMPLETED'
+    );
     const withdrawals = transactions.filter(
       (t) => t.type === 'WITHDRAWAL' && t.status === 'COMPLETED'
     );
     const totalDeposits = deposits.reduce((sum, t) => sum + Number(t.amount), 0);
     const totalWithdrawals = withdrawals.reduce((sum, t) => sum + Number(t.amount), 0);
+
+    // Log calculation values for debugging
+    console.log('[Report Service] Calculation Summary:', {
+      portfoliosCount: portfolioData.length,
+      totalPortfolioValue,
+      totalInvested,
+      totalGain,
+      gainPercentage: `${gainPercentage.toFixed(2)}%`,
+      depositsCount: deposits.length,
+      withdrawalsCount: withdrawals.length,
+      totalDeposits,
+      totalWithdrawals,
+      netCashFlow: totalDeposits - totalWithdrawals,
+    });
+
+    // Validate values are not null/undefined
+    const validatedSummary = {
+      totalPortfolioValue: totalPortfolioValue || 0,
+      totalInvested: totalInvested || 0,
+      totalGain: totalGain || 0,
+      gainPercentage: gainPercentage || 0,
+      totalDeposits: totalDeposits || 0,
+      totalWithdrawals: totalWithdrawals || 0,
+      netCashFlow: (totalDeposits || 0) - (totalWithdrawals || 0),
+    };
 
     return {
       userId: user.id,
@@ -164,31 +203,9 @@ export class ReportService {
       reportDate: new Date(),
       startDate,
       endDate,
-      portfolios: portfolioData.map(
-        (p: {
-          id: string;
-          name: string;
-          totalValue: number;
-          totalInvested: number;
-          totalGain: number;
-          gainPercentage: number;
-          investments: {
-            id: string;
-            name: string;
-            symbol: string | null;
-            type: InvestmentType;
-            quantity: Decimal;
-            purchasePrice: number;
-            currentPrice: number;
-            totalValue: number;
-            totalGain: number;
-            gainPercentage: number;
-            purchaseDate: Date;
-            maturityDate: Date | undefined;
-          }[];
-        }) => ({
+      portfolios: (portfolioData as any[]).map((p: any) => ({
           ...p,
-          investments: p.investments.map((i) => ({
+          investments: (p.investments || []).map((i: any) => ({
             id: i.id,
             name: i.name,
             symbol: i.symbol ?? undefined,
@@ -212,15 +229,7 @@ export class ReportService {
         status: t.status,
         createdAt: t.createdAt,
       })),
-      summary: {
-        totalPortfolioValue,
-        totalInvested,
-        totalGain,
-        gainPercentage,
-        totalDeposits,
-        totalWithdrawals,
-        netCashFlow: totalDeposits - totalWithdrawals,
-      },
+      summary: validatedSummary,
     };
   }
 

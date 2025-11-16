@@ -546,70 +546,74 @@ export class MarketplaceService {
         purchaseDate: new Date(),
         maturityDate: marketplaceInvestment.maturityDate,
         interestRate: expectedReturn,
+        status: 'PENDING', // Investment requires admin approval
       },
     });
 
-    // Create transaction record
+    // Create transaction record with PENDING status
     const transaction = await prisma.transaction.create({
       data: {
         userId,
         type: 'BUY',
         amount: totalAmount,
         currency: 'GBP',
-        status: 'COMPLETED',
-        description: `Buy £${input.amount} of ${marketplaceInvestment.name}`,
+        status: 'PENDING', // Transaction pending until investment is approved
+        description: `Buy £${input.amount} of ${marketplaceInvestment.name} (Pending Approval)`,
         investmentId: userInvestment.id,
         transactionDate: new Date(),
       },
     });
 
-    // Update portfolio totals
-    await this.updatePortfolioTotals(input.portfolioId);
+    // Do NOT update portfolio totals - only update when investment is approved
+    // Portfolio totals will be updated in approveInvestment() method
 
-    // Send purchase confirmation email
-    try {
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { email: true, firstName: true },
-      });
+    // Send purchase confirmation email asynchronously (non-blocking)
+    // This ensures the response is sent immediately and email is sent in background
+    void (async () => {
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { email: true, firstName: true },
+        });
 
-      if (user?.email) {
-        // Check if investment purchase emails are enabled
-        const shouldSend = await emailSettingsService.shouldSendNotification(
-          userId,
-          'investmentPurchase'
-        );
-        if (shouldSend) {
-          await emailService
-            .sendInvestmentPurchaseConfirmationEmail(
-              user.email,
-              user.firstName,
-              marketplaceInvestment.name,
-              quantity.toNumber(),
-              typeof marketplaceInvestment.currentPrice === 'number'
-                ? marketplaceInvestment.currentPrice
-                : marketplaceInvestment.currentPrice.toNumber(),
-              totalAmount.toNumber(),
-              marketplaceInvestment.currency
-            )
-            .then(() => {
-              console.warn(
-                `Investment purchase confirmation email sent successfully to ${user.email}`
-              );
-            })
-            .catch((error) => {
-              console.error('Failed to send purchase confirmation email:', error);
-            });
-        } else {
-          console.warn(
-            `Investment purchase confirmation email skipped for ${user.email} (disabled in settings)`
+        if (user?.email) {
+          // Check if investment purchase emails are enabled
+          const shouldSend = await emailSettingsService.shouldSendNotification(
+            userId,
+            'investmentPurchase'
           );
+          if (shouldSend) {
+            await emailService
+              .sendInvestmentPurchaseConfirmationEmail(
+                user.email,
+                user.firstName,
+                marketplaceInvestment.name,
+                quantity.toNumber(),
+                typeof marketplaceInvestment.currentPrice === 'number'
+                  ? marketplaceInvestment.currentPrice
+                  : marketplaceInvestment.currentPrice.toNumber(),
+                totalAmount.toNumber(),
+                marketplaceInvestment.currency
+              )
+              .then(() => {
+                console.warn(
+                  `Investment purchase confirmation email sent successfully to ${user.email}`
+                );
+              })
+              .catch((error) => {
+                console.error('Failed to send purchase confirmation email:', error);
+              });
+          } else {
+            console.warn(
+              `Investment purchase confirmation email skipped for ${user.email} (disabled in settings)`
+            );
+          }
         }
+      } catch (error) {
+        console.error('Failed to send purchase confirmation email:', error);
+        // Don't throw - email failure shouldn't break the purchase
       }
-    } catch (error) {
-      console.error('Failed to send purchase confirmation email:', error);
-      // Don't throw - email failure shouldn't break the purchase
-    }
+    })();
 
     return {
       transaction,
@@ -627,8 +631,11 @@ export class MarketplaceService {
 
   /**
    * Update portfolio totals
+   * Note: This method is no longer used as portfolio totals are updated in the admin service
+   * It is kept here for reference/future use
    */
-  private async updatePortfolioTotals(portfolioId: string): Promise<void> {
+  /*
+  private async _updatePortfolioTotals(portfolioId: string): Promise<void> {
     const investments = await prisma.investment.findMany({
       where: { portfolioId },
     });
@@ -798,7 +805,7 @@ export class MarketplaceService {
         type: input.type,
         symbol: input.symbol,
         description: input.description,
-        currentPrice: new Decimal(input.currentPrice),
+        currentPrice: input.currentPrice ? new Decimal(input.currentPrice) : new Decimal(0),
         minimumInvestment: new Decimal(input.minimumInvestment),
         maximumInvestment: input.maximumInvestment ? new Decimal(input.maximumInvestment) : null,
         currency: input.currency ?? 'GBP',

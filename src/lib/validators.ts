@@ -181,7 +181,7 @@ export const createMarketplaceItemSchema = z.object({
   type: z.enum(['STOCK', 'BOND', 'TERM_DEPOSIT', 'MUTUAL_FUND', 'OTHER']),
   symbol: z.string().optional(),
   description: z.string().optional(),
-  currentPrice: z.coerce.number().positive('Current price must be positive'),
+  currentPrice: z.coerce.number().positive('Current price must be positive').optional(),
   minimumInvestment: z.coerce.number().positive('Minimum investment must be positive'),
   maximumInvestment: z
     .preprocess(

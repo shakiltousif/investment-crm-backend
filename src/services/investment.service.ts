@@ -50,8 +50,24 @@ export class InvestmentService {
     return investment;
   }
 
-  async getInvestments(userId: string, portfolioId?: string): Promise<Array<unknown>> {
-    const where: Record<string, unknown> = { userId };
+  async getInvestments(
+    userId: string,
+    portfolioId?: string,
+    status?: string
+  ): Promise<Array<unknown>> {
+    const where: Record<string, unknown> = {
+      userId,
+    };
+
+    // If status is specified and not "ALL", filter by it; otherwise default to ACTIVE for backward compatibility
+    if (status && status !== 'ALL') {
+      where.status = status;
+    } else if (!status) {
+      // Default to showing only ACTIVE investments if no status filter is provided
+      where.status = 'ACTIVE';
+    }
+    // If status is "ALL", don't add status filter - show all investments
+
     if (portfolioId) {
       where.portfolioId = portfolioId;
     }
@@ -59,9 +75,33 @@ export class InvestmentService {
     const investments = await prisma.investment.findMany({
       where,
       orderBy: { createdAt: 'desc' },
+      include: {
+        portfolio: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
     });
 
-    return investments;
+    // Convert all Decimal fields to numbers for proper JSON serialization
+    return investments.map((investment) => ({
+      ...investment,
+      quantity: Number(investment.quantity),
+      purchasePrice: Number(investment.purchasePrice),
+      currentPrice: Number(investment.currentPrice),
+      totalValue: Number(investment.totalValue),
+      totalInvested: Number(investment.quantity) * Number(investment.purchasePrice),
+      totalGain: Number(investment.totalGain),
+      gainPercentage: Number(investment.gainPercentage),
+      interestRate: investment.interestRate ? Number(investment.interestRate) : null,
+      portfolioName: investment.portfolio?.name || '',
+      purchaseDate: investment.purchaseDate,
+      maturityDate: investment.maturityDate,
+      createdAt: investment.createdAt,
+      updatedAt: investment.updatedAt,
+    }));
   }
 
   async getInvestmentById(
@@ -335,7 +375,38 @@ export class InvestmentService {
     }
   }
 
-  private async updatePortfolioTotals(portfolioId: string): Promise<void> {
+  /**
+   * Calculate fixed-rate interest accrual for a single investment
+   * Returns the new current price with accrued interest
+   */
+  calculateFixedRateInterest(
+    purchasePrice: Decimal,
+    interestRate: Decimal,
+    purchaseDate: Date,
+    currentDate: Date = new Date()
+  ): Decimal {
+    // Calculate days held
+    const daysHeld = Math.floor(
+      (currentDate.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    if (daysHeld < 0) {
+      // Purchase date is in the future, return purchase price
+      return purchasePrice;
+    }
+
+    // Calculate accrued interest: principal * (interestRate / 100 / 365) * daysHeld
+    const accruedInterest = purchasePrice
+      .times(interestRate)
+      .dividedBy(100)
+      .dividedBy(365)
+      .times(daysHeld);
+
+    // Return current price (purchase price + accrued interest)
+    return purchasePrice.plus(accruedInterest);
+  }
+
+  async updatePortfolioTotals(portfolioId: string): Promise<void> {
     const investments = await prisma.investment.findMany({
       where: { portfolioId },
     });

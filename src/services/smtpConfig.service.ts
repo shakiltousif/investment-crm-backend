@@ -22,6 +22,7 @@ export interface SMTPConfigData {
   user: string;
   password?: string; // Optional for testing (can use saved password)
   from?: string;
+  senderName?: string;
   isActive?: boolean;
   testEmail?: string;
 }
@@ -33,6 +34,7 @@ export interface SMTPConfigResponse {
   secure: boolean;
   user: string;
   from?: string;
+  senderName?: string;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -61,6 +63,7 @@ export class SMTPConfigService {
       secure: boolean;
       user: string;
       from: string | null;
+      senderName: string | null;
       isActive: boolean;
       createdAt: Date;
       updatedAt: Date;
@@ -72,6 +75,7 @@ export class SMTPConfigService {
       secure: configData.secure,
       user: configData.user,
       from: configData.from ?? undefined,
+      senderName: configData.senderName ?? undefined,
       isActive: configData.isActive,
       createdAt: configData.createdAt,
       updatedAt: configData.updatedAt,
@@ -90,6 +94,7 @@ export class SMTPConfigService {
       pass: string;
     };
     from?: string;
+    senderName?: string;
   } | null> {
     const config = (await prismaClient.sMTPConfiguration.findFirst({
       where: { isActive: true },
@@ -111,6 +116,7 @@ export class SMTPConfigService {
       secure: boolean;
       user: string;
       from: string | null;
+      senderName: string | null;
     };
     const decryptedPassword = this.decryptPassword(configData.password);
 
@@ -123,6 +129,7 @@ export class SMTPConfigService {
         pass: decryptedPassword,
       },
       from: configData.from ?? configData.user,
+      senderName: configData.senderName ?? 'Fidelity Investment Portal',
     };
   }
 
@@ -152,6 +159,7 @@ export class SMTPConfigService {
         user: data.user,
         password: encryptedPassword,
         from: data.from,
+        senderName: data.senderName ?? 'Fidelity Investment Portal',
         isActive: data.isActive ?? true,
       },
     })) as Record<string, unknown>;
@@ -163,6 +171,7 @@ export class SMTPConfigService {
       secure: boolean;
       user: string;
       from: string | null;
+      senderName: string | null;
       isActive: boolean;
       createdAt: Date;
       updatedAt: Date;
@@ -174,6 +183,7 @@ export class SMTPConfigService {
       secure: configData.secure,
       user: configData.user,
       from: configData.from ?? undefined,
+      senderName: configData.senderName ?? undefined,
       isActive: configData.isActive,
       createdAt: configData.createdAt,
       updatedAt: configData.updatedAt,
@@ -223,10 +233,12 @@ export class SMTPConfigService {
       if (data.testEmail) {
         try {
           const fromAddress = data.from ?? data.user;
+          const senderName = data.senderName ?? 'Fidelity Investment Portal';
+          const fromHeader = senderName ? `"${senderName}" <${fromAddress}>` : fromAddress;
 
           // Send email with a timeout to prevent hanging
           const sendPromise = transporter.sendMail({
-            from: fromAddress,
+            from: fromHeader,
             to: data.testEmail,
             subject: 'SMTP Configuration Test Email',
             html: `

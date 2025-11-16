@@ -36,6 +36,7 @@ import notificationRoutes from './routes/notification.routes.js';
 import notificationSettingsRoutes from './routes/notificationSettings.routes.js';
 import problemReportRoutes from './routes/problemReport.routes.js';
 import smtpConfigRoutes from './routes/smtpConfig.routes.js';
+import emailTemplateRoutes from './routes/emailTemplate.routes.js';
 
 // Load environment variables
 dotenv.config();
@@ -151,6 +152,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/notification-settings', notificationSettingsRoutes);
 app.use('/api/smtp-config', smtpConfigRoutes);
 app.use('/api/problem-reports', problemReportRoutes);
+app.use('/api/admin/email-templates', emailTemplateRoutes);
 
 // 404 handler
 app.use((_req: Request, res: Response) => {
@@ -215,6 +217,23 @@ if (NODE_ENV !== 'test' && !process.env.VITEST) {
       httpServer.listen(PORT, () => {
         logger.info(`Server running on port ${PORT} in ${NODE_ENV} mode`);
         logger.info(`API URL: ${process.env.API_URL ?? `http://localhost:${PORT}`}`);
+
+        // Initialize scheduled jobs if enabled
+        if (process.env.ENABLE_SCHEDULED_JOBS === 'true' || NODE_ENV === 'production') {
+          void (async (): Promise<void> => {
+            try {
+              const { initializeInvestmentCalculationJob } = await import(
+                './jobs/investmentCalculation.job.js'
+              );
+              initializeInvestmentCalculationJob();
+              logger.info('Scheduled jobs initialized');
+            } catch (error) {
+              logger.error('Failed to initialize scheduled jobs:', error);
+            }
+          })();
+        } else {
+          logger.info('Scheduled jobs are disabled (set ENABLE_SCHEDULED_JOBS=true to enable)');
+        }
       });
     } catch (error) {
       logger.error('Failed to perform health checks:', error);

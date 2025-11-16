@@ -57,21 +57,35 @@ export class PortfolioService {
       const portfolios = await prisma.portfolio.findMany({
         where: { userId },
         include: {
-          investments: true,
+          investments: {
+            where: {
+              status: 'ACTIVE', // Only include ACTIVE investments
+            },
+          },
         },
       });
 
+      // Use stored values from database (more accurate, especially for fixed-rate investments)
+      // Fallback to manual calculation if stored values are missing
       const totalValue = portfolios.reduce((sum, portfolio) => {
+        // Use portfolio.totalValue if available, otherwise calculate from investments
+        if (portfolio.totalValue && Number(portfolio.totalValue) > 0) {
+          return sum + Number(portfolio.totalValue);
+        }
+        // Fallback: calculate from investments
         const portfolioValue = portfolio.investments.reduce((pSum, investment) => {
-          const price = Number(investment.currentPrice) || 0;
-          const qty = Number(investment.quantity) || 0;
-          return pSum + price * qty;
+          // Use stored totalValue if available, otherwise calculate
+          const value = investment.totalValue
+            ? Number(investment.totalValue)
+            : Number(investment.currentPrice || 0) * Number(investment.quantity || 0);
+          return pSum + value;
         }, 0);
         return sum + portfolioValue;
       }, 0);
 
       const totalInvested = portfolios.reduce((sum, portfolio) => {
         const portfolioInvested = portfolio.investments.reduce((pSum, investment) => {
+          // Calculate invested amount from purchase price
           const price = Number(investment.purchasePrice) || 0;
           const qty = Number(investment.quantity) || 0;
           return pSum + price * qty;
@@ -79,7 +93,23 @@ export class PortfolioService {
         return sum + portfolioInvested;
       }, 0);
 
-      const totalGain = totalValue - totalInvested;
+      // Calculate total gain using stored values or fallback to calculation
+      const totalGain = portfolios.reduce((sum, portfolio) => {
+        // Use portfolio.totalGain if available, otherwise calculate from investments
+        if (portfolio.totalGain !== null && portfolio.totalGain !== undefined) {
+          return sum + Number(portfolio.totalGain);
+        }
+        // Fallback: calculate from investments
+        const portfolioGain = portfolio.investments.reduce((pSum, investment) => {
+          // Use stored totalGain if available, otherwise calculate
+          const gain = investment.totalGain
+            ? Number(investment.totalGain)
+            : (Number(investment.currentPrice || 0) - Number(investment.purchasePrice || 0)) * Number(investment.quantity || 0);
+          return pSum + gain;
+        }, 0);
+        return sum + portfolioGain;
+      }, 0);
+
       const gainPercentage = totalInvested > 0 ? (totalGain / totalInvested) * 100 : 0;
 
       return {
@@ -88,26 +118,43 @@ export class PortfolioService {
         totalInvested,
         totalGain,
         gainPercentage,
-        portfolios: portfolios.map((portfolio) => ({
-          id: portfolio.id,
-          name: portfolio.name,
-          value: portfolio.investments.reduce((sum, inv) => {
-            const price = Number(inv.currentPrice) || 0;
-            const qty = Number(inv.quantity) || 0;
-            return sum + price * qty;
-          }, 0),
-          invested: portfolio.investments.reduce((sum, inv) => {
+        portfolios: portfolios.map((portfolio) => {
+          // Filter to only ACTIVE investments
+          const activeInvestments = portfolio.investments.filter((inv) => inv.status === 'ACTIVE');
+          
+          // Use stored portfolio values if available, otherwise calculate from investments
+          const portfolioValue = portfolio.totalValue && Number(portfolio.totalValue) > 0
+            ? Number(portfolio.totalValue)
+            : activeInvestments.reduce((sum, inv) => {
+                const value = inv.totalValue
+                  ? Number(inv.totalValue)
+                  : Number(inv.currentPrice || 0) * Number(inv.quantity || 0);
+                return sum + value;
+              }, 0);
+          
+          const portfolioInvested = activeInvestments.reduce((sum, inv) => {
             const price = Number(inv.purchasePrice) || 0;
             const qty = Number(inv.quantity) || 0;
             return sum + price * qty;
-          }, 0),
-          gain: portfolio.investments.reduce((sum, inv) => {
-            const currentPrice = Number(inv.currentPrice) || 0;
-            const purchasePrice = Number(inv.purchasePrice) || 0;
-            const qty = Number(inv.quantity) || 0;
-            return sum + (currentPrice - purchasePrice) * qty;
-          }, 0),
-        })),
+          }, 0);
+          
+          const portfolioGain = portfolio.totalGain !== null && portfolio.totalGain !== undefined
+            ? Number(portfolio.totalGain)
+            : activeInvestments.reduce((sum, inv) => {
+                const gain = inv.totalGain
+                  ? Number(inv.totalGain)
+                  : (Number(inv.currentPrice || 0) - Number(inv.purchasePrice || 0)) * Number(inv.quantity || 0);
+                return sum + gain;
+              }, 0);
+          
+          return {
+            id: portfolio.id,
+            name: portfolio.name,
+            value: portfolioValue,
+            invested: portfolioInvested,
+            gain: portfolioGain,
+          };
+        }),
       };
     } catch (error: unknown) {
       // Check if it's a database connection error
@@ -230,25 +277,34 @@ export class PortfolioService {
       percentage: Decimal;
     }>;
   }> {
-    const portfolio = await this.getPortfolioById(userId, portfolioId);
+    await this.getPortfolioById(userId, portfolioId);
 
+    // Only get ACTIVE investments
     const investments = await prisma.investment.findMany({
-      where: { portfolioId },
+      where: {
+        portfolioId,
+        status: 'ACTIVE', // Only include ACTIVE investments
+      },
     });
+
+    // Calculate total value from ACTIVE investments only
+    const activeTotalValue = investments.reduce((sum, inv) => {
+      return sum.plus(inv.totalValue);
+    }, new Decimal(0));
 
     const allocation = investments.map((inv) => ({
       id: inv.id,
       name: inv.name,
       type: inv.type,
       value: inv.totalValue,
-      percentage: portfolio.totalValue.isZero()
+      percentage: activeTotalValue.isZero()
         ? new Decimal(0)
-        : inv.totalValue.dividedBy(portfolio.totalValue).times(100),
+        : inv.totalValue.dividedBy(activeTotalValue).times(100),
     }));
 
     return {
       portfolioId,
-      totalValue: portfolio.totalValue,
+      totalValue: activeTotalValue, // Use calculated total from ACTIVE investments
       allocation,
     };
   }

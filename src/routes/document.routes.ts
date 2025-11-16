@@ -146,6 +146,49 @@ router.get('/statements', authenticate, async (req: AuthRequest, res: Response) 
 });
 
 /**
+ * POST /api/documents/statements/upload
+ * Upload statement (client uploads their own statement)
+ * NOTE: Must be defined BEFORE /statements/:id routes to avoid route conflicts
+ */
+router.post(
+  '/statements/upload',
+  authenticate,
+  upload.single('file'),
+  async (req: AuthRequest, res: Response): Promise<Response | void> => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      const schema = z.object({
+        period: z.string().min(1, 'Period is required'),
+        description: z.string().optional(),
+      });
+
+      const validatedData = schema.parse(req.body);
+
+      // Client uploads for themselves - use authenticated user's ID
+      const statement = await documentService.uploadStatement(req.userId!, {
+        userId: req.userId!, // Client uploads for themselves
+        period: validatedData.period,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        description: validatedData.description,
+        fileBuffer: req.file.buffer,
+      });
+
+      res.status(201).json({
+        message: 'Statement uploaded successfully',
+        data: statement,
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+);
+
+/**
  * GET /api/documents/statements/:id/download
  * Download statement file
  * NOTE: Must be defined BEFORE /statements/:id route to avoid route conflicts
@@ -199,6 +242,40 @@ router.get(
       return res.status(200).json({
         message: 'Statement retrieved successfully',
         data: statementWithFullUrl,
+      });
+    } catch (error) {
+      throw error;
+    }
+  }
+);
+
+/**
+ * PUT /api/documents/statements/:id/status
+ * Update statement status (admin only)
+ * NOTE: Must be defined BEFORE /statements/:id route to avoid route conflicts
+ */
+router.put(
+  '/statements/:id/status',
+  authenticate,
+  requireAdmin,
+  async (req: AuthRequest, res: Response): Promise<Response | void> => {
+    try {
+      const schema = z.object({
+        status: z.enum(['PENDING', 'VERIFIED', 'REJECTED', 'EXPIRED']),
+        reason: z.string().optional(),
+      });
+
+      const validatedData = schema.parse(req.body);
+
+      const statement = await documentService.updateStatementStatus(
+        req.params.id,
+        validatedData.status,
+        validatedData.reason
+      );
+
+      res.status(200).json({
+        message: 'Statement status updated successfully',
+        data: statement,
       });
     } catch (error) {
       throw error;

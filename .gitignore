@@ -144,9 +144,24 @@ tmp/
 temp/
 
 # Uploaded files (ignore all files but keep directory structure)
-uploads/*
+uploads/**/*
 !uploads/.gitkeep
-!uploads/documents/
+!uploads/**/.gitkeep
 !uploads/documents/.gitkeep
-!uploads/statements/
 !uploads/statements/.gitkeep
+!uploads/problem-reports/.gitkeep
+!uploads/profile-pictures/.gitkeep
+
+# Specifically ignore PDF files in upload directories
+uploads/**/*.pdf
+uploads/**/*.PDF
+
+# Ignore other common uploaded file types
+uploads/**/*.jpg
+uploads/**/*.jpeg
+uploads/**/*.png
+uploads/**/*.gif
+uploads/**/*.doc
+uploads/**/*.docx
+uploads/**/*.xls
+uploads/**/*.xlsx

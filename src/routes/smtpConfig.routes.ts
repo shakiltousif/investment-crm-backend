@@ -33,7 +33,15 @@ router.put('/', authenticate, requireAdmin, async (req: AuthRequest, res: Respon
       secure: z.boolean().optional(),
       user: z.string().email('Invalid email address'),
       password: z.string().min(1, 'Password is required'),
-      from: z.string().email('Invalid from email address').optional(),
+      from: z
+        .union([
+          z.string().email('Invalid from email address'),
+          z.literal(''),
+          z.undefined(),
+        ])
+        .optional()
+        .transform((val) => (val === '' ? undefined : val)),
+      senderName: z.string().optional(),
       isActive: z.boolean().optional(),
     });
 
@@ -67,7 +75,15 @@ router.post('/test', authenticate, requireAdmin, async (req: AuthRequest, res: R
       secure: z.boolean().optional(),
       user: z.string().email('Invalid email address'),
       password: z.string().optional(), // Optional if using existing saved config
-      from: z.string().email('Invalid from email address').optional(),
+      from: z
+        .union([
+          z.string().email('Invalid from email address'),
+          z.literal(''),
+          z.undefined(),
+        ])
+        .optional()
+        .transform((val) => (val === '' ? undefined : val)),
+      senderName: z.string().optional(),
       testEmail: z.string().email('Invalid test email address').optional(),
     });
 

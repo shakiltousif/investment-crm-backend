@@ -551,6 +551,66 @@ router.delete(
 );
 
 /**
+ * POST /api/admin/investments/:id/approve
+ * Approve pending investment
+ */
+router.post('/investments/:id/approve', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await adminService.approveInvestment(req.params.id, req.userId!);
+    res.status(200).json({
+      message: 'Investment approved successfully',
+      data: result,
+    });
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
+ * POST /api/admin/investments/:id/reject
+ * Reject pending investment
+ */
+router.post('/investments/:id/reject', async (req: AuthRequest, res: Response) => {
+  try {
+    const schema = z.object({
+      reason: z.string().optional(),
+    });
+
+    const { reason } = schema.parse(req.body);
+    const result = await adminService.rejectInvestment(req.params.id, req.userId!, reason);
+    res.status(200).json({
+      message: 'Investment rejected successfully',
+      data: result,
+    });
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
+ * GET /api/admin/investments/pending
+ * Get all pending investments
+ */
+router.get('/investments/pending', async (req: AuthRequest, res: Response) => {
+  try {
+    const filters = {
+      status: 'PENDING',
+      userId: req.query.userId as string | undefined,
+      limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
+      offset: req.query.offset ? parseInt(req.query.offset as string) : undefined,
+    };
+
+    const result = await adminService.getAllInvestments(filters);
+    res.status(200).json({
+      message: 'Pending investments retrieved successfully',
+      data: result,
+    });
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
  * POST /api/admin/users/:userId/portfolios/:portfolioId/adjust
  * Adjust portfolio totals (manual or auto-calculate)
  */
@@ -716,9 +776,10 @@ router.post('/marketplace/items', async (req: AuthRequest, res: Response) => {
   try {
     const { createMarketplaceItemSchema } = await import('../lib/validators.js');
     const validatedData = createMarketplaceItemSchema.parse(req.body);
-    // Convert null to undefined for maximumInvestment and maturityDate
+    // Convert null/undefined to proper values for maximumInvestment, maturityDate, and currentPrice
     const dataToSend = {
       ...validatedData,
+      currentPrice: validatedData.currentPrice ?? 0, // Default to 0 if not provided
       maximumInvestment:
         validatedData.maximumInvestment === null ? undefined : validatedData.maximumInvestment,
       maturityDate: validatedData.maturityDate === null ? undefined : validatedData.maturityDate,
@@ -906,6 +967,51 @@ router.delete('/documents/:id', async (req: AuthRequest, res: Response) => {
     const result = await adminService.deleteDocument(req.params.id);
     res.status(200).json({
       message: 'Document deleted successfully',
+      data: result,
+    });
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
+ * GET /api/admin/statements
+ * Get all statements with filters and pagination
+ */
+router.get('/statements', async (req: AuthRequest, res: Response) => {
+  try {
+    const filters = {
+      userId: req.query.userId as string | undefined,
+      period: req.query.period as string | undefined,
+      status: req.query.status as string | undefined,
+      limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
+      offset: req.query.offset ? parseInt(req.query.offset as string) : undefined,
+    };
+
+    const { documentService } = await import('../services/document.service.js');
+    const result = await documentService.getAllStatements(filters);
+    res.status(200).json({
+      message: 'Statements retrieved successfully',
+      data: result,
+    });
+  } catch (error) {
+    throw error;
+  }
+});
+
+/**
+ * PUT /api/admin/statements/:id/status
+ * Update statement status with notifications
+ */
+router.put('/statements/:id/status', async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await adminService.updateStatementStatus(
+      req.params.id,
+      req.body.status,
+      req.body.reason
+    );
+    res.status(200).json({
+      message: 'Statement status updated successfully',
       data: result,
     });
   } catch (error) {

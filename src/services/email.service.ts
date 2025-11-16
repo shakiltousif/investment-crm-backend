@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { smtpConfigService } from './smtpConfig.service.js';
+import { emailTemplateService } from './emailTemplate.service.js';
 
 interface EmailOptions {
   to: string;
@@ -16,6 +17,7 @@ interface SMTPConfigCache {
     user: string;
     password?: string;
     from?: string;
+    senderName?: string;
   };
   timestamp: number;
 }
@@ -63,6 +65,7 @@ export class EmailService {
             user: dbConfig.auth.user,
             password: dbConfig.auth.pass,
             from: dbConfig.from,
+            senderName: dbConfig.senderName,
           },
           timestamp: Date.now(),
         };
@@ -103,11 +106,17 @@ export class EmailService {
   private async getFromAddress(): Promise<string> {
     await this.refreshTransporterIfNeeded();
 
-    if (this.configCache?.config?.from) {
-      return this.configCache.config.from;
+    const config = this.configCache?.config;
+    if (config) {
+      const fromAddress =
+        config.from ?? process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'noreply@example.com';
+      const senderName = config.senderName ?? 'Fidelity Investment Portal';
+      return `"${senderName}" <${fromAddress}>`;
     }
 
-    return process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'noreply@example.com';
+    const fromAddress = process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'noreply@example.com';
+    const senderName = 'Fidelity Investment Portal';
+    return `"${senderName}" <${fromAddress}>`;
   }
 
   /**
@@ -160,39 +169,19 @@ export class EmailService {
   async sendPasswordResetEmail(email: string, resetToken: string): Promise<void> {
     const resetUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/reset-password?token=${resetToken}`;
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .button { display: inline-block; padding: 12px 24px; background-color: #4F46E5; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Password Reset Request</h2>
-            <p>You requested to reset your password for your FIL LIMITED account.</p>
-            <p>Click the button below to reset your password:</p>
-            <a href="${resetUrl}" class="button">Reset Password</a>
-            <p>Or copy and paste this link into your browser:</p>
-            <p>${resetUrl}</p>
-            <p>This link will expire in 1 hour.</p>
-            <p>If you didn't request this, please ignore this email.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const template = await emailTemplateService.getTemplate('PASSWORD_RESET');
+    if (!template) {
+      throw new Error('Password reset email template not found');
+    }
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      resetUrl,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'Password Reset Request - FIL LIMITED',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -205,40 +194,33 @@ export class EmailService {
     currency: string,
     status: string
   ): Promise<void> {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .status { padding: 10px; border-radius: 5px; margin: 20px 0; }
-            .status.pending { background-color: #FEF3C7; color: #92400E; }
-            .status.completed { background-color: #D1FAE5; color: #065F46; }
-            .status.rejected { background-color: #FEE2E2; color: #991B1B; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Deposit Request ${status === 'COMPLETED' ? 'Approved' : status === 'REJECTED' ? 'Rejected' : 'Submitted'}</h2>
-            <p>Your deposit request has been ${status.toLowerCase()}.</p>
-            <div class="status ${status.toLowerCase()}">
-              <strong>Amount:</strong> ${currency} ${amount.toLocaleString()}<br>
-              <strong>Status:</strong> ${status}
-            </div>
-            <p>${status === 'PENDING' ? 'We are processing your deposit request. You will receive another email once it is approved.' : status === 'COMPLETED' ? 'Your deposit has been successfully processed and added to your account.' : 'Your deposit request was rejected. Please contact support for more information.'}</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const template = await emailTemplateService.getTemplate('DEPOSIT_NOTIFICATION');
+    if (!template) {
+      throw new Error('Deposit notification email template not found');
+    }
+
+    const statusText = status === 'COMPLETED' ? 'Approved' : status === 'REJECTED' ? 'Rejected' : 'Submitted';
+    const statusClass = status.toLowerCase();
+    const statusMessage =
+      status === 'PENDING'
+        ? 'We are processing your deposit request. You will receive another email once it is approved.'
+        : status === 'COMPLETED'
+          ? 'Your deposit has been successfully processed and added to your account.'
+          : 'Your deposit request was rejected. Please contact support for more information.';
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      status,
+      statusText,
+      statusClass,
+      statusMessage,
+      amount: amount.toLocaleString(),
+      currency,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: `Deposit Request ${status} - FIL LIMITED`,
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -251,40 +233,33 @@ export class EmailService {
     currency: string,
     status: string
   ): Promise<void> {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .status { padding: 10px; border-radius: 5px; margin: 20px 0; }
-            .status.pending { background-color: #FEF3C7; color: #92400E; }
-            .status.completed { background-color: #D1FAE5; color: #065F46; }
-            .status.rejected { background-color: #FEE2E2; color: #991B1B; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Withdrawal Request ${status === 'COMPLETED' ? 'Approved' : status === 'REJECTED' ? 'Rejected' : 'Submitted'}</h2>
-            <p>Your withdrawal request has been ${status.toLowerCase()}.</p>
-            <div class="status ${status.toLowerCase()}">
-              <strong>Amount:</strong> ${currency} ${amount.toLocaleString()}<br>
-              <strong>Status:</strong> ${status}
-            </div>
-            <p>${status === 'PENDING' ? 'We are processing your withdrawal request. You will receive another email once it is approved.' : status === 'COMPLETED' ? 'Your withdrawal has been successfully processed and will be transferred to your bank account.' : 'Your withdrawal request was rejected. Please contact support for more information.'}</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const template = await emailTemplateService.getTemplate('WITHDRAWAL_NOTIFICATION');
+    if (!template) {
+      throw new Error('Withdrawal notification email template not found');
+    }
+
+    const statusText = status === 'COMPLETED' ? 'Approved' : status === 'REJECTED' ? 'Rejected' : 'Submitted';
+    const statusClass = status.toLowerCase();
+    const statusMessage =
+      status === 'PENDING'
+        ? 'We are processing your withdrawal request. You will receive another email once it is approved.'
+        : status === 'COMPLETED'
+          ? 'Your withdrawal has been successfully processed and will be transferred to your bank account.'
+          : 'Your withdrawal request was rejected. Please contact support for more information.';
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      status,
+      statusText,
+      statusClass,
+      statusMessage,
+      amount: amount.toLocaleString(),
+      currency,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: `Withdrawal Request ${status} - FIL LIMITED`,
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -292,40 +267,19 @@ export class EmailService {
    * Send welcome email
    */
   async sendWelcomeEmail(email: string, firstName: string): Promise<void> {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Welcome to FIL LIMITED, ${firstName}!</h2>
-            <p>Thank you for joining our investment management platform.</p>
-            <p>You can now:</p>
-            <ul>
-              <li>View your portfolio and investments</li>
-              <li>Make deposits and withdrawals</li>
-              <li>Browse available investment opportunities</li>
-              <li>Upload documents and view statements</li>
-            </ul>
-            <p>If you have any questions, please don't hesitate to contact our support team.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const template = await emailTemplateService.getTemplate('WELCOME_EMAIL');
+    if (!template) {
+      throw new Error('Welcome email template not found');
+    }
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'Welcome to FIL LIMITED',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -338,42 +292,28 @@ export class EmailService {
     password: string,
     isTemporaryPassword: boolean = false
   ): Promise<void> {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .credentials { background-color: #F3F4F6; padding: 15px; border-radius: 5px; margin: 20px 0; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-            .warning { background-color: #FEF3C7; padding: 10px; border-radius: 5px; margin: 20px 0; color: #92400E; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Your FIL LIMITED Account Has Been Created</h2>
-            <p>Hello ${firstName},</p>
-            <p>Your account has been created by an administrator. You can now access your account using the credentials below:</p>
-            <div class="credentials">
-              <p><strong>Email:</strong> ${email}</p>
-              <p><strong>Password:</strong> ${password}</p>
-            </div>
-            ${isTemporaryPassword ? '<div class="warning"><p><strong>Important:</strong> This is a temporary password. Please change it after your first login.</p></div>' : ''}
-            <p>You can log in at: <a href="${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/login">${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/login</a></p>
-            <p>If you have any questions, please contact our support team.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const template = await emailTemplateService.getTemplate('ACCOUNT_CREATED');
+    if (!template) {
+      throw new Error('Account created email template not found');
+    }
+
+    const loginUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/login`;
+    const temporaryPasswordWarning = isTemporaryPassword
+      ? '<div class="warning"><p><strong>Important:</strong> This is a temporary password. Please change it after your first login.</p></div>'
+      : '';
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      email,
+      password,
+      temporaryPasswordWarning,
+      loginUrl,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'Your FIL LIMITED Account Has Been Created',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -381,40 +321,22 @@ export class EmailService {
    * Send account locked email
    */
   async sendAccountLockedEmail(email: string, firstName: string, lockUntil?: Date): Promise<void> {
+    const template = await emailTemplateService.getTemplate('ACCOUNT_LOCKED');
+    if (!template) {
+      throw new Error('Account locked email template not found');
+    }
+
     const lockUntilText = lockUntil ? ` until ${lockUntil.toLocaleString()}` : '';
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .warning { background-color: #FEE2E2; padding: 15px; border-radius: 5px; margin: 20px 0; color: #991B1B; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Account Security Alert</h2>
-            <p>Hello ${firstName},</p>
-            <div class="warning">
-              <p><strong>Your account has been temporarily locked${lockUntilText}.</strong></p>
-            </div>
-            <p>This action was taken due to multiple failed login attempts. This is a security measure to protect your account.</p>
-            <p>If this was not you, please contact our support team immediately.</p>
-            <p>If you forgot your password, you can reset it using the "Forgot Password" link on the login page.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      lockUntilText,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'Account Security Alert - FIL LIMITED',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -422,37 +344,19 @@ export class EmailService {
    * Send account unlocked email
    */
   async sendAccountUnlockedEmail(email: string, firstName: string): Promise<void> {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .success { background-color: #D1FAE5; padding: 15px; border-radius: 5px; margin: 20px 0; color: #065F46; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Account Unlocked</h2>
-            <p>Hello ${firstName},</p>
-            <div class="success">
-              <p><strong>Your account has been unlocked.</strong></p>
-            </div>
-            <p>You can now log in to your account again. If you continue to experience issues, please contact our support team.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const template = await emailTemplateService.getTemplate('ACCOUNT_UNLOCKED');
+    if (!template) {
+      throw new Error('Account unlocked email template not found');
+    }
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'Account Unlocked - FIL LIMITED',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -465,12 +369,18 @@ export class EmailService {
     status: 'VERIFIED' | 'REJECTED' | 'EXPIRED',
     reason?: string
   ): Promise<void> {
-    const statusMessages: Record<string, { title: string; message: string; color: string }> = {
+    const template = await emailTemplateService.getTemplate('KYC_STATUS_CHANGE');
+    if (!template) {
+      throw new Error('KYC status change email template not found');
+    }
+
+    const statusMessages: Record<string, { title: string; message: string; color: string; bgColor: string }> = {
       VERIFIED: {
         title: 'KYC Verification Approved',
         message:
           'Your KYC verification has been approved. You now have full access to all platform features.',
         color: '#065F46',
+        bgColor: '#D1FAE5',
       },
       REJECTED: {
         title: 'KYC Verification Rejected',
@@ -478,49 +388,32 @@ export class EmailService {
           ? `Your KYC verification has been rejected. Reason: ${reason}. Please contact support for assistance.`
           : 'Your KYC verification has been rejected. Please contact support for assistance.',
         color: '#991B1B',
+        bgColor: '#FEE2E2',
       },
       EXPIRED: {
         title: 'KYC Verification Expired',
         message:
           'Your KYC verification has expired. Please submit updated documents to continue using the platform.',
         color: '#92400E',
+        bgColor: '#FEF3C7',
       },
     };
 
     const statusInfo = statusMessages[status] || statusMessages.REJECTED;
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .status { padding: 15px; border-radius: 5px; margin: 20px 0; background-color: ${status === 'VERIFIED' ? '#D1FAE5' : status === 'REJECTED' ? '#FEE2E2' : '#FEF3C7'}; color: ${statusInfo.color}; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>${statusInfo.title}</h2>
-            <p>Hello ${firstName},</p>
-            <div class="status">
-              <p><strong>Status:</strong> ${status}</p>
-              <p>${statusInfo.message}</p>
-            </div>
-            <p>If you have any questions, please contact our support team.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      status,
+      statusTitle: statusInfo.title,
+      statusMessage: statusInfo.message,
+      statusBgColor: statusInfo.bgColor,
+      statusColor: statusInfo.color,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: `${statusInfo.title} - FIL LIMITED`,
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -534,6 +427,11 @@ export class EmailService {
     status: 'VERIFIED' | 'REJECTED',
     reason?: string
   ): Promise<void> {
+    const template = await emailTemplateService.getTemplate('DOCUMENT_STATUS_CHANGE');
+    if (!template) {
+      throw new Error('Document status change email template not found');
+    }
+
     const statusInfo =
       status === 'VERIFIED'
         ? {
@@ -551,40 +449,36 @@ export class EmailService {
             bgColor: '#FEE2E2',
           };
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .status { padding: 15px; border-radius: 5px; margin: 20px 0; background-color: ${statusInfo.bgColor}; color: ${statusInfo.color}; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>${statusInfo.title}</h2>
-            <p>Hello ${firstName},</p>
-            <div class="status">
-              <p><strong>Document:</strong> ${documentName}</p>
-              <p><strong>Status:</strong> ${status}</p>
-              <p>${statusInfo.message}</p>
-            </div>
-            <p>If you have any questions, please contact our support team.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      documentName,
+      status,
+      statusTitle: statusInfo.title,
+      statusMessage: statusInfo.message,
+      statusBgColor: statusInfo.bgColor,
+      statusColor: statusInfo.color,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: `${statusInfo.title} - FIL LIMITED`,
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
+  }
+
+  /**
+   * Send statement status change email
+   * Reuses DOCUMENT_STATUS_CHANGE template
+   */
+  async sendStatementStatusChangeEmail(
+    email: string,
+    firstName: string,
+    statementName: string,
+    status: 'VERIFIED' | 'REJECTED',
+    reason?: string
+  ): Promise<void> {
+    // Reuse document status change email template
+    await this.sendDocumentStatusChangeEmail(email, firstName, statementName, status, reason);
   }
 
   /**
@@ -596,40 +490,21 @@ export class EmailService {
     documentName: string,
     documentType: string
   ): Promise<void> {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .info { background-color: #DBEAFE; padding: 15px; border-radius: 5px; margin: 20px 0; color: #1E40AF; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>New Document Available</h2>
-            <p>Hello ${firstName},</p>
-            <div class="info">
-              <p>A new document has been uploaded to your account:</p>
-              <p><strong>Document Name:</strong> ${documentName}</p>
-              <p><strong>Type:</strong> ${documentType}</p>
-            </div>
-            <p>You can view and download this document from your account dashboard.</p>
-            <p>If you have any questions, please contact our support team.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const template = await emailTemplateService.getTemplate('DOCUMENT_UPLOADED_BY_ADMIN');
+    if (!template) {
+      throw new Error('Document uploaded by admin email template not found');
+    }
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      documentName,
+      documentType,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'New Document Available - FIL LIMITED',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -644,42 +519,23 @@ export class EmailService {
     requestedAmount: number,
     currency: string
   ): Promise<void> {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .info { background-color: #FEF3C7; padding: 15px; border-radius: 5px; margin: 20px 0; color: #92400E; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Investment Enrollment Submitted</h2>
-            <p>Hello ${firstName},</p>
-            <p>Your investment enrollment has been successfully submitted.</p>
-            <div class="info">
-              <p><strong>Investment:</strong> ${investmentName}</p>
-              <p><strong>Reference Number:</strong> ${referenceNumber}</p>
-              <p><strong>Requested Amount:</strong> ${currency} ${requestedAmount.toLocaleString()}</p>
-              <p><strong>Status:</strong> PENDING</p>
-            </div>
-            <p>We will review your enrollment and notify you once a decision has been made.</p>
-            <p>If you have any questions, please contact our support team.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const template = await emailTemplateService.getTemplate('INVESTMENT_APPLICATION_SUBMITTED');
+    if (!template) {
+      throw new Error('Investment application submitted email template not found');
+    }
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      investmentName,
+      referenceNumber,
+      requestedAmount: requestedAmount.toLocaleString(),
+      currency,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'Investment Enrollment Submitted - FIL LIMITED',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -697,6 +553,11 @@ export class EmailService {
     currency?: string,
     notes?: string
   ): Promise<void> {
+    const template = await emailTemplateService.getTemplate('INVESTMENT_APPLICATION_STATUS_CHANGE');
+    if (!template) {
+      throw new Error('Investment application status change email template not found');
+    }
+
     const statusMessages: Record<
       string,
       { title: string; message: string; color: string; bgColor: string }
@@ -726,42 +587,30 @@ export class EmailService {
 
     const statusInfo = statusMessages[status] || statusMessages.REJECTED;
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .status { padding: 15px; border-radius: 5px; margin: 20px 0; background-color: ${statusInfo.bgColor}; color: ${statusInfo.color}; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>${statusInfo.title}</h2>
-            <p>Hello ${firstName},</p>
-            <div class="status">
-              <p><strong>Investment:</strong> ${investmentName}</p>
-              <p><strong>Reference Number:</strong> ${referenceNumber}</p>
-              <p><strong>Status:</strong> ${status}</p>
-              ${allocatedAmount ? `<p><strong>Allocated Amount:</strong> ${currency ?? 'GBP'} ${allocatedAmount.toLocaleString()}</p>` : ''}
-              ${allocatedQuantity ? `<p><strong>Allocated Quantity:</strong> ${allocatedQuantity.toLocaleString()}</p>` : ''}
-              <p>${statusInfo.message}</p>
-            </div>
-            <p>If you have any questions, please contact our support team.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const allocatedAmountHtml = allocatedAmount
+      ? `<p><strong>Allocated Amount:</strong> ${currency ?? 'GBP'} ${allocatedAmount.toLocaleString()}</p>`
+      : '';
+    const allocatedQuantityHtml = allocatedQuantity
+      ? `<p><strong>Allocated Quantity:</strong> ${allocatedQuantity.toLocaleString()}</p>`
+      : '';
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      investmentName,
+      referenceNumber,
+      status,
+      statusTitle: statusInfo.title,
+      statusMessage: statusInfo.message,
+      statusBgColor: statusInfo.bgColor,
+      statusColor: statusInfo.color,
+      allocatedAmountHtml,
+      allocatedQuantityHtml,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: `${statusInfo.title} - FIL LIMITED`,
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -777,42 +626,88 @@ export class EmailService {
     totalAmount: number,
     currency: string
   ): Promise<void> {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .success { background-color: #D1FAE5; padding: 15px; border-radius: 5px; margin: 20px 0; color: #065F46; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Investment Purchase Confirmation</h2>
-            <p>Hello ${firstName},</p>
-            <p>Your investment purchase has been completed successfully.</p>
-            <div class="success">
-              <p><strong>Investment:</strong> ${investmentName}</p>
-              <p><strong>Quantity:</strong> ${quantity.toLocaleString()}</p>
-              <p><strong>Unit Price:</strong> ${currency} ${unitPrice.toLocaleString()}</p>
-              <p><strong>Total Amount:</strong> ${currency} ${totalAmount.toLocaleString()}</p>
-            </div>
-            <p>You can view your investment in your portfolio dashboard.</p>
-            <p>If you have any questions, please contact our support team.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const template = await emailTemplateService.getTemplate('INVESTMENT_PURCHASE_CONFIRMATION');
+    if (!template) {
+      throw new Error('Investment purchase confirmation email template not found');
+    }
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      investmentName,
+      quantity: quantity.toLocaleString(),
+      unitPrice: unitPrice.toLocaleString(),
+      totalAmount: totalAmount.toLocaleString(),
+      currency,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'Investment Purchase Confirmation - FIL LIMITED',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
+    });
+  }
+
+  /**
+   * Send investment approval email
+   */
+  async sendInvestmentApprovalEmail(
+    email: string,
+    firstName: string,
+    investmentName: string,
+    totalAmount: number
+  ): Promise<void> {
+    const template = await emailTemplateService.getTemplate('INVESTMENT_PURCHASE_CONFIRMATION');
+    if (!template) {
+      throw new Error('Investment purchase confirmation email template not found');
+    }
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      investmentName,
+      quantity: '1',
+      unitPrice: totalAmount.toLocaleString(),
+      totalAmount: totalAmount.toLocaleString(),
+      currency: 'GBP',
+      status: 'approved',
+      message: `Your investment in "${investmentName}" has been approved and is now active in your portfolio.`,
+    });
+
+    await this.sendEmail({
+      to: email,
+      subject: `Investment Approved: ${investmentName}`,
+      html: interpolated.html,
+    });
+  }
+
+  /**
+   * Send investment rejection email
+   */
+  async sendInvestmentRejectionEmail(
+    email: string,
+    firstName: string,
+    investmentName: string,
+    reason?: string
+  ): Promise<void> {
+    const template = await emailTemplateService.getTemplate('INVESTMENT_PURCHASE_CONFIRMATION');
+    if (!template) {
+      throw new Error('Investment purchase confirmation email template not found');
+    }
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      investmentName,
+      quantity: '1',
+      unitPrice: '0',
+      totalAmount: '0',
+      currency: 'GBP',
+      status: 'rejected',
+      message: `Your investment request for "${investmentName}" has been rejected.${reason ? ` Reason: ${reason}` : ''}`,
+    });
+
+    await this.sendEmail({
+      to: email,
+      subject: `Investment Rejected: ${investmentName}`,
+      html: interpolated.html,
     });
   }
 
@@ -827,40 +722,23 @@ export class EmailService {
     totalValue: number,
     currency: string
   ): Promise<void> {
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .info { background-color: #DBEAFE; padding: 15px; border-radius: 5px; margin: 20px 0; color: #1E40AF; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Investment Matured</h2>
-            <p>Hello ${firstName},</p>
-            <p>Your investment has reached maturity.</p>
-            <div class="info">
-              <p><strong>Investment:</strong> ${investmentName}</p>
-              <p><strong>Maturity Date:</strong> ${maturityDate.toLocaleDateString()}</p>
-              <p><strong>Total Value:</strong> ${currency} ${totalValue.toLocaleString()}</p>
-            </div>
-            <p>You can view the details in your portfolio dashboard. If you have any questions, please contact our support team.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const template = await emailTemplateService.getTemplate('INVESTMENT_MATURED');
+    if (!template) {
+      throw new Error('Investment matured email template not found');
+    }
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      investmentName,
+      maturityDate: maturityDate.toLocaleDateString(),
+      totalValue: totalValue.toLocaleString(),
+      currency,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'Investment Matured - FIL LIMITED',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -875,41 +753,30 @@ export class EmailService {
     description: string,
     newBalance: number
   ): Promise<void> {
+    const template = await emailTemplateService.getTemplate('BALANCE_ADJUSTMENT');
+    if (!template) {
+      throw new Error('Balance adjustment email template not found');
+    }
+
     const isPositive = amount >= 0;
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .info { background-color: ${isPositive ? '#D1FAE5' : '#FEE2E2'}; padding: 15px; border-radius: 5px; margin: 20px 0; color: ${isPositive ? '#065F46' : '#991B1B'}; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Account Balance Adjustment</h2>
-            <p>Hello ${firstName},</p>
-            <p>Your account balance has been adjusted by an administrator.</p>
-            <div class="info">
-              <p><strong>Adjustment Amount:</strong> ${isPositive ? '+' : ''}${currency} ${Math.abs(amount).toLocaleString()}</p>
-              <p><strong>Description:</strong> ${description}</p>
-              <p><strong>New Balance:</strong> ${currency} ${newBalance.toLocaleString()}</p>
-            </div>
-            <p>If you have any questions about this adjustment, please contact our support team.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const adjustmentAmount = `${isPositive ? '+' : ''}${currency} ${Math.abs(amount).toLocaleString()}`;
+    const adjustmentBgColor = isPositive ? '#D1FAE5' : '#FEE2E2';
+    const adjustmentColor = isPositive ? '#065F46' : '#991B1B';
+
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      adjustmentAmount,
+      description,
+      newBalance: newBalance.toLocaleString(),
+      currency,
+      adjustmentBgColor,
+      adjustmentColor,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'Account Balance Adjustment - FIL LIMITED',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -922,45 +789,29 @@ export class EmailService {
     message: string,
     details?: Record<string, unknown>
   ): Promise<void> {
+    const template = await emailTemplateService.getTemplate('ADMIN_NOTIFICATION');
+    if (!template) {
+      throw new Error('Admin notification email template not found');
+    }
+
     const detailsHtml = details
       ? Object.entries(details)
           .map(([key, value]) => `<p><strong>${key}:</strong> ${String(value)}</p>`)
           .join('')
       : '';
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .alert { background-color: #FEF3C7; padding: 15px; border-radius: 5px; margin: 20px 0; color: #92400E; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>${subject}</h2>
-            <div class="alert">
-              <p>${message}</p>
-              ${detailsHtml}
-            </div>
-            <p>Please review this in the admin dashboard.</p>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      subject,
+      message,
+      detailsHtml,
+    });
 
     // Send to all admin emails
     for (const email of adminEmails) {
       await this.sendEmail({
         to: email,
-        subject: `Admin Alert: ${subject} - FIL LIMITED`,
-        html,
+        subject: interpolated.subject,
+        html: interpolated.html,
       });
     }
   }
@@ -992,43 +843,24 @@ export class EmailService {
     reportId: string,
     subject: string
   ): Promise<void> {
+    const template = await emailTemplateService.getTemplate('PROBLEM_REPORT_SUBMITTED');
+    if (!template) {
+      throw new Error('Problem report submitted email template not found');
+    }
+
     const reportUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/problem-reports`;
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .success { background-color: #D1FAE5; padding: 15px; border-radius: 5px; margin: 20px 0; color: #065F46; }
-            .button { display: inline-block; padding: 12px 24px; background-color: #00598f; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Problem Report Submitted</h2>
-            <p>Dear ${firstName},</p>
-            <div class="success">
-              <p><strong>Your problem report has been submitted successfully!</strong></p>
-              <p><strong>Subject:</strong> ${subject}</p>
-              <p><strong>Report ID:</strong> ${reportId}</p>
-            </div>
-            <p>We have received your problem report and our team will review it shortly. You will be notified when there's an update.</p>
-            <a href="${reportUrl}" class="button">View Your Reports</a>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      subject,
+      reportId,
+      reportUrl,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'Problem Report Submitted - FIL LIMITED',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -1041,41 +873,23 @@ export class EmailService {
     _reportId: string,
     adminMessage: string
   ): Promise<void> {
+    const template = await emailTemplateService.getTemplate('PROBLEM_REPORT_RESPONSE');
+    if (!template) {
+      throw new Error('Problem report response email template not found');
+    }
+
     const reportUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/problem-reports`;
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .response { background-color: #EFF6FF; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #00598f; }
-            .button { display: inline-block; padding: 12px 24px; background-color: #00598f; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Response to Your Problem Report</h2>
-            <p>Dear ${firstName},</p>
-            <p>An admin has responded to your problem report:</p>
-            <div class="response">
-              <p>${adminMessage}</p>
-            </div>
-            <a href="${reportUrl}" class="button">View Report</a>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      adminMessage,
+      reportUrl,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: 'Response to Your Problem Report - FIL LIMITED',
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -1088,45 +902,35 @@ export class EmailService {
     reportId: string,
     status: string
   ): Promise<void> {
+    const template = await emailTemplateService.getTemplate('PROBLEM_REPORT_STATUS_CHANGE');
+    if (!template) {
+      throw new Error('Problem report status change email template not found');
+    }
+
     const reportUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/problem-reports`;
     const statusText = status === 'RESOLVED' ? 'Resolved' : 'Reopened';
     const statusColor = status === 'RESOLVED' ? '#D1FAE5' : '#FEF3C7';
     const textColor = status === 'RESOLVED' ? '#065F46' : '#92400E';
+    const statusMessage =
+      status === 'RESOLVED'
+        ? 'Your problem report has been resolved. If you have any further concerns, please feel free to submit a new report.'
+        : 'Your problem report has been reopened and is being reviewed again.';
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .status { background-color: ${statusColor}; padding: 15px; border-radius: 5px; margin: 20px 0; color: ${textColor}; }
-            .button { display: inline-block; padding: 12px 24px; background-color: #00598f; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>Problem Report Status Update</h2>
-            <p>Dear ${firstName},</p>
-            <div class="status">
-              <p><strong>Your problem report has been ${statusText.toLowerCase()}.</strong></p>
-              <p><strong>Report ID:</strong> ${reportId}</p>
-            </div>
-            <p>${status === 'RESOLVED' ? 'Your problem report has been resolved. If you have any further concerns, please feel free to submit a new report.' : 'Your problem report has been reopened and is being reviewed again.'}</p>
-            <a href="${reportUrl}" class="button">View Report</a>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      firstName,
+      reportId,
+      status,
+      statusText,
+      statusMessage,
+      statusColor,
+      textColor,
+      reportUrl,
+    });
 
     await this.sendEmail({
       to: email,
-      subject: `Problem Report ${statusText} - FIL LIMITED`,
-      html,
+      subject: interpolated.subject,
+      html: interpolated.html,
     });
   }
 
@@ -1139,45 +943,26 @@ export class EmailService {
     subject: string,
     userName: string
   ): Promise<void> {
+    const template = await emailTemplateService.getTemplate('ADMIN_PROBLEM_REPORT_NOTIFICATION');
+    if (!template) {
+      throw new Error('Admin problem report notification email template not found');
+    }
+
     const reportUrl = `${process.env.FRONTEND_URL ?? 'http://localhost:3000'}/admin/problem-reports`;
 
-    const html = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .alert { background-color: #FEF3C7; padding: 15px; border-radius: 5px; margin: 20px 0; color: #92400E; }
-            .button { display: inline-block; padding: 12px 24px; background-color: #00598f; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-            .footer { margin-top: 30px; font-size: 12px; color: #666; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h2>New Problem Report</h2>
-            <div class="alert">
-              <p><strong>A new problem report has been submitted.</strong></p>
-              <p><strong>Subject:</strong> ${subject}</p>
-              <p><strong>User:</strong> ${userName}</p>
-              <p><strong>Report ID:</strong> ${reportId}</p>
-            </div>
-            <p>Please review and respond to this report in the admin dashboard.</p>
-            <a href="${reportUrl}" class="button">View Report</a>
-            <div class="footer">
-              <p>FIL LIMITED Investment Management</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    `;
+    const interpolated = emailTemplateService.interpolateTemplate(template, {
+      subject,
+      userName,
+      reportId,
+      reportUrl,
+    });
 
     // Send to all admin emails
     for (const email of adminEmails) {
       await this.sendEmail({
         to: email,
-        subject: `New Problem Report: ${subject} - FIL LIMITED`,
-        html,
+        subject: interpolated.subject,
+        html: interpolated.html,
       });
     }
   }

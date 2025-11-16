@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
-import { authenticate, AuthRequest } from '../middleware/auth.js';
+import { authenticate, AuthRequest, requireAdmin } from '../middleware/auth.js';
 import { investmentService } from '../services/investment.service.js';
+import { investmentCalculationService } from '../services/investmentCalculation.service.js';
 import { createInvestmentSchema, updateInvestmentSchema } from '../lib/validators.js';
 import { Decimal } from '@prisma/client/runtime/library';
 
@@ -9,10 +10,11 @@ const router = Router();
 // Get all investments
 router.get('/', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { portfolioId } = req.query;
+    const { portfolioId, status } = req.query;
     const investments = await investmentService.getInvestments(
       req.userId!,
-      portfolioId as string | undefined
+      portfolioId as string | undefined,
+      status as string | undefined
     );
     res.status(200).json(investments);
   } catch (error) {
@@ -108,6 +110,30 @@ router.post('/sync-prices', authenticate, async (req: AuthRequest, res: Response
     });
   } catch (error) {
     throw error;
+  }
+});
+
+// Manually trigger daily profit calculation (admin only)
+router.post('/calculate-profits', authenticate, requireAdmin, async (_req: AuthRequest, res: Response) => {
+  try {
+    const result = await investmentCalculationService.calculateDailyProfits();
+    return res.status(200).json({
+      success: result.success,
+      message: 'Profit calculation completed',
+      data: {
+        marketplacePricesUpdated: result.marketplacePricesUpdated,
+        investmentPricesSynced: result.investmentPricesSynced,
+        fixedRateInvestmentsUpdated: result.fixedRateInvestmentsUpdated,
+        portfoliosUpdated: result.portfoliosUpdated,
+        errors: result.errors,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to calculate profits',
+      error: (error as Error).message,
+    });
   }
 });
 

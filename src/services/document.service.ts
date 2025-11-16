@@ -413,6 +413,7 @@ export class DocumentService {
         fileSize: data.fileSize,
         mimeType: data.mimeType,
         description: data.description,
+        status: 'PENDING',
         uploadedBy: adminId,
       },
     });
@@ -441,7 +442,129 @@ export class DocumentService {
       ...stmt,
       fileUrl: stmt.fileUrl.startsWith('http') ? stmt.fileUrl : `${apiBaseUrl}${stmt.fileUrl}`,
       downloadUrl: `${apiBaseUrl}/api/documents/statements/${stmt.id}/download`,
+      status: stmt.status || 'PENDING',
     }));
+  }
+
+  /**
+   * Get all statements (admin only)
+   */
+  async getAllStatements(filters?: {
+    userId?: string;
+    period?: string;
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{
+    statements: Array<unknown>;
+    total: number;
+  }> {
+    const where: Record<string, unknown> = {};
+
+    if (filters?.userId) {
+      where.userId = filters.userId;
+    }
+    if (filters?.period) {
+      where.period = filters.period;
+    }
+    if (filters?.status) {
+      where.status = filters.status;
+    }
+
+    const [statements, total] = await Promise.all([
+      prisma.statement.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+        orderBy: { uploadedAt: 'desc' },
+        take: filters?.limit ?? 50,
+        skip: filters?.offset ?? 0,
+      }),
+      prisma.statement.count({ where }),
+    ]);
+
+    // Construct full URLs for each statement
+    const apiBaseUrl = process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
+    const statementsWithUrls = statements.map((stmt) => ({
+      ...stmt,
+      fileUrl: stmt.fileUrl.startsWith('http') ? stmt.fileUrl : `${apiBaseUrl}${stmt.fileUrl}`,
+      downloadUrl: `${apiBaseUrl}/api/documents/statements/${stmt.id}/download`,
+      status: stmt.status || 'PENDING',
+    }));
+
+    return {
+      statements: statementsWithUrls,
+      total,
+    };
+  }
+
+  /**
+   * Update statement status
+   */
+  async updateStatementStatus(
+    statementId: string,
+    status: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'EXPIRED',
+    reason?: string
+  ): Promise<unknown> {
+    const statement = await prisma.statement.findUnique({
+      where: { id: statementId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    if (!statement) {
+      throw new NotFoundError('Statement not found');
+    }
+
+    const oldStatus = statement.status || 'PENDING';
+
+    // Update statement
+    const updated = await prisma.statement.update({
+      where: { id: statementId },
+      data: {
+        status,
+        description: reason
+          ? `${statement.description || ''}${statement.description ? ' - ' : ''}${reason}`.trim()
+          : statement.description,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
+    });
+
+    // Construct full URL
+    const apiBaseUrl = process.env.API_URL ?? `http://localhost:${process.env.PORT ?? 4000}`;
+    return {
+      ...updated,
+      fileUrl: updated.fileUrl.startsWith('http')
+        ? updated.fileUrl
+        : `${apiBaseUrl}${updated.fileUrl}`,
+      downloadUrl: `${apiBaseUrl}/api/documents/statements/${updated.id}/download`,
+      oldStatus,
+    };
   }
 
   /**

@@ -144,7 +144,7 @@ model Investment {
   maturityDate          DateTime?
   interestRate          Decimal?    @db.Decimal(5, 2)
   
-  status                InvestmentStatus @default(ACTIVE)
+  status                InvestmentStatus @default(PENDING)
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
   
@@ -154,6 +154,7 @@ model Investment {
   @@index([userId])
   @@index([portfolioId])
   @@index([type])
+  @@index([status])
 }
 
 // Transaction model
@@ -230,6 +231,7 @@ enum InvestmentType {
 }
 
 enum InvestmentStatus {
+  PENDING
   ACTIVE
   COMPLETED
   CANCELLED
@@ -388,6 +390,7 @@ model Statement {
   fileSize          Int
   mimeType          String
   description       String?
+  status            DocumentStatus  @default(PENDING)
   
   uploadedBy        String          // Admin user ID
   uploadedAt        DateTime        @default(now())
@@ -396,6 +399,7 @@ model Statement {
   updatedAt         DateTime        @updatedAt
   
   @@index([userId])
+  @@index([status])
   @@index([period])
 }
 
@@ -478,6 +482,7 @@ model SMTPConfiguration {
   user              String          // SMTP username/email
   password          String          // SMTP password (encrypted)
   from              String?         // From email address (defaults to user if not set)
+  senderName        String?         // Sender name for email header (defaults to "Fidelity Investment Portal")
   isActive          Boolean         @default(true)
   
   createdAt         DateTime        @default(now())
@@ -644,5 +649,49 @@ model ProblemReportResponseAttachment {
   
   @@index([responseId])
   @@map("problem_report_response_attachments")
+}
+
+// Email Template Type enum
+enum EmailTemplateType {
+  PASSWORD_RESET
+  DEPOSIT_NOTIFICATION
+  WITHDRAWAL_NOTIFICATION
+  WELCOME_EMAIL
+  ACCOUNT_CREATED
+  ACCOUNT_LOCKED
+  ACCOUNT_UNLOCKED
+  KYC_STATUS_CHANGE
+  DOCUMENT_STATUS_CHANGE
+  DOCUMENT_UPLOADED_BY_ADMIN
+  INVESTMENT_APPLICATION_SUBMITTED
+  INVESTMENT_APPLICATION_STATUS_CHANGE
+  INVESTMENT_PURCHASE_CONFIRMATION
+  INVESTMENT_MATURED
+  BALANCE_ADJUSTMENT
+  ADMIN_NOTIFICATION
+  PROBLEM_REPORT_SUBMITTED
+  PROBLEM_REPORT_RESPONSE
+  PROBLEM_REPORT_STATUS_CHANGE
+  ADMIN_PROBLEM_REPORT_NOTIFICATION
+}
+
+// Email Template model
+model EmailTemplate {
+  id                String            @id @default(cuid())
+  type              EmailTemplateType @unique
+  name              String
+  description       String?
+  subject           String
+  htmlContent       String            @db.Text
+  cssStyles         String?           @db.Text
+  variables         Json              // Array of variable definitions
+  isActive          Boolean           @default(true)
+  
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  
+  @@index([type])
+  @@index([isActive])
+  @@map("email_templates")
 }
 

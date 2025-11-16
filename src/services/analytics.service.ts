@@ -105,6 +105,8 @@ export class AnalyticsService {
       investments: Array<{
         investmentId: string;
         name: string;
+        symbol: string;
+        type: string;
         value: number;
         percentage: number;
       }>;
@@ -113,36 +115,59 @@ export class AnalyticsService {
     const portfolios = await prisma.portfolio.findMany({
       where: { userId },
       include: {
-        investments: true,
+        investments: {
+          where: {
+            status: 'ACTIVE', // Only include ACTIVE investments
+          },
+        },
       },
     });
 
+    // Calculate total value using stored totalValue from database
     const totalValue = portfolios.reduce((sum, portfolio) => {
       const portfolioValue = portfolio.investments.reduce((pSum, investment) => {
-        return pSum + Number(investment.currentPrice) * Number(investment.quantity);
+        // Use stored totalValue if available, otherwise calculate
+        const value = investment.totalValue
+          ? Number(investment.totalValue)
+          : Number(investment.currentPrice) * Number(investment.quantity);
+        return pSum + value;
       }, 0);
       return sum + portfolioValue;
     }, 0);
 
     return portfolios.map((portfolio) => {
-      const portfolioValue = portfolio.investments.reduce(
-        (sum, inv) => sum + Number(inv.currentPrice) * Number(inv.quantity),
-        0
-      );
+      // Filter to only ACTIVE investments and use stored totalValue
+      const activeInvestments = portfolio.investments.filter((inv) => inv.status === 'ACTIVE');
+      
+      const portfolioValue = activeInvestments.reduce((sum, inv) => {
+        // Use stored totalValue if available, otherwise calculate
+        const value = inv.totalValue
+          ? Number(inv.totalValue)
+          : Number(inv.currentPrice) * Number(inv.quantity);
+        return sum + value;
+      }, 0);
+
       return {
         portfolioId: portfolio.id,
         portfolioName: portfolio.name,
         value: portfolioValue,
         percentage: totalValue > 0 ? (portfolioValue / totalValue) * 100 : 0,
-        investments: portfolio.investments.map((inv) => ({
-          investmentId: inv.id,
-          name: inv.name,
-          value: Number(inv.currentPrice) * Number(inv.quantity),
-          percentage:
-            portfolioValue > 0
-              ? ((Number(inv.currentPrice) * Number(inv.quantity)) / portfolioValue) * 100
-              : 0,
-        })),
+        investments: activeInvestments.map((inv) => {
+          // Use stored totalValue if available, otherwise calculate
+          const invValue = inv.totalValue
+            ? Number(inv.totalValue)
+            : Number(inv.currentPrice) * Number(inv.quantity);
+          
+          return {
+            investmentId: inv.id,
+            name: inv.name,
+            symbol: inv.symbol ?? '',
+            type: inv.type,
+            value: invValue,
+            percentage:
+              portfolioValue > 0 ? (invValue / portfolioValue) * 100 : 0,
+          };
+        }),
       };
     });
   }
@@ -323,7 +348,11 @@ export class AnalyticsService {
         userId,
       },
       include: {
-        investments: true,
+        investments: {
+          where: {
+            status: 'ACTIVE', // Only include ACTIVE investments
+          },
+        },
       },
     });
 
@@ -331,20 +360,26 @@ export class AnalyticsService {
       throw new NotFoundError('Portfolio not found');
     }
 
-    // Calculate total value
+    // Filter to only ACTIVE investments
+    const activeInvestments = portfolio.investments.filter((inv) => inv.status === 'ACTIVE');
+
+    // Calculate total value using stored totalValue from database
     let totalValue = new Decimal(0);
-    for (const investment of portfolio.investments) {
-      const quantity = new Decimal(investment.quantity);
-      const currentPrice = new Decimal(investment.currentPrice);
-      const value = quantity.times(currentPrice);
+    for (const investment of activeInvestments) {
+      // Use stored totalValue if available, otherwise calculate
+      const value = investment.totalValue
+        ? new Decimal(investment.totalValue)
+        : new Decimal(investment.quantity).times(new Decimal(investment.currentPrice));
       totalValue = totalValue.plus(value);
     }
 
     // Calculate allocation percentages
-    const allocation: PortfolioAllocation[] = portfolio.investments.map((investment) => {
-      const quantity = new Decimal(investment.quantity);
-      const currentPrice = new Decimal(investment.currentPrice);
-      const value = quantity.times(currentPrice);
+    const allocation: PortfolioAllocation[] = activeInvestments.map((investment) => {
+      // Use stored totalValue if available, otherwise calculate
+      const value = investment.totalValue
+        ? new Decimal(investment.totalValue)
+        : new Decimal(investment.quantity).times(new Decimal(investment.currentPrice));
+      
       const percentage = totalValue.greaterThan(0)
         ? value.dividedBy(totalValue).times(100)
         : new Decimal(0);

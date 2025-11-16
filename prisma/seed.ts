@@ -243,6 +243,61 @@ async function main() {
   // Created support settings - using console.warn for consistency
   console.warn('Created support settings');
 
+  // Seed email templates
+  const { emailTemplateService } = await import('../src/services/emailTemplate.service.js');
+  
+  const templateTypes = [
+    'PASSWORD_RESET',
+    'DEPOSIT_NOTIFICATION',
+    'WITHDRAWAL_NOTIFICATION',
+    'WELCOME_EMAIL',
+    'ACCOUNT_CREATED',
+    'ACCOUNT_LOCKED',
+    'ACCOUNT_UNLOCKED',
+    'KYC_STATUS_CHANGE',
+    'DOCUMENT_STATUS_CHANGE',
+    'DOCUMENT_UPLOADED_BY_ADMIN',
+    'INVESTMENT_APPLICATION_SUBMITTED',
+    'INVESTMENT_APPLICATION_STATUS_CHANGE',
+    'INVESTMENT_PURCHASE_CONFIRMATION',
+    'INVESTMENT_MATURED',
+    'BALANCE_ADJUSTMENT',
+    'ADMIN_NOTIFICATION',
+    'PROBLEM_REPORT_SUBMITTED',
+    'PROBLEM_REPORT_RESPONSE',
+    'PROBLEM_REPORT_STATUS_CHANGE',
+    'ADMIN_PROBLEM_REPORT_NOTIFICATION',
+  ] as const;
+
+  for (const type of templateTypes) {
+    // Use the service method which handles the enum conversion
+    const defaultTemplate = (emailTemplateService as any).getDefaultTemplate(type);
+    if (defaultTemplate) {
+      // Check if template already exists
+      const existing = await prisma.emailTemplate.findUnique({
+        where: { type },
+      });
+
+      if (!existing) {
+        await prisma.emailTemplate.create({
+          data: {
+            type,
+            name: defaultTemplate.name,
+            description: defaultTemplate.description,
+            subject: defaultTemplate.subject,
+            htmlContent: defaultTemplate.htmlContent,
+            cssStyles: defaultTemplate.cssStyles,
+            variables: defaultTemplate.variables as any,
+            isActive: true,
+          },
+        });
+        console.warn(`Created email template: ${type}`);
+      } else {
+        console.warn(`Email template ${type} already exists, skipping...`);
+      }
+    }
+  }
+
   // Database seed completed successfully - using console.warn for consistency
   console.warn('Database seed completed successfully!');
 }
