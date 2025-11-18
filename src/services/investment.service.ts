@@ -406,6 +406,76 @@ export class InvestmentService {
     return purchasePrice.plus(accruedInterest);
   }
 
+  /**
+   * Calculate current value on-demand for an investment
+   * This method calculates real-time values based on purchase date and interest rate
+   * Useful for dashboard updates without waiting for daily cron job
+   * 
+   * @param investment - The investment record from database
+   * @param currentDate - Optional current date (defaults to now)
+   * @returns Object with calculated currentPrice, totalValue, totalGain, and gainPercentage
+   */
+  calculateInvestmentValueOnDemand(
+    investment: {
+      purchasePrice: Decimal;
+      quantity: Decimal;
+      interestRate: Decimal | null;
+      purchaseDate: Date;
+      type: string;
+      currentPrice?: Decimal;
+    },
+    currentDate: Date = new Date()
+  ): {
+    currentPrice: Decimal;
+    totalValue: Decimal;
+    totalInvested: Decimal;
+    totalGain: Decimal;
+    gainPercentage: Decimal;
+  } {
+    const fixedRateTypes: Array<'BOND' | 'CORPORATE_BOND' | 'TERM_DEPOSIT' | 'FIXED_RATE_DEPOSIT'> = [
+      'BOND',
+      'CORPORATE_BOND',
+      'TERM_DEPOSIT',
+      'FIXED_RATE_DEPOSIT',
+    ];
+
+    let currentPrice: Decimal;
+
+    // If it's a fixed-rate investment with interest rate, calculate accrued interest
+    if (
+      fixedRateTypes.includes(investment.type as any) &&
+      investment.interestRate &&
+      investment.purchaseDate
+    ) {
+      // Calculate current price with accrued interest from purchase date
+      currentPrice = this.calculateFixedRateInterest(
+        investment.purchasePrice,
+        investment.interestRate,
+        investment.purchaseDate,
+        currentDate
+      );
+    } else {
+      // For other investment types, use stored currentPrice or purchasePrice as fallback
+      currentPrice = investment.currentPrice || investment.purchasePrice;
+    }
+
+    // Calculate totals
+    const totalValue = investment.quantity.times(currentPrice);
+    const totalInvested = investment.quantity.times(investment.purchasePrice);
+    const totalGain = totalValue.minus(totalInvested);
+    const gainPercentage = totalInvested.isZero()
+      ? new Decimal(0)
+      : totalGain.dividedBy(totalInvested).times(100);
+
+    return {
+      currentPrice,
+      totalValue,
+      totalInvested,
+      totalGain,
+      gainPercentage,
+    };
+  }
+
   async updatePortfolioTotals(portfolioId: string): Promise<void> {
     const investments = await prisma.investment.findMany({
       where: { portfolioId },

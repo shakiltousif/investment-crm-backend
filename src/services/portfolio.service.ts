@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import { CreatePortfolioInput, UpdatePortfolioInput } from '../lib/validators.js';
 import { NotFoundError } from '../middleware/errorHandler.js';
 import { Decimal } from '@prisma/client/runtime/library';
+import { investmentService } from './investment.service.js';
 
 export class PortfolioService {
   async createPortfolio(userId: string, data: CreatePortfolioInput): Promise<unknown> {
@@ -65,20 +66,33 @@ export class PortfolioService {
         },
       });
 
-      // Use stored values from database (more accurate, especially for fixed-rate investments)
-      // Fallback to manual calculation if stored values are missing
+      // Calculate values on-demand for real-time accuracy
+      // This ensures dashboard shows current values even if daily cron job hasn't run yet
       const totalValue = portfolios.reduce((sum, portfolio) => {
-        // Use portfolio.totalValue if available, otherwise calculate from investments
-        if (portfolio.totalValue && Number(portfolio.totalValue) > 0) {
-          return sum + Number(portfolio.totalValue);
-        }
-        // Fallback: calculate from investments
         const portfolioValue = portfolio.investments.reduce((pSum, investment) => {
-          // Use stored totalValue if available, otherwise calculate
-          const value = investment.totalValue
-            ? Number(investment.totalValue)
-            : Number(investment.currentPrice || 0) * Number(investment.quantity || 0);
-          return pSum + value;
+          // Use on-demand calculation for fixed-rate investments to get real-time values
+          const fixedRateTypes: Array<'BOND' | 'CORPORATE_BOND' | 'TERM_DEPOSIT' | 'FIXED_RATE_DEPOSIT'> = [
+            'BOND',
+            'CORPORATE_BOND',
+            'TERM_DEPOSIT',
+            'FIXED_RATE_DEPOSIT',
+          ];
+          
+          if (
+            fixedRateTypes.includes(investment.type as any) &&
+            investment.interestRate &&
+            investment.purchaseDate
+          ) {
+            // Calculate on-demand for real-time accuracy
+            const calculated = investmentService.calculateInvestmentValueOnDemand(investment);
+            return pSum + Number(calculated.totalValue);
+          } else {
+            // For other investments, use stored totalValue or calculate
+            const value = investment.totalValue
+              ? Number(investment.totalValue)
+              : Number(investment.currentPrice || 0) * Number(investment.quantity || 0);
+            return pSum + value;
+          }
         }, 0);
         return sum + portfolioValue;
       }, 0);
@@ -93,19 +107,31 @@ export class PortfolioService {
         return sum + portfolioInvested;
       }, 0);
 
-      // Calculate total gain using stored values or fallback to calculation
+      // Calculate total gain using on-demand calculation for accuracy
       const totalGain = portfolios.reduce((sum, portfolio) => {
-        // Use portfolio.totalGain if available, otherwise calculate from investments
-        if (portfolio.totalGain !== null && portfolio.totalGain !== undefined) {
-          return sum + Number(portfolio.totalGain);
-        }
-        // Fallback: calculate from investments
         const portfolioGain = portfolio.investments.reduce((pSum, investment) => {
-          // Use stored totalGain if available, otherwise calculate
-          const gain = investment.totalGain
-            ? Number(investment.totalGain)
-            : (Number(investment.currentPrice || 0) - Number(investment.purchasePrice || 0)) * Number(investment.quantity || 0);
-          return pSum + gain;
+          const fixedRateTypes: Array<'BOND' | 'CORPORATE_BOND' | 'TERM_DEPOSIT' | 'FIXED_RATE_DEPOSIT'> = [
+            'BOND',
+            'CORPORATE_BOND',
+            'TERM_DEPOSIT',
+            'FIXED_RATE_DEPOSIT',
+          ];
+          
+          if (
+            fixedRateTypes.includes(investment.type as any) &&
+            investment.interestRate &&
+            investment.purchaseDate
+          ) {
+            // Calculate on-demand for real-time accuracy
+            const calculated = investmentService.calculateInvestmentValueOnDemand(investment);
+            return pSum + Number(calculated.totalGain);
+          } else {
+            // For other investments, use stored totalGain or calculate
+            const gain = investment.totalGain
+              ? Number(investment.totalGain)
+              : (Number(investment.currentPrice || 0) - Number(investment.purchasePrice || 0)) * Number(investment.quantity || 0);
+            return pSum + gain;
+          }
         }, 0);
         return sum + portfolioGain;
       }, 0);
@@ -122,15 +148,31 @@ export class PortfolioService {
           // Filter to only ACTIVE investments
           const activeInvestments = portfolio.investments.filter((inv) => inv.status === 'ACTIVE');
           
-          // Use stored portfolio values if available, otherwise calculate from investments
-          const portfolioValue = portfolio.totalValue && Number(portfolio.totalValue) > 0
-            ? Number(portfolio.totalValue)
-            : activeInvestments.reduce((sum, inv) => {
-                const value = inv.totalValue
-                  ? Number(inv.totalValue)
-                  : Number(inv.currentPrice || 0) * Number(inv.quantity || 0);
-                return sum + value;
-              }, 0);
+          const fixedRateTypes: Array<'BOND' | 'CORPORATE_BOND' | 'TERM_DEPOSIT' | 'FIXED_RATE_DEPOSIT'> = [
+            'BOND',
+            'CORPORATE_BOND',
+            'TERM_DEPOSIT',
+            'FIXED_RATE_DEPOSIT',
+          ];
+          
+          // Calculate portfolio value using on-demand calculation for real-time accuracy
+          const portfolioValue = activeInvestments.reduce((sum, inv) => {
+            if (
+              fixedRateTypes.includes(inv.type as any) &&
+              inv.interestRate &&
+              inv.purchaseDate
+            ) {
+              // Calculate on-demand for fixed-rate investments
+              const calculated = investmentService.calculateInvestmentValueOnDemand(inv);
+              return sum + Number(calculated.totalValue);
+            } else {
+              // For other investments, use stored totalValue or calculate
+              const value = inv.totalValue
+                ? Number(inv.totalValue)
+                : Number(inv.currentPrice || 0) * Number(inv.quantity || 0);
+              return sum + value;
+            }
+          }, 0);
           
           const portfolioInvested = activeInvestments.reduce((sum, inv) => {
             const price = Number(inv.purchasePrice) || 0;
@@ -138,14 +180,24 @@ export class PortfolioService {
             return sum + price * qty;
           }, 0);
           
-          const portfolioGain = portfolio.totalGain !== null && portfolio.totalGain !== undefined
-            ? Number(portfolio.totalGain)
-            : activeInvestments.reduce((sum, inv) => {
-                const gain = inv.totalGain
-                  ? Number(inv.totalGain)
-                  : (Number(inv.currentPrice || 0) - Number(inv.purchasePrice || 0)) * Number(inv.quantity || 0);
-                return sum + gain;
-              }, 0);
+          // Calculate portfolio gain using on-demand calculation
+          const portfolioGain = activeInvestments.reduce((sum, inv) => {
+            if (
+              fixedRateTypes.includes(inv.type as any) &&
+              inv.interestRate &&
+              inv.purchaseDate
+            ) {
+              // Calculate on-demand for fixed-rate investments
+              const calculated = investmentService.calculateInvestmentValueOnDemand(inv);
+              return sum + Number(calculated.totalGain);
+            } else {
+              // For other investments, use stored totalGain or calculate
+              const gain = inv.totalGain
+                ? Number(inv.totalGain)
+                : (Number(inv.currentPrice || 0) - Number(inv.purchasePrice || 0)) * Number(inv.quantity || 0);
+              return sum + gain;
+            }
+          }, 0);
           
           return {
             id: portfolio.id,
